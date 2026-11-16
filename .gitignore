@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Capacitor copies the web build here on cap sync
+ios/App/App/public/
+ios/DerivedData/
+ios/**/xcuserdata/
