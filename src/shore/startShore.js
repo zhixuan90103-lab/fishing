@@ -10,6 +10,7 @@ import { Ocean } from './minamo/ocean/ocean.js';
 import { makeOceanNodes, updateOceanUniforms } from './minamo/ocean/oceanNodes.js';
 import { makeWaterMaterial, makeRadialGrid } from './minamo/ocean/waterMaterial.js';
 import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
+import { createShoreSchool } from '../fish/school.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
@@ -112,13 +113,18 @@ export async function startShore(container, hooks = {}) {
   const world = await buildWorld(scene, O, sky, params);
   const particles = makeParticles(O);
   scene.add(particles.mesh);
+  // Bream Fish (Dorade Royale) by BlueMesh, CC BY.
+  // https://sketchfab.com/3d-models/bream-fish-dorade-royale-a3d0e1a597794a9bb74739a13cfc8b77
+  // Same materials as fish.html. Do not run them through underwaterize.
+  // Swim rules: docs/FISH-SCHOOL.md
+  const shoreSchool = await createShoreSchool(scene);
 
   const camera = new THREE.PerspectiveCamera(params.fov, 390 / 844, 0.05, 20000);
   camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
   const tune = {
     fogNear: 0,
-    fogFar: 149,
-    fogColor: '#7898b0',
+    fogFar: 180,
+    fogColor: '#bdd7ea',
     windSpeed: params.windSpeed,
     swellHeight: params.swellHeight,
     choppiness: params.choppiness,
@@ -131,8 +137,9 @@ export async function startShore(container, hooks = {}) {
     x: 0,
     y: 1.7,
     z: 2,
-    yaw: 180,
-    pitch: -4,
+    yaw: 100,
+    pitch: -10,
+    swimRate: 1,
   };
   const applyCamera = () => {
     camera.position.set(tune.x, tune.y, tune.z);
@@ -147,6 +154,7 @@ export async function startShore(container, hooks = {}) {
     camera.updateMatrixWorld();
   };
   applyCamera();
+  shoreSchool.place(tune);
 
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
@@ -237,6 +245,13 @@ export async function startShore(container, hooks = {}) {
       waveDirty = false;
     }
     particles.update(camera, time);
+    shoreSchool.update(dt, tune.swimRate, world.rocks, {
+      x: tune.x,
+      z: tune.z,
+      yaw: (tune.yaw * Math.PI) / 180,
+      fov: camera.fov,
+      aspect: camera.aspect,
+    });
 
     let enc = device.createCommandEncoder({ label: 'ocean' });
     ocean.update(dt, enc, camera.position, sun.dir);
@@ -324,6 +339,9 @@ function mountTunePanel(container, tune, hooks) {
       ['折射', 'refract', 0, 1.5, 0.01],
       ['曝光', 'exposure', 0.2, 1.6, 0.01],
       ['太阳', 'sunScale', 0.2, 1.6, 0.01],
+    ]],
+    ['鱼', [
+      ['游速', 'swimRate', 0.2, 2.5, 0.05],
     ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],

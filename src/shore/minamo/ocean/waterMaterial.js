@@ -78,8 +78,8 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
     sss: uniform(params.sss),
     refractStrength: uniform(params.refractStrength),
     fogNear: uniform(0),
-    fogFar: uniform(149),
-    fogColor: uniform(new THREE.Color('#7898b0')),
+    fogFar: uniform(180),
+    fogColor: uniform(new THREE.Color('#bdd7ea')),
     sunAngularRadius: uniform(0.0047 * 2.5),
     debug: uniform(params.waterDebug || 0),
   };
@@ -144,11 +144,15 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
       const T = refract(V.negate(), N, float(1 / 1.333));
       const thick0 = clamp(sceneViewZ(screenUV).sub(fragViewZ), 0, 8);
       // bounded screen-space offset from the view-space normal (stable; the exact re-projection marbled)
+      // The fish is down with the rocks, about 3.5 m. Leave that depth unshifted so the
+      // body stays one piece. Deeper water still refracts. Colour still follows the real depth.
       const Nv = cameraViewMatrix.mul(vec4(N, 0)).xyz;
-      const uvR = screenUV.add(vec2(Nv.x, Nv.y.negate()).mul(W.refractStrength.mul(0.05)).mul(saturate(thick0.div(2.5))).div(max(fragViewZ.mul(0.15), 1))).toVar();
+      const shift = vec2(Nv.x, Nv.y.negate()).mul(W.refractStrength.mul(0.05)).mul(saturate(thick0.div(2.5))).div(max(fragViewZ.mul(0.15), 1));
+      const uvR = screenUV.add(shift.mul(smoothstep(5.5, 7.0, thick0))).toVar();
+      const bd0 = backdropTex.sample(screenUV).toVar();
       const bdR = backdropTex.sample(uvR).toVar();
-      // anything in front of the surface at the refracted uv -> fall back to the straight sample
-      If(bdR.a.lessThan(fragViewZ), () => { bdR.assign(backdropTex.sample(screenUV)); });
+      // In front of the surface, or a depth jump either way (fish onto sand, sand onto fish).
+      If(bdR.a.lessThan(fragViewZ).or(abs(bdR.a.sub(bd0.a)).greaterThan(0.35)), () => { bdR.assign(bd0); });
       const thick = clamp(bdR.a.sub(fragViewZ), 0, 400);
       // path length inside water along the refracted ray (view-z difference scaled by the ray's slant)
       const pathLen = thick.div(max(abs(dot(T, U.camFwd)), 0.15)).min(300);

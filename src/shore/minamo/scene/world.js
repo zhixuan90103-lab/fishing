@@ -156,7 +156,7 @@ function shadowCaster(geometry, transformFrom = null) {
   return m;
 }
 
-function toNodeMaterial(m) {
+export function toNodeMaterial(m) {
   const n = new THREE.MeshStandardNodeMaterial();
   for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "roughness", "metalness", "color", "normalScale", "side"]) if (m[k] !== undefined) n[k] = m[k];
   n.envMapIntensity = 1;
@@ -229,6 +229,7 @@ export async function buildWorld(scene, O, sky, params) {
     const focal = heightPx / (2 * Math.tan((fov * Math.PI) / 360));
     for (const { lod, errors } of lodList) lod.levels.forEach((l, i) => { l.distance = (errors[i] * focal) / LOD_PIXEL_ERROR; });
   };
+  const rocks = [];
   const place = (src, x, z, yOff, rotY, sx, sy = sx, sz = sx) => {
     const lod = new THREE.LOD();
     const s = Math.max(sx, sy, sz);
@@ -247,6 +248,7 @@ export async function buildWorld(scene, O, sky, params) {
       o.scale.set(sx, sy, sz);
       scene.add(o);
     }
+    if (z < 40) rocks.push({ x, z, r: Math.max(sx, sz) * 0.72 });
     return lod;
   };
   const [boulder, smallRocks, shelf1, shelf2, cliff, shell] = await Promise.all(
@@ -273,5 +275,5 @@ export async function buildWorld(scene, O, sky, params) {
   place(cliff, 34, 116, -6.0, Math.PI * 1.15, 2.0);
   place(cliff, 86, 100, -5.0, Math.PI * 1.28, 2.2);
   updateLods(1080 * params.renderScale, params.fov);
-  return { terrain, updateLods };
+  return { terrain, updateLods, rocks };
 }

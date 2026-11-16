@@ -1,6 +1,6 @@
 /**
- * Boot: safe-area → device preview → WebGPU design stage → minimal demo.
- * Replace this file (or add src/game/*) for real gameplay.
+ * Boot: safe-area → device preview → WebGPU design stage → shore scene.
+ * Fishing rules live in docs/FISHING-REQUIREMENTS.md. The state machine is not here yet.
  * Keep: adapt/*, create-renderer, utils/haptics, DOM contract.
  */
 

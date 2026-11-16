@@ -17,12 +17,18 @@ index.html
   → style.css
   → main.ts
        → applyNativeClass / safeArea
-       → createRenderer(#stage)
-       → demo scene
+       → startShore(#stage)
+            → WebGPURenderer（Three canvas 隐藏）
+            → #shore-view 接最终画面
+            → 天空 HDRI、沙滩石头、三层 FFT 海面、后期
+            → 岸边鱼群（docs/FISH-SCHOOL.md）
+            → 设置面板（雾 / 水 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
-       → haptics + HUD buttons
+       → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
 ```
+
+`createRenderer` 仍在，岸边路径不调用它。没有 `navigator.gpu` 时 `main.ts` 走 `showFatal`。
 
 ## 3. DOM
 
@@ -60,8 +66,12 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 要改 | 文件 |
 |------|------|
 | base / 端口 | `vite.config.ts` |
-| appId | `capacitor.config.ts` |
+| appId / appName | `capacitor.config.ts`（现为 `com.wangzhixuan.fishing` / Fishing） |
 | 设计分辨率 | `design.ts` + `style.css` |
+| 岸边与设置 | `src/shore/startShore.js` |
+| 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，`src/fish/school.js`，`src/fish/dorade.js` |
+| 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
+| 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 震动原生 | `plugins/native-haptics/*.swift` + bootstrap |
 | 启动 HUD | `index.html` + `main.ts` |
 | 音效（规划） | [AUDIO.md](./AUDIO.md) |

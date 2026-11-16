@@ -4,7 +4,7 @@
 
 ## 1. 定位
 
-可复制的 **竖屏 WebGPU 手游底座**：能 dev、能 build、能真机、能震动、桌面≈手机/Pad。不含具体玩法（demo 可删）。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面已经接上。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
 
 ## 2. 目录
 
@@ -17,14 +17,18 @@ portrait-webgpu-base/
 ├── vite.config.ts          # base: './' · port 5190
 ├── capacitor.config.ts     # contentInset never · scrollEnabled false
 ├── src/
-│   ├── main.ts             # demo（可替换）
-│   ├── create-renderer.ts
+│   ├── main.ts             # 安全区、舞台、startShore、震动 HUD
+│   ├── shore/
+│   │   ├── startShore.js   # 岸边启动、设置面板、镜头
+│   │   └── minamo/         # 水面与场景，MIT
+│   ├── create-renderer.ts  # showFatal；岸边不走 createRenderer
 │   ├── style.css
 │   ├── adapt/
 │   │   ├── design.ts       # 390×844 · layout · clientToDesign
 │   │   ├── devicePreview.ts
 │   │   └── safeArea.ts
 │   └── utils/haptics.ts
+├── public/assets/          # HDRI、沙滩、石头。cap sync 时拷进 iOS
 ├── plugins/native-haptics/ # Swift 真源
 └── scripts/bootstrap-ios.mjs
 ```
@@ -44,7 +48,8 @@ portrait-webgpu-base/
 
 | 项 | 值 |
 |----|-----|
-| `appId` | 在 `capacitor.config.ts` 自定，避免和真机已装 App 冲突 |
+| `appId` | `com.wangzhixuan.fishing`。不要用模板 `…hapticstest` |
+| `appName` | `Fishing` |
 | `webDir` | `dist` |
 | `ios.contentInset` | `never` |
 | `ios.scrollEnabled` | `false` |
@@ -82,12 +87,31 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 
 3D 可全出血；可点 UI 只在 `#ui-root`。
 
-## 6. WebGPU
+## 6. WebGPU 与水面
 
-- `createRenderer` → `three/webgpu` WebGPURenderer  
-- 无 `navigator.gpu` / init 失败 → `showFatal`  
-- DPR cap 默认 2  
-- 禁止 `setSize(innerWidth, innerHeight)` 跟窗走  
+水面外观已定。下面的数是启动默认值，写在 `src/shore/startShore.js`。设置面板只用于当次试看，不要把试出来的另一组再写回去，除非明确要求改默认。
+
+| 项 | 值 |
+|----|-----|
+| 雾色 | `#bdd7ea` |
+| 雾起始 / 结束 | 0 / 180 |
+| 风速 / 涌浪 / 翻卷 | 0.8 / 0 / 0.02 |
+| 白沫 | 0.12 |
+| 粗糙 / 透光 / 折射 | 0.2 / 0.22 / 1.32 |
+| 曝光 / 太阳 / 泛光 | 0.61 / 0.37 / 0.012，自动曝光关 |
+| 浪高 `waveScale` | 0.22（不在滑条上。低风速的 JONSWAP 是短碎浪，靠它压平） |
+| 镜头 | `(0, 1.7, 2)`，yaw 100°，pitch −10° |
+
+- Three **0.186.1**（`@types/three` 0.187.0）。0.186.1 的类型包没有发布。
+- 岸边：`startShore` 建 `WebGPURenderer`。无 `navigator.gpu` 或后端不是 WebGPU → `showFatal`。
+- 最终像素在 `#shore-view`。分辨率是设计尺寸 × min(dpr, 2) × `renderScale`。阴影贴图 2048。
+- 海浪是三层 256² FFT（约 250 m / 37 m / 7.3 m）。改风速、涌浪、翻卷会 `ocean.rebuildSpectrum()`。
+- 雾只混在水面着色器里，按视线仰角和距离。反射先往深水色拉一档（天空占 0.8），薄雾里雾色占 0.55。天空 HDRI 保持清晰。
+- 陆地在 +z，海在 −z。拖画面改 yaw/pitch，并写回设置滑条。这还不是「手机就是鱼竿」。
+- 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。
+- 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
+- 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
+- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/school.js`，不写进水面着色器，也不写进钓鱼状态机。  
 
 ## 7. Haptics
 
