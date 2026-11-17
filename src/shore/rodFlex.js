@@ -17,8 +17,10 @@
  * load bends only the tip and a heavy one moves the bend down the blank. The fast modes
  * tilt each segment on top of that. Segments keep their length.
  *
- * Three things can act on the tip from outside, and all three enter the same way, as a
- * pull on the tip shared out among the modes:
+ * Three things can act on the tip from outside. The two forces go to the first mode alone:
+ * its deep-bend curve is already the whole answer to a pull on the tip, and it stiffens as
+ * it should. The fast modes do not stiffen, so a share of a hard pull would wring them
+ * into an S the real blank never takes. They are left to carry motion only.
  *   a weight riding on it   setTipLoad     changes the modes themselves
  *   a steady force          setTipForce    the same whatever the rod does
  *   a tether                setTipTether   a line to a fixed point: pulls only when the
@@ -75,6 +77,15 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
   let tension = 0;
   // The total of those for the substep in hand. Written by tipPull().
   let pullX = 0, pullY = 0, pullZ = 0;
+  // How a pull on the tip reaches each mode. Only the first takes it, scaled so that a
+  // steady pull F settles the tip at F / tipStiffness, the deep-bend table's own figure.
+  let pullShare = new Float64Array(count);
+  function sharePull() {
+    pullShare = new Float64Array(count);
+    const first = modes[0];
+    pullShare[0] = (first.omega * first.omega) / (beam.tipStiffness * first.tip);
+  }
+  sharePull();
   const bent = new Float64Array(nodes * 3);
 
   function rigidPlace(out, butt, axis) {
@@ -119,6 +130,13 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
    * (bx, by, bz) is the butt and (ax, ay, az) the grip axis at that moment.
    * The steady force, plus the tether if the bent tip is further from its anchor than the
    * line is long. Also sets `tension`.
+   *
+   * The tether bends the rod only until the tip section points along the line. A line at
+   * 40 degrees to the grip turns the tip 40 degrees and no more, however hard it pulls:
+   * past that the pull runs down the blank instead of across it. So the part that bends
+   * is tension * sin(line angle - tip angle) / cos(tip angle). For a straight rod that is
+   * the plain sideways part of the pull, and for a line square to the grip it is the whole
+   * tension, which is the case the deep-bend table was solved for.
    */
   function tipPull(bx, by, bz, ax, ay, az) {
     pullX = extX;
@@ -127,16 +145,36 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     if (!tied) return;
     curve(ax, ay, az, bent);
     const e = (nodes - 1) * 3;
-    const gx = tieX - (bx + bent[e]);
-    const gy = tieY - (by + bent[e + 1]);
-    const gz = tieZ - (bz + bent[e + 2]);
+    let gx = tieX - (bx + bent[e]);
+    let gy = tieY - (by + bent[e + 1]);
+    let gz = tieZ - (bz + bent[e + 2]);
     const gap = Math.hypot(gx, gy, gz);
     tension = gap > tieLength ? tieStiffness * (gap - tieLength) : 0;
-    if (tension > 0) {
-      pullX += (gx / gap) * tension;
-      pullY += (gy / gap) * tension;
-      pullZ += (gz / gap) * tension;
-    }
+    if (!(tension > 0)) return;
+    // Split the line's direction into along the grip and across it.
+    gx /= gap;
+    gy /= gap;
+    gz /= gap;
+    const along = gx * ax + gy * ay + gz * az;
+    gx -= ax * along;
+    gy -= ay * along;
+    gz -= az * along;
+    const across = Math.hypot(gx, gy, gz);
+    if (across < 1e-6) return;
+    gx /= across;
+    gy /= across;
+    gz /= across;
+    // A line that pulls back past square is treated as square.
+    const lineAngle = Math.atan2(across, Math.max(along, 0));
+    // How far the tip has already turned toward the line.
+    const r = Math.hypot(q[0], q[1], q[2]);
+    const toward = r > 1e-9 ? (q[0] * gx + q[1] * gy + q[2] * gz) / r : 0;
+    const tipAngle = beam.tipAngle(modes[0].tip * r) * toward;
+    const part = Math.sin(lineAngle - tipAngle) / Math.cos(tipAngle);
+    const bend = tension * Math.max(-1, Math.min(1, part));
+    pullX += gx * bend;
+    pullY += gy * bend;
+    pullZ += gz * bend;
   }
 
   /**
@@ -163,9 +201,10 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     const rz = v[o + 2] - bz;
     const tipSpeed = Math.abs(mode.tip) * Math.hypot(rx, ry, rz);
     const loss = 2 * DAMPING[m] * mode.omega * (1 + tipSpeed / LOSS_DOUBLES_AT);
-    v[o] += (-spring * dx - loss * rx + mode.tip * pullX) * sub;
-    v[o + 1] += (-spring * dy - loss * ry + mode.tip * pullY - mode.push * GRAVITY) * sub;
-    v[o + 2] += (-spring * dz - loss * rz + mode.tip * pullZ) * sub;
+    const share = pullShare[m];
+    v[o] += (-spring * dx - loss * rx + share * pullX) * sub;
+    v[o + 1] += (-spring * dy - loss * ry + share * pullY - mode.push * GRAVITY) * sub;
+    v[o + 2] += (-spring * dz - loss * rz + share * pullZ) * sub;
     z[o] += v[o] * sub;
     z[o + 1] += v[o + 1] * sub;
     z[o + 2] += v[o + 2] * sub;
@@ -221,9 +260,9 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     for (let m = 0; m < modes.length; m += 1) {
       const mode = modes[m];
       const k = mode.omega * mode.omega;
-      let fx = mode.tip * extX;
-      let fy = mode.tip * extY - mode.push * GRAVITY;
-      let fz = mode.tip * extZ;
+      let fx = pullShare[m] * extX;
+      let fy = pullShare[m] * extY - mode.push * GRAVITY;
+      let fz = pullShare[m] * extZ;
       const a = fx * axis.x + fy * axis.y + fz * axis.z;
       fx = (fx - axis.x * a) / k;
       fy = (fy - axis.y * a) / k;
@@ -268,6 +307,7 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       if (value === load) return;
       load = value;
       modes = beam.modes(load, count);
+      sharePull();
       stale = true;
     },
 

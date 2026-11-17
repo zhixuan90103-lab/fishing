@@ -37,8 +37,10 @@ const DENSITY = [
   [1.0, 0.08],
 ];
 
-// The deep-bend table runs from straight up to this tip angle. Past it the rod will not bend further.
-const TIP_ANGLE_MAX = (72 * Math.PI) / 180;
+// The deep-bend table runs from straight up to this tip angle. Past it the rod will not
+// bend further. Near 90 the tip lies along a pull from the side, and more pull only moves
+// the bend down toward the butt.
+const TIP_ANGLE_MAX = (87 * Math.PI) / 180;
 const LEVELS = 48;
 function along(table, t) {
   for (let i = 1; i < table.length; i += 1) {
@@ -250,6 +252,8 @@ export function createRodBeam({ length, segs, rigidBelow = 0 }) {
     h: beam.h,
     // Largest sideways tip deflection the deep-bend table reaches.
     reach: deflect[LEVELS],
+    // Sideways force on the tip for a metre of deflection, small bends, N/m.
+    tipStiffness: TIP_STIFFNESS,
 
     /**
      * The slowest `count` vibration modes with tipLoad kg riding on the tip. Each has:
@@ -272,6 +276,12 @@ export function createRodBeam({ length, segs, rigidBelow = 0 }) {
     deepen(linear) {
       find(force, TIP_STIFFNESS * linear);
       return deflect[row] + (deflect[row + 1] - deflect[row]) * frac;
+    },
+
+    // How far the tip section has turned off the grip axis when the tip is deflected by d.
+    tipAngle(d) {
+      find(deflect, d);
+      return (TIP_ANGLE_MAX * (row + frac)) / LEVELS;
     },
 
     // Every segment's angle off the grip axis when the tip is deflected by d.
