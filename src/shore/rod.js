@@ -104,6 +104,11 @@ export function createSpinningRod() {
   const boneBasis = new THREE.Matrix4();
   const parentQ = new THREE.Quaternion();
   const invQ = new THREE.Quaternion();
+  const tetherWorld = new THREE.Vector3();
+  const tetherBend = new THREE.Vector3();
+  let tetherLength = 0;
+  let tetherStiffness = 0;
+  let tetherOn = false;
 
   // The flex gives each node relative to the butt, in the axes it was driven with.
   // Bring that into the rod's own frame, then out through the real transform.
@@ -148,15 +153,25 @@ export function createSpinningRod() {
     setTipLoad(kg) {
       flex.setTipLoad(kg);
     },
-    // Pull on the tip, world space, newtons: the line. Only the part across the blank bends it.
+    // A steady pull on the tip, world space, newtons. Only the part across the blank bends
+    // it. A fishing line does not come through here: its pull has to follow the tip, so it
+    // uses setTipTether.
     setTipForce(force) {
       flex.setTipForce(force.x, force.y, force.z);
     },
     // Tie the tip to a world point with `length` metres of line that pulls `stiffness`
-    // newtons per metre of stretch and nothing while slack. null unties it.
+    // newtons per metre of stretch and nothing while slack. null unties it. The point is
+    // remembered in world space and moved into the bend's frame at the start of each step.
     setTipTether(point, length, stiffness) {
-      if (point) flex.setTipTether(point.x, point.y, point.z, length, stiffness);
-      else flex.clearTipTether();
+      if (!point) {
+        tetherOn = false;
+        flex.clearTipTether();
+        return;
+      }
+      tetherOn = true;
+      tetherWorld.copy(point);
+      tetherLength = length;
+      tetherStiffness = stiffness;
     },
     // How hard the tether pulls right now, newtons.
     get tipTension() {
@@ -174,6 +189,10 @@ export function createSpinningRod() {
     },
     update(dt) {
       hold.carry(dt);
+      if (tetherOn) {
+        hold.intoBend(tetherWorld, tetherBend);
+        flex.setTipTether(tetherBend.x, tetherBend.y, tetherBend.z, tetherLength, tetherStiffness);
+      }
       flex.step(dt, hold.grip.butt, hold.grip.axis);
       layBlank();
       poseBones();
@@ -186,6 +205,11 @@ export function createSpinningRod() {
   };
 }
 
+// Blank radius along the shaft, 0 at the butt and 1 at the tip. Guides stand on this.
+function blankRadius(t) {
+  return THREE.MathUtils.lerp(0.008, 0.0015, t);
+}
+
 function blankGeometry(boneCount) {
   const positions = [];
   const indices = [];
@@ -194,7 +218,7 @@ function blankGeometry(boneCount) {
   for (let i = 0; i < RINGS; i += 1) {
     const t = i / (RINGS - 1);
     const y = LENGTH * t;
-    const radius = THREE.MathUtils.lerp(0.008, 0.0015, t);
+    const radius = blankRadius(t);
     const u = t * (boneCount - 1);
     const i0 = Math.min(boneCount - 2, Math.floor(u));
     const f = u - i0;
@@ -250,7 +274,7 @@ function addGuides(bones, seg, metal) {
     if (along < gripEnd) continue;
     const index = Math.min(bones.length - 1, Math.round(along / seg));
     const t = along / LENGTH;
-    const blankRadius = THREE.MathUtils.lerp(0.008, 0.0015, t);
+    const radiusOnBlank = blankRadius(t);
     const guide = new THREE.Group();
     guide.position.y = along - index * seg;
     const radius = ringRadius[g];
@@ -260,13 +284,13 @@ function addGuides(bones, seg, metal) {
       metal,
     );
     foot.rotation.x = Math.PI / 2;
-    foot.position.z = blankRadius + footLen * 0.5;
+    foot.position.z = radiusOnBlank + footLen * 0.5;
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(radius, 0.0011, 8, 16),
       metal,
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.z = blankRadius + footLen;
+    ring.position.z = radiusOnBlank + footLen;
     guide.add(foot, ring);
     bones[index].add(guide);
     rings.unshift(ring);

@@ -40,14 +40,41 @@ export function hangLine(ax, ay, az, bx, by, bz, length, out, at, count) {
   }
 
   if (span < FOLD_BELOW * length) {
-    const low = (ay + by - length) * 0.5;
-    const down = ay - low;
-    for (let i = 0; i < count; i += 1) {
-      const t = i / last;
-      const s = length * t;
-      out[at + i * 3] = ax + dx * t;
-      out[at + i * 3 + 1] = s <= down ? ay - s : low + (s - down);
-      out[at + i * 3 + 2] = az + dz * t;
+    // Down from the first end to a bottom point, then up to the second. The bottom sits
+    // on the halfway line, as low as this length allows, so the two straight pieces add
+    // up to `length`. Spreading the span along the whole drop would draw a longer line.
+    const mx = (ax + bx) * 0.5;
+    const mz = (az + bz) * 0.5;
+    const half = span * 0.5;
+    let lo = Math.min(ay, by) - length;
+    let hi = Math.min(ay, by);
+    for (let n = 0; n < 40; n += 1) {
+      const mid = (lo + hi) * 0.5;
+      const used = Math.hypot(half, ay - mid) + Math.hypot(half, by - mid);
+      if (used > length) lo = mid;
+      else hi = mid;
+    }
+    const low = (lo + hi) * 0.5;
+    const d1 = Math.hypot(mx - ax, low - ay, mz - az);
+    const d2 = Math.hypot(bx - mx, by - low, bz - mz);
+    const total = d1 + d2;
+    // One sample sits on the bottom. A sample on either side would chord across the
+    // corner and draw the line short.
+    let n1 = d2 === 0 ? last : Math.round((last * d1) / total);
+    n1 = Math.min(last - (d2 === 0 ? 0 : 1), Math.max(d1 === 0 ? 0 : 1, n1));
+    for (let i = 0; i <= n1; i += 1) {
+      const t = n1 > 0 ? i / n1 : 0;
+      const o = at + i * 3;
+      out[o] = ax + (mx - ax) * t;
+      out[o + 1] = ay + (low - ay) * t;
+      out[o + 2] = az + (mz - az) * t;
+    }
+    for (let i = n1 + 1; i <= last; i += 1) {
+      const t = (i - n1) / (last - n1);
+      const o = at + i * 3;
+      out[o] = mx + (bx - mx) * t;
+      out[o + 1] = low + (by - low) * t;
+      out[o + 2] = mz + (bz - mz) * t;
     }
     return slack;
   }

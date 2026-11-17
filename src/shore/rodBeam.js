@@ -16,7 +16,9 @@ const FREE_HZ = 2.8;
 // Sideways force on the tip for a metre of deflection, small bends, N/m.
 const TIP_STIFFNESS = 1.86;
 // Relative bending stiffness along the blank: [fraction of length, stiffness]. Butt is 1.
-// Follows radius^4 of the taper in rod.js. Steeper falloff means a faster, tippier action.
+// Hand-matched to the blank's radius^4 in rod.js, then left as its own table. Steeper
+// falloff means a faster, tippier action. Change this table to retune the rod; do not
+// expect a taper edit in rod.js to move it.
 const STIFFNESS = [
   [0.0, 1.0],
   [0.35, 0.26],

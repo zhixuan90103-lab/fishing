@@ -91,12 +91,16 @@ export function createRodHold(root, handAt) {
   // was, then take a share of its turn. last is the target's previous value.
   const turn = new THREE.Quaternion();
   const part = new THREE.Quaternion();
+  // q and -q are the same turn. Keep the one with a positive scalar so the angle stays short.
+  function positiveHalf(q) {
+    if (q.w < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+  }
   function chase(q, target, last, rate, dt) {
     const keep = Math.exp(-rate * dt);
     q.slerp(last, 1 - keep);
     const share = dt > 1e-6 ? 1 - (1 - keep) / (rate * dt) : 0;
     turn.copy(target).multiply(part.copy(last).invert());
-    if (turn.w < 0) turn.set(-turn.x, -turn.y, -turn.z, -turn.w);
+    positiveHalf(turn);
     q.premultiply(part.identity().slerp(turn, share));
     last.copy(target);
   }
@@ -122,7 +126,7 @@ export function createRodHold(root, handAt) {
     chase(easedQ, easeQ, lastEaseQ, SMOOTH_RATE, dt);
     chase(heldQ, easedQ, lastEasedQ, FOLLOW_RATE, dt);
     trail.copy(easedQ).invert().multiply(heldQ);
-    if (trail.w < 0) trail.set(-trail.x, -trail.y, -trail.z, -trail.w);
+    positiveHalf(trail);
     const angle = 2 * Math.acos(Math.min(1, trail.w));
     const most = FOLLOW_MAX * Math.PI / 180;
     if (angle > 1e-6) trail.slerp(IDENTITY, 1 - (most * Math.tanh(angle / most)) / angle);
@@ -135,6 +139,8 @@ export function createRodHold(root, handAt) {
     quaternion: new THREE.Quaternion(),
   };
   const viewP = new THREE.Vector3();
+  const invViewQ = new THREE.Quaternion();
+  const bendPoint = new THREE.Vector3();
 
   setMount();
   placeRoot();
@@ -149,6 +155,21 @@ export function createRodHold(root, handAt) {
       Object.assign(pose, next);
       setMount();
       placeRoot();
+    },
+
+    // The bend is integrated in the smoothed view's frame. A world point (the line's far
+    // end) has to be brought into that same frame or the pull is measured to a different
+    // tip than the one on screen. Rotating about the view keeps the distance to the drawn
+    // tip: the drawn blank is this frame's curve, carried by the raw view.
+    intoBend(world, out) {
+      if (!root.parent || !started) {
+        out.copy(world);
+        return out;
+      }
+      invViewQ.copy(viewQ).invert();
+      bendPoint.copy(world).sub(viewP).applyQuaternion(invViewQ).applyQuaternion(easedQ);
+      out.copy(bendPoint).add(viewP);
+      return out;
     },
 
     // Place the root for this frame and refresh grip. Leaves the root's world matrix current.
