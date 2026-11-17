@@ -11,6 +11,70 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { texture, float } from 'three/tsl';
 import { toNodeMaterial } from '../shore/minamo/scene/world.js';
 
+// Spine joints from behind the head to the tail root. The clip swings these by 1 to 8
+// degrees, all in phase, so the body reads as a stiff board. poseSpine adds a wave that
+// travels toward the tail on top of the clip.
+// [bone, swing in degrees at drive 1, phase lag, share of the turn bend]
+const DEG = Math.PI / 180;
+const SPINE = [
+  ['Bone001_Armature', 1.6, 0.25, 0.14],
+  ['Bone002_Armature', 3.2, 0.55, 0.2],
+  ['Bone003_Armature', 4.6, 0.85, 0.22],
+  ['Bone004_Armature', 6, 1.15, 0.2],
+  ['Bone005_Armature', 7, 1.45, 0.14],
+  ['Bone006_Armature', 8.5, 1.75, 0.1],
+];
+// The dorsal fin and the belly hang off the head bone, not the spine. Each of these
+// copies the spine joint at the same station, or the fin stays straight over a bent back.
+const FOLLOW = [
+  ['Bone020_Armature', 0],
+  ['Bone026_Armature', 0],
+  ['Bone027_Armature', 1],
+  ['Bone028_Armature', 2],
+  ['Bone029_Armature', 3],
+  ['Bone030_Armature', 4],
+];
+const CLIP_BEATS = 2;
+const spineQ = new THREE.Quaternion();
+const spineUp = new THREE.Vector3();
+
+function rigSpine(fish) {
+  fish.holder.updateMatrixWorld(true);
+  const holderQ = fish.holder.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const joint = (name, station) => {
+    const bone = fish.holder.getObjectByName(name);
+    if (!bone) return null;
+    // The fish's up axis in this bone's own frame. Bending is always about that.
+    const q = holderQ.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
+    const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(q.invert()).normalize();
+    return { bone, axis, station, base: bone.quaternion.clone(), last: bone.quaternion.clone() };
+  };
+  fish.spine = [
+    ...SPINE.map(([name], i) => joint(name, i)),
+    ...FOLLOW.map(([name, station]) => joint(name, station)),
+  ].filter(Boolean);
+  fish.beat = (Math.PI * 2 * CLIP_BEATS) / (fish.action.getClip().duration || 1);
+  return fish;
+}
+
+// Call after mixer.update. drive scales the tail beat (0 is a stiff glide, 1 is a
+// working stroke). bend is the whole-body curve in radians, positive when the fish
+// turns to its left (toward +X with the head on +Z).
+// The mixer only writes a bone when its track value changes, so the clip pose is
+// tracked here and the wave is never stacked on its own last output.
+export function poseSpine(fish, drive, bend) {
+  const phase = fish.action.time * fish.beat;
+  for (let i = 0; i < fish.spine.length; i++) {
+    const s = fish.spine[i];
+    const row = SPINE[s.station];
+    if (!s.bone.quaternion.equals(s.last)) s.base.copy(s.bone.quaternion);
+    const angle = row[1] * DEG * drive * Math.cos(phase - row[2]) - row[3] * bend;
+    spineQ.setFromAxisAngle(spineUp.copy(s.axis), angle);
+    s.bone.quaternion.copy(s.base).multiply(spineQ);
+    s.last.copy(s.bone.quaternion);
+  }
+}
+
 export async function loadDorade(length = 1) {
   const gltf = await new GLTFLoader().loadAsync('./assets/models/dorade-royale.glb');
   const diffuse = await gltf.parser.getDependency('texture', 0);
@@ -64,7 +128,7 @@ export async function loadDorade(length = 1) {
   const mixer = new THREE.AnimationMixer(root);
   const action = mixer.clipAction(gltf.animations[0]);
   action.play();
-  return { holder, mixer, action, roughnessNode };
+  return rigSpine({ holder, mixer, action, roughnessNode });
 }
 
 // One GLB load. Clones share geometry and materials. Each fish gets its own skeleton and mixer.
@@ -81,7 +145,7 @@ export function createDoradePool(template, capacity) {
     const action = mixer.clipAction(clip);
     action.play();
     action.paused = true;
-    free.push({ holder, mixer, action, active: false });
+    free.push(rigSpine({ holder, mixer, action, active: false }));
   }
   return {
     acquire() {

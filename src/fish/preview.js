@@ -1,10 +1,12 @@
 import * as THREE from 'three/webgpu';
-import { loadDorade } from './dorade.js';
+import { loadDorade, poseSpine } from './dorade.js';
 
 const canvas = document.querySelector('#view');
 const status = document.querySelector('#status');
 const rateInput = document.querySelector('#rate');
 const rateLabel = document.querySelector('#rate-label');
+const driveInput = document.querySelector('#drive');
+const bendInput = document.querySelector('#bend');
 
 if (!navigator.gpu) {
   status.textContent = '这个浏览器没有 WebGPU';
@@ -92,6 +94,7 @@ function frame(now) {
   last = now;
   fish.action.setEffectiveTimeScale(swimRate);
   fish.mixer.update(dt);
+  poseSpine(fish, Number(driveInput.value), Number(bendInput.value));
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
