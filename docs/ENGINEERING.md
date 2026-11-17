@@ -111,7 +111,8 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
-- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/school.js`，不写进水面着色器，也不写进钓鱼状态机。  
+- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
+- 鱼竿和渔轮是代码建模，见 [ROD.md](./ROD.md)。  
 
 ## 7. Haptics
 

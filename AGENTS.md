@@ -13,7 +13,8 @@
 |------|------|
 | Web 启动 | `index.html` → `src/main.ts` |
 | 岸边场景 | `src/shore/startShore.js` |
-| 岸边鱼群 | `docs/FISH-SCHOOL.md`，`src/fish/school.js` |
+| 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节 |
+| 鱼竿和渔轮 | `docs/ROD.md`，`src/shore/rod.js`，`src/shore/reel.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 岸边资源（CC0） | `public/assets/`，路径前缀 `./assets/` |
 | 设计舞台 | `src/adapt/design.ts` |
@@ -65,7 +66,8 @@ npm run ios           # sync 并打开 Xcode
 
 ## 还没做
 
-- 钓鱼状态机、手机即鱼竿、咬口和拔河。规则在需求文档，不要在场景里另写一套。
+- 钓鱼状态机、手机即鱼竿、咬口和拔河。规则在需求文档，不要在场景里另写一套。上钩的鱼从鱼群里取，接口见 `docs/FISH-SCHOOL.md` 第 6 节。
+- 鱼线，以及竿按受力方向弯。见 `docs/ROD.md`。
 - 落水水花、气泡、咬口涟漪。
 - 音效。按 `docs/AUDIO.md`，禁止热路径 `new Audio()`。
 - Android。

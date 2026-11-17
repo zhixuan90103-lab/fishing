@@ -69,7 +69,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | appId / appName | `capacitor.config.ts`（现为 `com.wangzhixuan.fishing` / Fishing） |
 | 设计分辨率 | `design.ts` + `style.css` |
 | 岸边与设置 | `src/shore/startShore.js` |
-| 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，`src/fish/school.js`，`src/fish/dorade.js` |
+| 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
+| 鱼竿和渔轮 | [ROD.md](./ROD.md)，`src/shore/rod.js`，`src/shore/reel.js` |
 | 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 震动原生 | `plugins/native-haptics/*.swift` + bootstrap |
