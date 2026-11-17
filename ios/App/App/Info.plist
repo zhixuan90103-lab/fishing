@@ -68,5 +68,7 @@
 	<true/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
+	<key>NSMotionUsageDescription</key>
+	<string>转动和倾斜手机时，镜头和鱼竿跟着动。</string>
 </dict>
 </plist>

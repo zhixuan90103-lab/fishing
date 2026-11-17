@@ -16,6 +16,7 @@
 | 岸边场景 | `src/shore/startShore.js` |
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节 |
 | 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。渔轮是 `src/shore/reel.js` |
+| 手机瞄准 | `docs/PHONE-LOOK.md`，传感器 `src/shore/phoneLook.js`，用法在 `src/shore/startShore.js`。数字在 `docs/ROD.md` 第 3 节 |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
@@ -77,7 +78,7 @@ npm run ios           # sync 并打开 Xcode
 ## 还没做
 
 - 钓鱼状态机、咬口和拔河。规则在需求文档，不要在场景里另写一套。上钩的鱼从鱼群里取，接口见 `docs/FISH-SCHOOL.md` 第 6 节。
-- 手机即鱼竿。现在竿跟的是拖动的镜头，要换的是 `src/shore/rodHold.js` 这一层。
+- 抛投和甩杆。瞄准已经接上：没按住时手机改视线，按住时镜头停、竿跟着倾斜。整竿抛出期间冻住镜头的口子是 `setLookLocked`，玩法还没调用。见 `docs/PHONE-LOOK.md`。
 - 饵和鱼钩。线的远端和放出的长度现在由设置面板给，要换成玩法来给。见 `docs/LINE.md`。
 - 渔轮跟着线长转。部件已有，没有东西驱动。
 - 拔河用的竿的软硬。现在从侧面拉约 7 牛就弯到头，见 `docs/ROD.md` 第 8 节。

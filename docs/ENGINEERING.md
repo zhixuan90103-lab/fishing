@@ -125,12 +125,12 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 最终像素在 `#shore-view`。分辨率是设计尺寸 × min(dpr, 2) × `renderScale`。阴影贴图 2048。
 - 海浪是三层 256² FFT（约 250 m / 37 m / 7.3 m）。改风速、涌浪、翻卷会 `ocean.rebuildSpectrum()`。
 - 雾只混在水面着色器里，按视线仰角和距离。反射先往深水色拉一档（天空占 0.8），薄雾里雾色占 0.55。天空 HDRI 保持清晰。
-- 陆地在 +z，海在 −z。拖画面改 yaw/pitch，并写回设置滑条。这还不是「手机就是鱼竿」。
+- 陆地在 +z，海在 −z。没有传感器时拖画面改 yaw/pitch，并写回设置滑条。真机的瞄准见 [PHONE-LOOK.md](./PHONE-LOOK.md)。
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
-- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `rod.update` 再 `line.update`。
+- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `applyPhone`，再 `rod.update`，再 `line.update`。
 
 ## 7. Haptics
 

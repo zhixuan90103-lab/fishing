@@ -82,8 +82,11 @@ export function createRodHold(root, handAt) {
   }
 
   function placeRoot() {
-    root.quaternion.multiplyQuaternions(trail, mountQ);
-    root.position.copy(mountP).sub(hand).applyQuaternion(trail).add(hand);
+    // View lag first, then the phone aim at full size. The 5° cap belongs to the view
+    // lag only. The phone aim is the raw tilt past its own dead zone.
+    swing.multiplyQuaternions(trail, aimQ);
+    root.quaternion.multiplyQuaternions(swing, mountQ);
+    root.position.copy(mountP).sub(hand).applyQuaternion(swing).add(hand);
   }
 
   // Move q toward target at the given rate. Exact for a target that turns evenly through
@@ -132,6 +135,11 @@ export function createRodHold(root, handAt) {
     if (angle > 1e-6) trail.slerp(IDENTITY, 1 - (most * Math.tanh(angle / most)) / angle);
   }
 
+  // Phone aim in camera space, on top of the mount. Identity when the phone is still.
+  // Not chased and not capped. phoneLook does not low-pass this aim.
+  const aimQ = new THREE.Quaternion();
+  const swing = new THREE.Quaternion();
+
   // The grip in the world, as the bend should see it: built on the smoothed view.
   const grip = {
     butt: new THREE.Vector3(),
@@ -155,6 +163,11 @@ export function createRodHold(root, handAt) {
       Object.assign(pose, next);
       setMount();
       placeRoot();
+    },
+
+    // Extra aim in camera space, on top of ROD_POSE. Full size, not limited by FOLLOW_MAX.
+    setAim(next) {
+      aimQ.copy(next);
     },
 
     // The bend is integrated in the smoothed view's frame. A world point (the line's far

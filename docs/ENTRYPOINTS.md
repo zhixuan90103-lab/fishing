@@ -24,7 +24,7 @@ index.html
             → 岸边鱼群 createShoreSchool（docs/FISH-SCHOOL.md）
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
-            → 每帧：rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
+            → 每帧：applyPhone → rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
             → 设置面板（雾 / 水 / 鱼 / 鱼竿 / 鱼线 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
@@ -102,6 +102,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
 | 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
 | 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
+| 手机瞄准 | [PHONE-LOOK.md](./PHONE-LOOK.md)。传感器 `src/shore/phoneLook.js`，视线和瞄准 `src/shore/startShore.js` |
 | 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
