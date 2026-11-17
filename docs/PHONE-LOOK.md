@@ -3,7 +3,7 @@
 状态：已实现，真机上的方向和手感还没确认。手机瞄准是物料：它把手机的姿态变成镜头的视线和竿的指向，不含抛投、抬杆和咬口。  
 玩法规则在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 第 5 节。竿拿到瞄准以后怎么动见 [ROD.md](./ROD.md)。
 
-手机就是鱼竿。手机指向哪，竿就指向哪。没按住时镜头跟着转过去；按住时镜头停住，手机只动竿。
+手机就是鱼竿。手机指向哪，竿就指向哪。没按住时镜头跟着转过去；按住时镜头停住，手机只动竿。饵抛出去以后镜头也一直停着，直到线收回来。
 
 ## 1. 分层
 
@@ -15,7 +15,7 @@
 
 数据只往一个方向走：手机 → 读 → 分 → 镜头和握。读不知道有镜头和竿，分不知道传感器，也不碰镜头对象和竿对象。`phoneLook.js` 和 `aim.js` 都不引 Three，可以在 Node 里跑。
 
-`src/shore/startShore.js` 只接线：每帧在 `applyPhone` 里把 `look()` 交给 `aim.step`，按 `aim` 给的角度摆镜头，把剩下的交给 `rod.setAim`。谁算"按住"也在它那里：手指按着，或玩法调了 `setLookLocked`。
+`src/shore/startShore.js` 只接线：每帧在 `applyPhone` 里把 `look()` 交给 `aim.step`，按 `aim` 给的角度摆镜头，把剩下的交给 `rod.setAim`。谁算"按住"也在它那里：手指按着，或玩法把镜头锁了。
 
 ```
 按钮「允许手机转动」
@@ -100,21 +100,23 @@ rodHold 把它加在安装姿态上，FOLLOW_MAX 不管它
 
 ## 5. 给玩法留的口子
 
-`startShore()` 返回的对象上有：
+`startShore` 创建玩法时交给它一个 `lockLook`：
 
 | 接口 | 作用 |
 |---|---|
-| `setLookLocked(true)` | 镜头停，竿继续跟手机。和手指按住是同一件事。整竿抛出、线在水里期间用它 |
-| `setLookLocked(false)` | 镜头自己追回手机指的方向，不跳 |
+| `lockLook(true)` | 镜头停，竿继续跟手机。和手指按住是同一件事。饵飞出去到线收回来之间一直锁着，见 [PLAY.md](./PLAY.md) |
+| `lockLook(false)` | 镜头自己追回手机指的方向，不跳 |
 
-玩法要读"手机抬得多快"来判抬杆和甩杆的力度时，从 `phoneLook` 的角度去量，不要在这一层写规则，也不要从竿的弯曲反推。这个读数的口子还没有。
+玩法要在每帧的 `applyPhone` 之前调它。晚一帧，镜头会先朝竿指的方向追出去一截。
+
+玩法要读"手机甩得多快、抬得多快"时，读瞄准的俯仰（`aim.viewPitch + aim.rodPitch`），由 `startShore` 每帧传给它。角速度由玩法自己量，不要在这一层写规则，也不要从竿尖或竿的弯曲反推：竿身软，竿尖跟不上手。
 
 权限只由「允许手机转动」的点击去要：`enable()` 在那一次点击里同步调用，一次只请求一个接口。iOS 上 Capacitor 的 WebView 会静默放行而不弹框，所以 `BridgeViewController.swift` 里的 `MotionPromptProxy` 必须 `decisionHandler(.prompt)`。它的真源在 `plugins/native-haptics/`。
 
 ## 6. 还没做
 
 - 真机上的方向和手感没有确认。现在只在合成的姿态数据上验过算式。
-- 玩法还没有调用 `setLookLocked`。抛投、甩杆、抬杆的判定和力度不在这一层。
+- 抛投的力度由玩法量：它读瞄准的俯仰往下掉得多快，见 [PLAY.md](./PLAY.md) 第 4 节。抬杆的判定还没做。
 - 给玩法读手机转动快慢的口子。
 - 手机的平移不读。左右看靠转动手机。
 - 桌面上竿不受控制。

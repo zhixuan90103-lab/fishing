@@ -24,8 +24,10 @@ index.html
             → 岸边鱼群 createShoreSchool（docs/FISH-SCHOOL.md）
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
-            → 每帧：applyPhone → rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
-            → 设置面板（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 鱼线 / 镜头；震动测试移入面板）
+            → 饵 createLure，加在场景根上（docs/LURE.md）
+            → 玩法 createFishing({ rod, line, lure, lockLook })（docs/PLAY.md）
+            → 每帧：fishing.update → applyPhone → rod.update → line.update → fishing.follow → shoreSchool.update → 海面 → 场景 → 水 → 后期
+            → 设置面板（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
@@ -40,6 +42,21 @@ school.js update
        → 量每条鱼的拥挤
        → 对每条鱼：状态（或被取走后的 brain）→ 习性 → 归队 → swimFish
   → 尾巴动画 mixer.update → 脊柱波 poseSpine
+```
+
+玩法一帧（`fishing.update` 在最前面，`fishing.follow` 在 `line.update` 之后。第一帧的 `line.update` 之后先调一次 `fishing.begin`）：
+
+```
+fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
+  → 读上一帧线画出来的竿尖 line.tip
+  → ready：swing.step 量瞄准的俯仰往下掉得多快；松手且够快 → lureMove.launch，lockLook(true)
+           否则饵留在竿尖：line.stow
+  → flight：lureMove.fly，按着就停线；线长跟着饵；落水 → line.setTied(true)
+  → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lureMove.tow
+           靠近竿尖 → lureMove.hang；线收完 → ready，lockLook(false)
+  → line.setEnd / setLength，lure.place
+fishing.js follow()
+  → ready：把饵摆到这一帧的 line.end 上，鼻尖朝上
 ```
 
 手机瞄准一帧（`applyPhone`，在 `rod.update` 之前）：
@@ -123,6 +140,13 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
+| 这一竿怎么走、手指是什么意思 | [PLAY.md](./PLAY.md)，`src/play/fishing.js` |
+| 抛多远、多用力才算抛 | `src/play/swing.js` |
+| 收线的快慢 | `src/play/retrieve.js` |
+| 饵怎么飞、怎么荡、在水里怎么跟线 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |
+| 饵的外形 | `src/shore/lure.js` |
+| 渔轮收线时怎么转 | `src/shore/reel.js` 的 `wind` 和顶部常量 |
+| 桌面用什么代替手指 | `src/shore/startShore.js` 的 `onKey` |
 | 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
 | 鱼线：外观、软硬、接到竿上 | `src/shore/line.js` |
 | 线在竿上走哪些点 | `src/shore/rod.js` 的 `linePath` 和导环表 |

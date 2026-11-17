@@ -11,7 +11,7 @@
  *   rotor    cup, two arms, bail wire, line roller. Turns about Y.
  *   spool    skirt, line, drag knob. Slides along Y.
  *   handle   shaft, crank, knob. Turns about X.
- * Nothing animates them yet.
+ * wind(metres) turns them together for that much line coming in.
  */
 
 import * as THREE from 'three/webgpu';
@@ -31,6 +31,14 @@ const HANDLE_REST = 0.7;
 const CRANK_LENGTH = 0.05;
 const CRANK_FLARE = 0.006;
 
+// Line wound per turn of the handle, metres. Lower spins everything faster for the same line.
+const LINE_PER_TURN = 0.72;
+// Turns of the rotor per turn of the handle.
+const GEAR_RATIO = 5.2;
+// The spool slides this far each way, metres, once back and forth per SPOOL_EVERY handle turns.
+const SPOOL_STROKE = 0.004;
+const SPOOL_EVERY = 2;
+
 export function createSpinningReel() {
   const mats = {
     body: new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.42, metalness: 0.35 }),
@@ -48,11 +56,24 @@ export function createSpinningReel() {
   const handle = buildHandle(mats);
   object.add(...frame, rotor, spool, handle);
 
+  const spoolRest = spool.position.y;
+  // Handle turns so far, radians.
+  let turned = 0;
+
   return {
     object,
     rotor,
     spool,
     handle,
+    // Wind in this much line, metres: the handle and rotor turn, the spool slides back
+    // and forth to lay it. Line running out freely (a cast) does not come through here.
+    wind(metres) {
+      if (!metres) return;
+      turned += (metres / LINE_PER_TURN) * Math.PI * 2;
+      handle.rotation.x = HANDLE_REST + turned;
+      rotor.rotation.y = turned * GEAR_RATIO;
+      spool.position.y = spoolRest + SPOOL_STROKE * Math.sin(turned / SPOOL_EVERY);
+    },
     // Where the line turns from the spool toward the guides. It rides on the rotor.
     lineRoller: rotor.getObjectByName('reel-line-roller'),
     dispose() {

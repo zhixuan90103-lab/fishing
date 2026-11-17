@@ -6,18 +6,19 @@
 
 ## 1. 物料和玩法分开
 
-现在做的水面、鱼群、鱼竿、鱼线都是**物料**：自己能看、能动，不含钓鱼规则。玩法以后接上来，通过物料留的口子驱动它们。
+水面、鱼群、鱼竿、渔轮、鱼线、饵、手机瞄准都是**物料**：自己能看、能动，不含钓鱼规则。玩法在 `src/play/`，通过物料留的口子驱动它们，见 [PLAY.md](./PLAY.md)。
 
-- 钓鱼的规则只写在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md)，代码只写在玩法那一层。不要在水面、鱼群、鱼竿、鱼线里另写一套咬口或拔河。
+- 钓鱼的规则只写在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md)，代码只写在 `src/play/`。不要在水面、鱼群、鱼竿、鱼线、饵里另写一套抛投、咬口或拔河。
 - 物料对外只给**口子**，不给内部状态。现有的口子：
 
 | 物料 | 玩法往里送什么 | 玩法从里读什么 | 出处 |
 |---|---|---|---|
 | 鱼群 | `take(fish, brain)`、`giveBack(fish)` | `fishes` | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 6 节 |
 | 鱼竿 | `setPose(pose)`、`setTipLoad(kg)` | — | [ROD.md](./ROD.md) 第 6 节 |
-| 渔轮 | 转 `rod.reel.rotor` / `handle`，移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
-| 鱼线 | `setEnd`、`setLength` / `tighten` | `slack`、`tension`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
-| 手机瞄准 | `setLookLocked` | — | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
+| 渔轮 | `rod.reel.wind(米)`，或单独转 `rotor` / `handle`、移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
+| 鱼线 | `setEnd`、`setLength` / `tighten`、`stow`、`setTied` | `slack`、`tension`、`stiffness`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
+| 饵 | `lureMove` 的 `hang` / `launch` / `fly` / `tow`，`lure.place` | 位置、速度、`swum` | [LURE.md](./LURE.md) 第 5 节 |
+| 手机瞄准 | `lockLook` | — | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
 | 震动 | `haptics.*` | — | [HAPTICS.md](./HAPTICS.md) |
 
 - **物料之间也只走口子。** 线要拉竿，走 `rod.setTipTether`；线要知道导环在哪，走 `rod.linePath`。手机的瞄准要动竿，走 `rod.setAim`。这三个是给物料用的，玩法不要直接调。想让竿受力，改线的远端或线长。
@@ -29,7 +30,9 @@
 | 一条鱼 | `fish.html`，有游速、发力、弯身滑杆 |
 | 鱼群的游动 | Node 里跑 `flock.js` |
 | 鱼竿 | 设置面板"鱼竿"一栏；Node 里跑 `rodFlex.js` |
-| 鱼线 | 设置面板"鱼线"一栏；Node 里跑 `lineCurve.js` |
+| 鱼线 | Node 里跑 `lineCurve.js`；页面里甩一竿，饵落水后带竿 |
+| 饵 | Node 里跑 `lureMove.js` 的挂、飞、拖 |
+| 一竿的流程 | Node 里用假的竿和线跑 `fishing.js`；桌面用空格键代替手指 |
 | 手机瞄准 | Node 里给 `phoneLook.js` 喂合成的 `deviceorientation` 事件，读 `look()`；给 `aim.js` 喂转动和按住，读镜头和竿各得多少 |
 
 ## 2. 坐标和单位
@@ -78,6 +81,7 @@
 | `src/shore/` | 岸边场景、鱼竿、渔轮、鱼线 | JavaScript |
 | `src/shore/minamo/` | 水面，第三方 MIT 代码 | JavaScript。尽量不改 |
 | `src/fish/` | 鱼的模型和游动 | JavaScript |
+| `src/play/` | 玩法：这一竿的规则。工程里唯一写钓鱼规则的地方 | JavaScript |
 
 `npm run build` 里的 `tsc` 只严格检查 TypeScript。`.js` 文件不做类型检查，写错属性名不会报错，所以 JS 的改动要跑起来看。
 
@@ -91,11 +95,13 @@
 | 鱼群 | `shoal`（整群）→ `behaviors`（想做什么）→ `swim`（怎么游）；`flock` 串一帧，`school` 接到场景 |
 | 鱼竿 | 镜头 → `rodHold`（握）→ `rodFlex`（弯）→ `rod`（摆骨骼）；`rodBeam`（梁）在启动时解一次，供 `rodFlex` 查 |
 | 鱼线 | `rod.linePath`（竿上的点）→ `lineCurve`（形状）→ `line`（画）；`line` 再把远端和线长交回 `rod` |
+| 饵 | 玩法选动法 → `lureMove`（位置）→ 线的远端和 `lure`（模型） |
+| 玩法 | `swing`（甩多用力）和 `retrieve`（收多快）→ `fishing`（这一竿走到哪）→ 物料的口子 |
 | 手机瞄准 | `phoneLook`（读姿态）→ `aim`（分给镜头和竿）→ 镜头，以及 `rodHold`（握）；`startShore` 的 `applyPhone` 串一帧 |
 
-- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`phoneLook.js`、`aim.js`。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
+- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`phoneLook.js`、`aim.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
 - **只在启动时算一次的东西单独放。** 梁的振动和深弯表在 `rodBeam.js`，每帧的运动在 `rodFlex.js`。热路径只查表。
-- **`startShore.js` 只负责创建、接线和每帧调用。** 不要把游动、建模、弯曲、玩法写进去。每帧的顺序写在 [ENTRYPOINTS.md](./ENTRYPOINTS.md) 第 2 节，后面的依赖前面的。
+- **`startShore.js` 只负责创建、接线和每帧调用。** 不要把游动、建模、弯曲、玩法写进去。玩法它只做三件事：创建 `fishing`，每帧把手指、有没有传感器、镜头朝向交给它，给它一个锁镜头的回调。每帧的顺序写在 [ENTRYPOINTS.md](./ENTRYPOINTS.md) 第 2 节，后面的依赖前面的。
 
 ### 写法
 
@@ -126,8 +132,8 @@
 
 - **默认值在代码里，表在文档里，面板只是试看。** 面板上试出来的数不写回默认值，除非明确要求改默认。
 - 水面外观已定。启动默认值写在 `startShore.js`，对应的表在 ENGINEERING 第 6 节，两处要一致。
-- 竿和线的调节量在各自文件顶部，对应的表在 [ROD.md](./ROD.md) 第 3 到 5 节和 [LINE.md](./LINE.md) 第 4 节。手机瞄准的在 `phoneLook.js` 和 `aim.js` 顶部，表在 [PHONE-LOOK.md](./PHONE-LOOK.md) 第 3、4 节。改了常量，同一次改动里把表改掉。
-- **面板里有两种滑条，不要混。** 一种调的是物料自己的默认外观（雾、水、镜头、鱼竿的安装姿态）。另一种是替还没做的玩法临时送数（竿尖负重、鱼线的落点和余线）。后一种在代码里标明 `Trial only`，玩法接上以后拿掉，不要让别的代码依赖它。
+- 竿和线的调节量在各自文件顶部，对应的表在 [ROD.md](./ROD.md) 第 3 到 5 节和 [LINE.md](./LINE.md) 第 4 节。手机瞄准的在 `phoneLook.js` 和 `aim.js` 顶部，表在 [PHONE-LOOK.md](./PHONE-LOOK.md) 第 3、4 节。饵的在 `lureMove.js` 和 `lure.js` 顶部，表在 [LURE.md](./LURE.md)。玩法的在 `src/play/` 各文件顶部，表在 [PLAY.md](./PLAY.md)。改了常量，同一次改动里把表改掉。
+- **面板里有两种滑条，不要混。** 一种调的是物料自己的默认外观（雾、水、镜头、鱼竿的安装姿态）。另一种是替还没做的玩法临时送数（现在只剩竿尖负重）。后一种在代码里标明 `Trial only`，玩法接上以后拿掉，不要让别的代码依赖它。
 
 ## 7. 改完怎么验
 
@@ -146,6 +152,9 @@
 | 线拉竿 | 远端固定，把线收短、把竿抬起和带向旁边，看张力稳定在多少；在 20、30、60 帧下张力应当收敛到同一个数。把线收短到 2 米、把竿带偏到 70°，打印每个关节的弯角：应当同号，从竿尾到竿尖平缓变化，不能有反向和单个关节的折角。再在页面里把余线拉到两头各看一眼 |
 | 手机瞄准的角度 | 在 Node 里给 `phoneLook.js` 喂由已知姿态算出的 `alpha` / `beta` / `gamma`：只转一个方向时另两个角应为 0，包括手机正好竖直的时候；转一整圈、大幅乱晃后回到原姿态，三个角应回到原值；`chaseAngle` 在 20、30、60、120 帧下结果一样 |
 | 镜头和竿怎么分 | 在 Node 里给 `aim.js` 喂一段转动：每一帧镜头加竿应当正好等于瞄准；按住时镜头的数不变，松开后镜头回到瞄准、竿回到 0；`reset` 之后镜头在给定的方向上 |
+| 饵的运动 | 在 Node 里跑 `lureMove.js`，20 到 120 帧各一遍：飞行的落点等于要的距离，按停以后落得更近；拖的时候饵的位置和线长各帧率一致，停手后拉长量回到 0；挂的时候离竿尖不超过线长，最后停在正下方 |
+| 收线的速度 | 在 Node 里跑 `retrieve.js`：各帧率下收的线长一个数都不差；松手再按，线速不跳 |
+| 一竿的流程 | 在 Node 里用假的竿和线跑 `fishing.js`：三段按顺序走完，落水那一下按着不收线，飞行中按下落得更近，收完回到空杆并解开镜头；每一帧饵的位移不能有突跳 |
 | 手感、震动、甩竿、手机瞄准的方向 | 只能真机。桌面没有马达，也没有姿态传感器；桌面用拖动看画面 |
 
 **证明前后一致的办法。** 画面可以逐像素比。会动的东西用录数的办法：写一段固定的输入（镜头怎么转、哪一帧改什么），每帧把要比的数全录下来，改之前存一份，改之后再跑一遍，逐个数比。鱼用同一个随机种子比位置和朝向。竿和线比每节骨骼的世界矩阵、线上每个点、张力和余线。只是挪代码、不改算式的整理，差值应当正好是 0，不是"很小"。输入里要有不同的帧长、一帧的突跳和每个口子的调用，不然比不出问题。
@@ -164,11 +173,13 @@
 | [ENGINEERING.md](./ENGINEERING.md) | 壳、配置、水面定稿数值、iOS 流程、已知坑、变更记录 |
 | [ENTRYPOINTS.md](./ENTRYPOINTS.md) | 启动链、每帧的顺序，"要改什么找哪个文件" |
 | [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) | 这一竿的规则。唯一的玩法真源 |
+| [PLAY.md](./PLAY.md) | 玩法层的设计：规则怎么落到代码上，做到哪了，先填的数字 |
 | [FISHING-FEEL.md](./FISHING-FEEL.md)、[FISHING-RESEARCH.md](./FISHING-RESEARCH.md) | 参考材料，不是本版范围 |
 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) | 鱼群的设计 |
 | [ROD.md](./ROD.md) | 鱼竿和渔轮的设计 |
 | [PHONE-LOOK.md](./PHONE-LOOK.md) | 手机瞄准的设计：手机姿态怎么变成视线和竿的指向 |
 | [LINE.md](./LINE.md) | 鱼线的设计 |
+| [LURE.md](./LURE.md) | 饵的设计：模型和它的三种动法 |
 | [LINE-RESEARCH.md](./LINE-RESEARCH.md) | 鱼线做法的检索纪要，不是规格。和实现有出入的地方记在 LINE.md 第 4 节 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
@@ -179,7 +190,7 @@
 
 ### 物料的设计文档
 
-FISH-SCHOOL、ROD、LINE、PHONE-LOOK 是同一个写法，新加的物料照着来：
+FISH-SCHOOL、ROD、LINE、LURE、PHONE-LOOK 是同一个写法，新加的物料照着来：
 
 1. **状态**：一两句。实现到哪了，是不是物料，规则在哪份文档。
 2. **分层**：每个文件回答什么问题，数据往哪个方向走。

@@ -31,8 +31,14 @@ Fishing/
 │   │   ├── rodFlex.js      # 弯：每帧的惯性和回弹。不依赖 Three
 │   │   ├── line.js         # 鱼线：画线，把竿尖系在远端上
 │   │   ├── lineCurve.js    # 鱼线的形状：直线或悬链线。不依赖 Three
-│   │   ├── reel.js         # 渔轮，四个可动部件
+│   │   ├── lure.js         # 饵的模型
+│   │   ├── lureMove.js     # 饵怎么动：挂、飞、拖。不依赖 Three
+│   │   ├── reel.js         # 渔轮，四个可动部件，wind 按收的线长转
 │   │   └── minamo/         # 水面与场景，MIT
+│   ├── play/               # 玩法。唯一写钓鱼规则的地方，都不依赖 Three
+│   │   ├── fishing.js      # 这一竿走到哪：空杆、飞行、水里
+│   │   ├── swing.js        # 甩多用力，抛多远
+│   │   └── retrieve.js     # 空竿按住时线收多快
 │   ├── fish/
 │   │   ├── school.js       # 岸边入口：40 条真鱼 + 动画
 │   │   ├── flock.js        # 一帧的流程，不依赖 Three
@@ -132,7 +138,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
-- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `applyPhone`，再 `rod.update`，再 `line.update`。
+- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `fishing.update`，再 `applyPhone`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
 
 ## 7. Haptics
 
@@ -204,4 +210,5 @@ npm run cap:sync
 | 2026-11-17 | 规范整理：会动的东西的通则、分层和验证办法写进 CONVENTIONS.md，物料设计文档定了统一的写法 |
 | 2026-11-17 | 手机瞄准重做：视线和竿从手机姿态直接读，不再从加速度积分平移，也不用死区。同一个姿态永远是同一个画面。镜头和竿合成一条式子，按住只是镜头不追。左右看改成转动手机，上下方向改成顶部倒向自己为抬。加「镜头回正」。PHONE-LOOK.md 改写成设计文档，数字从 ROD.md 挪过去 |
 | 2026-11-17 | 手机瞄准分层：镜头和竿怎么分从 `startShore.js` 挪进 `aim.js`，`rod.setAim` 改收三个角。只整理结构，同一段输入下握的结果逐数相同 |
+| 2026-11-17 | 增加饵和玩法层。默认线收到头，饵固定在竿尖，不随甩动晃；按住向前甩、途中松手，饵按手机向前倾的角速度飞出 6 到 28 米；落水后长按收线，先慢后匀速；收完回到空杆。规则在 `src/play/`，饵的运动在 `lureMove.js`。线加 `stow`、`setTied` 和 `stiffness`，渔轮加 `wind`。设置面板里替玩法送数的"落点距离""余线"拿掉。桌面用空格键代替手指 |
 | 2026-11-17 | 弹出转动权限框的 `MotionPromptProxy` 补进真源 `plugins/native-haptics/BridgeViewController.swift`，之前只在 `ios/` 的副本里 |

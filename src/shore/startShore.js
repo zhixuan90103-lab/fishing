@@ -13,14 +13,13 @@ import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
 import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
+import { createLure } from './lure.js';
+import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
 import { PITCH_LIMIT, createAim } from './aim.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
-
-// Where the line's far end sits below the surface until a lure exists, metres.
-const LINE_END_DEPTH = -0.4;
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -154,11 +153,6 @@ export async function startShore(container, hooks = {}) {
     rodRoll: ROD_POSE.roll,
     // Grams on the rod tip. Trial only: nothing hangs there yet.
     rodLoad: 0,
-    // Trial only, until the cast and the lure exist: the line's far end sits in the water
-    // this far out along the starting view, with this much spare line. Below zero the
-    // line is shorter than the gap: it is stretched, and the rod bends to it.
-    lineReach: 12,
-    lineSpare: 0,
   };
   // Phone to view and rod: phoneLook reads the attitude, aim shares it out, and this file
   // only places the camera and hands the rod its part. docs/PHONE-LOOK.md.
@@ -221,18 +215,18 @@ export async function startShore(container, hooks = {}) {
   };
   const line = createFishingLine(rod);
   scene.add(line.object);
-  // Trial only: the far end stays where the view first pointed, however the view turns.
-  const castYaw = (tune.yaw * Math.PI) / 180;
-  const castFrom = { x: tune.x, z: tune.z };
-  const applyLine = () => {
-    line.setEnd(
-      castFrom.x + Math.sin(castYaw) * tune.lineReach,
-      LINE_END_DEPTH,
-      castFrom.z + Math.cos(castYaw) * tune.lineReach,
-    );
-    line.tighten(tune.lineSpare);
-  };
-  applyLine();
+  const lure = createLure();
+  scene.add(lure.object);
+  // The cast: it alone says where the line ends, how much is out and when the view locks.
+  const fishing = createFishing({
+    rod,
+    line,
+    lure,
+    lockLook(locked) { lookLocked = locked; },
+  });
+  let fishingBegun = false;
+  let frameCount = 0;
+  const fishingInput = { finger: false, sensor: false, viewYaw: 0, aimPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -267,6 +261,15 @@ export async function startShore(container, hooks = {}) {
 
   let dragging = false;
   let pressing = false;
+  // Desktop stand-in for the finger: there a drag turns the view, so the space bar presses.
+  let spaceDown = false;
+  const onKey = (e) => {
+    if (e.code !== 'Space') return;
+    spaceDown = e.type === 'keydown';
+    e.preventDefault();
+  };
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('keyup', onKey);
   const yawInput = { el: null };
   const pitchInput = { el: null };
   const phoneHint = document.createElement('button');
@@ -295,7 +298,7 @@ export async function startShore(container, hooks = {}) {
   canvas.addEventListener('pointerup', endPress);
   canvas.addEventListener('pointercancel', endPress);
   canvas.addEventListener('pointermove', (e) => {
-    if (!dragging || phone.active) return;
+    if (!dragging || phone.active || lookLocked) return;
     tune.yaw -= e.movementX * 0.17;
     tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - e.movementY * 0.17));
     if (yawInput.el) yawInput.el.value = String(Math.round(tune.yaw));
@@ -343,9 +346,27 @@ export async function startShore(container, hooks = {}) {
       waveDirty = false;
     }
     particles.update(camera, time);
+    if (fishingBegun) {
+      fishingInput.sensor = phone.active;
+      fishingInput.finger = phone.active ? pressing : spaceDown;
+      fishingInput.viewYaw = (phone.active ? aim.viewYaw : tune.yaw) * Math.PI / 180;
+      fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
+      fishing.update(dt, fishingInput);
+    }
     applyPhone(dt);
     rod.update(dt);
     line.update();
+    if (fishingBegun) {
+      fishing.follow();
+      if (tuneUi.open && (frameCount += 1) % 6 === 0) {
+        tuneUi.setCast(
+          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 甩 ${Math.round(fishing.swing)}°/秒 · 上次松手 ${Math.round(fishing.lastRelease)}°/秒`,
+        );
+      }
+    } else {
+      fishing.begin();
+      fishingBegun = true;
+    }
     shoreSchool.update(dt, tune.swimRate, world.rocks, {
       x: tune.x,
       z: tune.z,
@@ -401,7 +422,6 @@ export async function startShore(container, hooks = {}) {
     onWave() { waveDirty = true; },
     onCamera() { applyCamera(); },
     onRod() { applyRod(); },
-    onLine() { applyLine(); },
     onRecenter() { applyCamera(); },
     yawInput,
     pitchInput,
@@ -410,14 +430,14 @@ export async function startShore(container, hooks = {}) {
   return {
     resize,
     camera,
-    // True while a cast is out: the view stays, the phone keeps moving the rod. When it
-    // goes false the view eases back onto the phone's aim.
-    setLookLocked(locked) {
-      lookLocked = locked;
-    },
+    // The cast in progress: its stage and how much line is out. Read only.
+    fishing,
     dispose() {
       running = false;
       tuneUi.remove();
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      lure.dispose();
       line.dispose();
       rod.dispose();
       phone.dispose();
@@ -464,10 +484,6 @@ function mountTunePanel(container, tune, hooks) {
       ['滚转', 'rodRoll', -180, 180, 1],
       ['竿尖负重 g', 'rodLoad', 0, 30, 1],
     ]],
-    ['鱼线', [
-      ['落点距离', 'lineReach', 2, 40, 0.5],
-      ['余线（负是收紧）', 'lineSpare', -1, 4, 0.05],
-    ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],
       ['位置 Y', 'y', 0.3, 8, 0.1],
@@ -504,7 +520,6 @@ function mountTunePanel(container, tune, hooks) {
         if (wave) hooks.onWave();
         if (title === '摄像机') hooks.onCamera();
         if (title === '鱼竿') hooks.onRod();
-        if (title === '鱼线') hooks.onLine();
       });
       row.append(Object.assign(document.createElement('span'), { textContent: label }), input, value);
       block.appendChild(row);
@@ -514,6 +529,12 @@ function mountTunePanel(container, tune, hooks) {
   colorRow.querySelector('input').addEventListener('input', (e) => {
     tune.fogColor = e.target.value;
   });
+  // What the cast is reading, for tuning it against a real hand. Not a player hint.
+  const cast = document.createElement('div');
+  cast.className = 'tune-block';
+  cast.innerHTML = '<p class="tune-title">这一竿</p><p class="tune-cast" style="margin:0;font-size:12px"></p>';
+  panel.appendChild(cast);
+  const castText = cast.querySelector('.tune-cast');
   const haptic = root.querySelector('.panel');
   if (haptic) panel.appendChild(haptic);
   toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; });
@@ -523,6 +544,8 @@ function mountTunePanel(container, tune, hooks) {
   panel.querySelector('.tune-recenter').addEventListener('click', () => { hooks.onRecenter(); });
   root.append(toggle, panel);
   return {
+    get open() { return !panel.hidden; },
+    setCast(text) { castText.textContent = text; },
     remove() { toggle.remove(); panel.remove(); },
   };
 }

@@ -17,6 +17,13 @@
  * Each frame, after rod.update(): read the guides, draw, hand the rod the end and length
  * for its next step.
  *
+ * A far end that cannot hold the tip back (a lure in the air, or hanging under the tip)
+ * is drawn the same but not tied: setTied(false).
+ *
+ * With the line wound right in, the far end is not a place in the world at all: it sits
+ * at the tip and goes wherever the tip goes. stow() says so, and the end is then taken
+ * from this frame's tip, so it cannot trail a fast swing by a frame.
+ *
  * Everything is in world space. Units: metres, newtons.
  */
 
@@ -56,6 +63,12 @@ export function createFishingLine(rod) {
   // tighten() asks for the length to be taken from the gap. That needs the tip, so it
   // waits for the next update. null: nothing asked.
   let fitSpare = 0;
+  // Whether the far end can hold the tip back.
+  let tied = true;
+  // Wound right in: the far end rides this far straight below the tip. null: it is a
+  // place in the world, given by setEnd.
+  let stowed = null;
+  const stiffnessAt = (metres) => Math.min(STIFFEST, STRETCH_FORCE / Math.max(metres, 1e-3));
 
   return {
     object,
@@ -77,9 +90,25 @@ export function createFishingLine(rod) {
       return rod.tipTension;
     },
 
+    // How hard the line pulls per metre it is stretched, at the length now out, N/m.
+    get stiffness() {
+      return stiffnessAt(length);
+    },
+
+    // Whether the far end can hold the tip back. In the water, or on a fish, it can. A
+    // lure in the air or hanging under the tip cannot: the line is drawn and pulls nothing.
+    setTied(yes) {
+      tied = yes;
+    },
     // Where the far end is: the lure, or the fish's mouth.
     setEnd(x, y, z) {
       end.set(x, y, z);
+      stowed = null;
+    },
+    // Wound right in: the far end rides `drop` metres straight below the tip, and that is
+    // all the line there is out. `end` is valid after the next update(). setEnd undoes it.
+    stow(drop) {
+      stowed = drop;
     },
     // How much line is out past the tip, metres.
     setLength(metres) {
@@ -96,13 +125,19 @@ export function createFishingLine(rod) {
       rod.linePath(path);
       for (let i = 0; i < stops; i += 1) path[i].toArray(positions, i * 3);
       tip.copy(path[stops - 1]);
+      if (stowed !== null) {
+        end.set(tip.x, tip.y - stowed, tip.z);
+        length = stowed;
+        fitSpare = null;
+      }
       if (fitSpare !== null) {
         length = tip.distanceTo(end) + fitSpare;
         fitSpare = null;
       }
       slack = hangLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, positions, hangAt, HANG_POINTS + 1);
       geometry.attributes.position.needsUpdate = true;
-      rod.setTipTether(end, length, Math.min(STIFFEST, STRETCH_FORCE / Math.max(length, 1e-3)));
+      if (tied) rod.setTipTether(end, length, stiffnessAt(length));
+      else rod.setTipTether(null);
     },
 
     dispose() {
