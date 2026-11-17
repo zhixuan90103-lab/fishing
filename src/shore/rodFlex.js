@@ -53,6 +53,15 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
   let load = 0;
   let extX = 0, extY = 0, extZ = 0;
   let stale = true;
+  // A line tied from the tip to a fixed point. It pulls only when the gap is longer than
+  // the line. Solved inside the substeps, so a stiff line stays stable.
+  let tied = false;
+  let tieX = 0, tieY = 0, tieZ = 0;
+  let tieLength = 0;
+  let tieStiffness = 0;
+  let tension = 0;
+  let prevBx = 0, prevBy = 0, prevBz = 0;
+  const bent = new Float64Array(nodes * 3);
 
   function rigidPlace(out, butt, axis) {
     for (let m = 0; m < modes.length; m += 1) {
@@ -63,7 +72,35 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     }
   }
 
-  // Settle at rest under gravity and the current pull.
+  // The blank's curve for the current offsets, for a grip axis (ax, ay, az).
+  function curve(ax, ay, az, out) {
+    const first = modes[0];
+    const r = Math.hypot(q[0], q[1], q[2]);
+    const sx = r > 1e-9 ? q[0] / r : 0;
+    const sy = r > 1e-9 ? q[1] / r : 0;
+    const sz = r > 1e-9 ? q[2] / r : 0;
+    beam.bendAngles(first.tip * r, angles);
+    out[0] = out[1] = out[2] = 0;
+    for (let j = 0; j < segs; j += 1) {
+      const c = Math.cos(angles[j]);
+      const s = Math.sin(angles[j]);
+      let dx = ax * c + sx * s;
+      let dy = ay * c + sy * s;
+      let dz = az * c + sz * s;
+      for (let m = 1; m < modes.length; m += 1) {
+        const tilt = modes[m].slope[j];
+        dx += q[m * 3] * tilt;
+        dy += q[m * 3 + 1] * tilt;
+        dz += q[m * 3 + 2] * tilt;
+      }
+      const len = h / Math.hypot(dx, dy, dz);
+      out[j * 3 + 3] = out[j * 3] + dx * len;
+      out[j * 3 + 4] = out[j * 3 + 1] + dy * len;
+      out[j * 3 + 5] = out[j * 3 + 2] + dz * len;
+    }
+  }
+
+  // Settle at rest under gravity and the current pull. The tether is left to pull it in.
   function reset(butt, axis) {
     rigidPlace(base, butt, axis);
     for (let m = 0; m < modes.length; m += 1) {
@@ -97,6 +134,10 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     prevAx = axis.x;
     prevAy = axis.y;
     prevAz = axis.z;
+    prevBx = butt.x;
+    prevBy = butt.y;
+    prevBz = butt.z;
+    tension = 0;
     stale = false;
   }
 
@@ -123,6 +164,29 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       extZ = z0;
     },
 
+    /**
+     * Tie the tip to a world point with `length` metres of line. The line pulls along
+     * itself with `stiffness` newtons for each metre the gap exceeds the length, and not
+     * at all while the gap is shorter. Unlike setTipForce, the pull answers the rod's own
+     * motion: swing the tip away and it loads up, let it come back and it goes slack.
+     */
+    setTipTether(x, y, z0, length, stiffness) {
+      tied = true;
+      tieX = x;
+      tieY = y;
+      tieZ = z0;
+      tieLength = length;
+      tieStiffness = stiffness;
+    },
+    clearTipTether() {
+      tied = false;
+      tension = 0;
+    },
+    // How hard the tether pulls right now, newtons. 0 while it is slack.
+    get tension() {
+      return tension;
+    },
+
     // Drop all motion and come to rest on the next step. For when the rod is re-mounted.
     settle() {
       stale = true;
@@ -141,6 +205,8 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       const n = Math.max(1, Math.ceil(dt / SUB_DT - 1e-6));
       const sub = dt / n;
       rigidPlace(next, butt, axis);
+      // Grip axis at the start of the substep, to go with the offsets q.
+      let sx = prevAx, sy = prevAy, sz = prevAz;
       for (let j = 1; j <= n; j += 1) {
         const f = j / n;
         // The grip turns through the frame too. With only the end axis, a steady turn
@@ -158,6 +224,27 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
           ay = axis.y;
           az = axis.z;
         }
+        // Pull on the tip for this substep: the steady force, plus the tether if the bent
+        // tip is further from its anchor than the line is long.
+        let tx = extX, ty = extY, tz = extZ;
+        if (tied) {
+          const f0 = (j - 1) / n;
+          curve(sx, sy, sz, bent);
+          const e = (nodes - 1) * 3;
+          const gx = tieX - (prevBx + (butt.x - prevBx) * f0 + bent[e]);
+          const gy = tieY - (prevBy + (butt.y - prevBy) * f0 + bent[e + 1]);
+          const gz = tieZ - (prevBz + (butt.z - prevBz) * f0 + bent[e + 2]);
+          const gap = Math.hypot(gx, gy, gz);
+          tension = gap > tieLength ? tieStiffness * (gap - tieLength) : 0;
+          if (tension > 0) {
+            tx += (gx / gap) * tension;
+            ty += (gy / gap) * tension;
+            tz += (gz / gap) * tension;
+          }
+        }
+        sx = ax;
+        sy = ay;
+        sz = az;
         for (let m = 0; m < modes.length; m += 1) {
           const mode = modes[m];
           const o = m * 3;
@@ -178,9 +265,9 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
           const rz = v[o + 2] - bz;
           const tipSpeed = Math.abs(mode.tip) * Math.hypot(rx, ry, rz);
           const loss = 2 * DAMPING[m] * mode.omega * (1 + tipSpeed / LOSS_DOUBLES_AT);
-          v[o] += (-spring * dx - loss * rx + mode.tip * extX) * sub;
-          v[o + 1] += (-spring * dy - loss * ry + mode.tip * extY - mode.push * GRAVITY) * sub;
-          v[o + 2] += (-spring * dz - loss * rz + mode.tip * extZ) * sub;
+          v[o] += (-spring * dx - loss * rx + mode.tip * tx) * sub;
+          v[o + 1] += (-spring * dy - loss * ry + mode.tip * ty - mode.push * GRAVITY) * sub;
+          v[o + 2] += (-spring * dz - loss * rz + mode.tip * tz) * sub;
           z[o] += v[o] * sub;
           z[o + 1] += v[o + 1] * sub;
           z[o + 2] += v[o + 2] * sub;
@@ -233,6 +320,9 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       prevAx = axis.x;
       prevAy = axis.y;
       prevAz = axis.z;
+      prevBx = butt.x;
+      prevBy = butt.y;
+      prevBz = butt.z;
     },
 
     /**
@@ -242,30 +332,7 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
      * segment on top of that. Every segment keeps its length.
      */
     shape(axis, out) {
-      const first = modes[0];
-      const r = Math.hypot(q[0], q[1], q[2]);
-      const sx = r > 1e-9 ? q[0] / r : 0;
-      const sy = r > 1e-9 ? q[1] / r : 0;
-      const sz = r > 1e-9 ? q[2] / r : 0;
-      beam.bendAngles(first.tip * r, angles);
-      out[0] = out[1] = out[2] = 0;
-      for (let j = 0; j < segs; j += 1) {
-        const c = Math.cos(angles[j]);
-        const s = Math.sin(angles[j]);
-        let dx = axis.x * c + sx * s;
-        let dy = axis.y * c + sy * s;
-        let dz = axis.z * c + sz * s;
-        for (let m = 1; m < modes.length; m += 1) {
-          const tilt = modes[m].slope[j];
-          dx += q[m * 3] * tilt;
-          dy += q[m * 3 + 1] * tilt;
-          dz += q[m * 3 + 2] * tilt;
-        }
-        const len = h / Math.hypot(dx, dy, dz);
-        out[j * 3 + 3] = out[j * 3] + dx * len;
-        out[j * 3 + 4] = out[j * 3 + 1] + dy * len;
-        out[j * 3 + 5] = out[j * 3 + 2] + dz * len;
-      }
+      curve(axis.x, axis.y, axis.z, out);
     },
   };
 }

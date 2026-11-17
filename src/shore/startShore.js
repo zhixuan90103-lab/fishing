@@ -12,10 +12,13 @@ import { makeWaterMaterial, makeRadialGrid } from './minamo/ocean/waterMaterial.
 import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
 import { ROD_POSE, createSpinningRod } from './rod.js';
+import { createFishingLine } from './line.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
 
+// Where the line's far end sits below the surface until a lure exists, metres.
+const LINE_END_DEPTH = -0.4;
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -149,7 +152,14 @@ export async function startShore(container, hooks = {}) {
     rodRoll: ROD_POSE.roll,
     // Grams on the rod tip. Trial only: nothing hangs there yet.
     rodLoad: 0,
+    // Trial only, until the cast and the lure exist: the line's far end sits in the water
+    // this far out along the starting view, with this much spare line. Below zero the
+    // line is shorter than the gap: it is stretched, and the rod bends to it.
+    lineReach: 12,
+    lineSpare: 0,
   };
+  const castYaw = (tune.yaw * Math.PI) / 180;
+  const castFrom = { x: tune.x, z: tune.z };
   const applyCamera = () => {
     camera.position.set(tune.x, tune.y, tune.z);
     const yaw = (tune.yaw * Math.PI) / 180;
@@ -178,6 +188,17 @@ export async function startShore(container, hooks = {}) {
     });
     rod.setTipLoad(tune.rodLoad / 1000);
   };
+  const line = createFishingLine(rod);
+  scene.add(line.object);
+  const applyLine = () => {
+    line.setEnd(
+      castFrom.x + Math.sin(castYaw) * tune.lineReach,
+      LINE_END_DEPTH,
+      castFrom.z + Math.cos(castYaw) * tune.lineReach,
+    );
+    line.tighten(tune.lineSpare);
+  };
+  applyLine();
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -268,6 +289,7 @@ export async function startShore(container, hooks = {}) {
     }
     particles.update(camera, time);
     rod.update(dt);
+    line.update();
     shoreSchool.update(dt, tune.swimRate, world.rocks, {
       x: tune.x,
       z: tune.z,
@@ -323,6 +345,7 @@ export async function startShore(container, hooks = {}) {
     onWave() { waveDirty = true; },
     onCamera() { applyCamera(); },
     onRod() { applyRod(); },
+    onLine() { applyLine(); },
     yawInput,
     pitchInput,
   });
@@ -333,6 +356,7 @@ export async function startShore(container, hooks = {}) {
     dispose() {
       running = false;
       tuneUi.remove();
+      line.dispose();
       rod.dispose();
       renderer.dispose();
       canvas.remove();
@@ -377,6 +401,10 @@ function mountTunePanel(container, tune, hooks) {
       ['滚转', 'rodRoll', -180, 180, 1],
       ['竿尖负重 g', 'rodLoad', 0, 30, 1],
     ]],
+    ['鱼线', [
+      ['落点距离', 'lineReach', 2, 40, 0.5],
+      ['余线（负是收紧）', 'lineSpare', -1, 4, 0.05],
+    ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],
       ['位置 Y', 'y', 0.3, 8, 0.1],
@@ -413,6 +441,7 @@ function mountTunePanel(container, tune, hooks) {
         if (wave) hooks.onWave();
         if (title === '摄像机') hooks.onCamera();
         if (title === '鱼竿') hooks.onRod();
+        if (title === '鱼线') hooks.onLine();
       });
       row.append(Object.assign(document.createElement('span'), { textContent: label }), input, value);
       block.appendChild(row);

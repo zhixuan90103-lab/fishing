@@ -8,7 +8,8 @@
 | [docs/FISHING-REQUIREMENTS.md](./docs/FISHING-REQUIREMENTS.md) | 这一竿的规则。已定，玩法未开工 |
 | [docs/CONVENTIONS.md](./docs/CONVENTIONS.md) | 做内容时的规矩：物料和玩法分开、坐标、验证、文档 |
 | [docs/FISH-SCHOOL.md](./docs/FISH-SCHOOL.md) | 鱼群的设计。已实现。以后来咬钩的鱼从这群里取 |
-| [docs/ROD.md](./docs/ROD.md) | 鱼竿和渔轮的设计。模型已有，没有线，没接玩法 |
+| [docs/ROD.md](./docs/ROD.md) | 鱼竿和渔轮的设计。会跟镜头、会弯，没接玩法 |
+| [docs/LINE.md](./docs/LINE.md) | 鱼线的设计。能画，远端和线长先由设置面板给 |
 | [docs/ENGINEERING.md](./docs/ENGINEERING.md) | 壳、水面、打包 |
 | [docs/ENTRYPOINTS.md](./docs/ENTRYPOINTS.md) | 启动链 |
 | [docs/HAPTICS.md](./docs/HAPTICS.md) | 震动接入 |

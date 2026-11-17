@@ -82,7 +82,7 @@ export function createSpinningRod() {
   const reel = createSpinningReel();
   reel.object.position.set(0, REAR_GRIP + SEAT * 0.5, SEAT_RADIUS);
   root.add(reel.object);
-  addGuides(bones, seg, metal);
+  const rings = addGuides(bones, seg, metal);
 
   root.traverse((obj) => {
     obj.frustumCulled = false;
@@ -152,6 +152,26 @@ export function createSpinningRod() {
     setTipForce(force) {
       flex.setTipForce(force.x, force.y, force.z);
     },
+    // Tie the tip to a world point with `length` metres of line that pulls `stiffness`
+    // newtons per metre of stretch and nothing while slack. null unties it.
+    setTipTether(point, length, stiffness) {
+      if (point) flex.setTipTether(point.x, point.y, point.z, length, stiffness);
+      else flex.clearTipTether();
+    },
+    // How hard the tether pulls right now, newtons.
+    get tipTension() {
+      return flex.tension;
+    },
+    // How many points linePath() gives.
+    lineStops: rings.length + 1,
+    // Where the line runs along the rod, world space: the reel's line roller, then every
+    // guide ring from the stripper to the tip-top. Fills `out`, an array of Vector3.
+    // Call after update().
+    linePath(out) {
+      root.updateMatrixWorld(true);
+      reel.lineRoller.getWorldPosition(out[0]);
+      for (let i = 0; i < rings.length; i += 1) rings[i].getWorldPosition(out[i + 1]);
+    },
     update(dt) {
       hold.carry(dt);
       flex.step(dt, hold.grip.butt, hold.grip.axis);
@@ -218,7 +238,9 @@ function addSleeves(root, cork, seatMat) {
   root.add(rear, seat, fore, cap);
 }
 
+// Returns the rings in the order the line passes them: stripper first, tip-top last.
 function addGuides(bones, seg, metal) {
+  const rings = [];
   // 7 ft spinning train, measured from the tip. Last entry is the stripper.
   const fromTip = [0, 0.086, 0.178, 0.292, 0.435, 0.594, 0.772, 0.972, 1.2];
   const ringRadius = [0.0035, 0.0038, 0.0042, 0.0046, 0.0052, 0.006, 0.007, 0.008, 0.009];
@@ -247,5 +269,7 @@ function addGuides(bones, seg, metal) {
     ring.position.z = blankRadius + footLen;
     guide.add(foot, ring);
     bones[index].add(guide);
+    rings.unshift(ring);
   }
+  return rings;
 }

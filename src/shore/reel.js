@@ -53,6 +53,8 @@ export function createSpinningReel() {
     rotor,
     spool,
     handle,
+    // Where the line turns from the spool toward the guides. It rides on the rotor.
+    lineRoller: rotor.getObjectByName('reel-line-roller'),
     dispose() {
       object.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       for (const m of Object.values(mats)) m.dispose();
@@ -99,6 +101,7 @@ function buildRotor(mats) {
   rotor.add(new THREE.Mesh(bailWireGeometry(BAIL_RADIUS, ARM_TIP_Y, BAIL_LEAN), mats.steel));
   // Line roller sits where the wire leaves the first arm.
   const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.0048, 14), mats.steel);
+  roller.name = 'reel-line-roller';
   roller.position.set(BAIL_RADIUS - 0.0006, ARM_TIP_Y + 0.0052 * Math.sin(BAIL_LEAN), -0.0052 * Math.cos(BAIL_LEAN));
   roller.rotation.x = BAIL_LEAN - Math.PI / 2;
   const rollerCap = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 12, 10), mats.body);

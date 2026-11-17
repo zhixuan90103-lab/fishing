@@ -23,7 +23,8 @@ index.html
             → 天空 HDRI、沙滩石头、三层 FFT 海面、后期
             → 岸边鱼群 createShoreSchool（docs/FISH-SCHOOL.md）
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
-            → 每帧：rod.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
+            → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
+            → 每帧：rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
             → 设置面板（雾 / 水 / 鱼 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
@@ -91,6 +92,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
+| 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
+| 鱼线：外观、接到竿上 | `src/shore/line.js` |
 | 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 鱼的摆幅和骨骼 | `src/fish/dorade.js` 的 `SPINE` 表 |

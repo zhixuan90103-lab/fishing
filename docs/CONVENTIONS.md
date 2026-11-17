@@ -15,7 +15,8 @@
 |---|---|---|
 | 鱼群 | `fishes`、`take(fish, brain)`、`giveBack(fish)` | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 6 节 |
 | 渔轮 | `rod.reel.rotor` / `spool` / `handle` 三个组 | [ROD.md](./ROD.md) |
-| 鱼竿 | `rod.setTipLoad(kg)`、`rod.setTipForce(force)`、`rod.setPose(pose)` | [ROD.md](./ROD.md) 第 6 节 |
+| 鱼竿 | `rod.setTipLoad(kg)`、`rod.setTipForce(force)`、`rod.setPose(pose)`。拉力一般不直接给竿，走鱼线 | [ROD.md](./ROD.md) 第 6 节 |
+| 鱼线 | `line.setEnd`、`setLength` / `tighten`，读 `slack`、`tension`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
 | 震动 | `haptics.*` | [HAPTICS.md](./HAPTICS.md) |
 
 - 每个物料有自己的单看页面或单看办法，不必进游戏才能检查。鱼是 `fish.html`。
@@ -94,6 +95,7 @@
 | 只整理结构、不该改变结果 | 证明前后一致：画面逐像素比，或同一随机种子逐帧比数值 |
 | 鱼的游动 | 在 Node 里跑 `flock.js` 几分钟，量：运动方向和鱼头的夹角（应为 0）、鱼群散布、两条鱼贴得太近的比例。和改之前的数对比 |
 | 竿的弯曲 | 在 Node 里跑 `rodFlex.js`：甩一下再急停，量各阶频率、每次回摆的幅度、竿长、各段开始落后的先后；匀速转动时的偏移应接近 0。和改之前的数对比 |
+| 鱼线的形状 | 在 Node 里跑 `lineCurve.js`：画出的长度等于线长，两端对上，余线正负对。再在页面里把余线和拉力拉到头各看一眼 |
 | 鱼的身体姿态 | `fish.html` 把发力、弯身拉到最大，看有没有撕裂、方向对不对 |
 | 手感、震动、甩竿 | 只能真机。桌面没有马达，也不能甩 |
 
@@ -114,6 +116,7 @@
 | [FISHING-FEEL.md](./FISHING-FEEL.md)、[FISHING-RESEARCH.md](./FISHING-RESEARCH.md) | 参考材料，不是本版范围 |
 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) | 鱼群的设计 |
 | [ROD.md](./ROD.md) | 鱼竿和渔轮的设计 |
+| [LINE.md](./LINE.md) | 鱼线的设计 |
 | [LINE-RESEARCH.md](./LINE-RESEARCH.md) | 鱼线做法的检索纪要，不是规格 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
