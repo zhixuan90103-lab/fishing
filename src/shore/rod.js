@@ -67,7 +67,7 @@ export function createSpinningRod() {
   mesh.add(bones[0]);
   mesh.bind(skeleton);
   addSleeves(root, cork, seatMat);
-  addReel(root, dark, metal);
+  addReel(root, dark);
   addGuides(bones, seg, metal);
 
   const blankDir = new THREE.Vector3(-0.12, 0.5, -0.86).normalize();
@@ -169,206 +169,170 @@ function addSleeves(root, cork, seatMat) {
   const rear = sleeve(0.016, REAR_GRIP, 0, cork);
   const seat = sleeve(0.012, SEAT, REAR_GRIP, seatMat);
   const fore = sleeve(0.013, FORE_GRIP, REAR_GRIP + SEAT, cork);
-  const cap = sleeve(0.017, 0.012, 0, seatMat);
+  const cap = sleeve(0.017, 0.012, -0.003, seatMat);
   root.add(rear, seat, fore, cap);
 }
 
-function smoother(t) {
-  const x = THREE.MathUtils.clamp(t, 0, 1);
-  return x * x * x * (x * (x * 6 - 15) + 10);
+function lathe(points, segments = 28) {
+  return new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), segments);
 }
 
-function crankGeometry(hang) {
-  const y = -0.016;
-  const hubInner = 0.016;
-  const joint = new THREE.Vector3(hubInner + 0.01, y, hang);
-  const armRoot = joint.clone().add(new THREE.Vector3(0.008, 0, 0));
-  const armEnd = armRoot.clone().add(new THREE.Vector3(0.0056, 0, 0.0315));
-  const gripJoint = armEnd.clone().add(new THREE.Vector3(0.008, 0, 0));
-  const gripEnd = gripJoint.clone().add(new THREE.Vector3(0.0175, 0, 0));
-  const stations = [
-    { p: new THREE.Vector3(hubInner, y, hang), r: 0.009 },
-    { p: joint.clone(), r: 0.009 },
-    { p: armRoot, r: 0.0055 },
-    { p: armEnd, r: 0.0055 },
-    { p: armEnd.clone().lerp(gripJoint, 0.5), r: 0.0035 },
-    { p: gripJoint, r: 0.0055 },
-    { p: gripJoint.clone().lerp(gripEnd, 0.4), r: 0.0075 },
-    { p: gripEnd, r: 0.0075 },
-  ];
+function alongX(mesh) {
+  mesh.rotation.z = -Math.PI / 2;
+  return mesh;
+}
 
-  const samples = [];
-  const push = (p, r) => {
-    const last = samples[samples.length - 1];
-    if (last && last.p.distanceTo(p) < 1e-5) return;
-    samples.push({ p: p.clone(), r });
-  };
-  const pushLine = (a, b, ra, rb, steps) => {
-    for (let i = 0; i <= steps; i += 1) {
-      const t = i / steps;
-      push(a.clone().lerp(b, t), ra + (rb - ra) * smoother(t));
-    }
-  };
-  const cuts = stations.map((station, i) => {
-    if (i === 0 || i === stations.length - 1) return null;
-    const a = stations[i - 1].p;
-    const b = station.p;
-    const c = stations[i + 1].p;
-    const d1 = b.clone().sub(a).normalize();
-    const d2 = c.clone().sub(b).normalize();
-    const phi = Math.acos(THREE.MathUtils.clamp(d1.dot(d2), -1, 1));
-    if (phi < 0.08) return null;
-    const t = Math.min(0.007 / Math.tan(phi / 2), a.distanceTo(b) * 0.45, b.distanceTo(c) * 0.45);
-    const p1 = b.clone().addScaledVector(d1, -t);
-    const p2 = b.clone().addScaledVector(d2, t);
-    const bisector = d1.clone().negate().add(d2).normalize();
-    const center = b.clone().addScaledVector(bisector, t / Math.sin(phi / 2));
-    return { p1, p2, center, start: p1.clone().sub(center), end: p2.clone().sub(center) };
+function footAndStem() {
+  // Side profile: u runs along the rod, v runs down from the seat.
+  const s = new THREE.Shape();
+  s.moveTo(-0.031, 0.0005);
+  s.lineTo(0.031, 0.0005);
+  s.lineTo(0.031, 0.002);
+  s.quadraticCurveTo(0.013, 0.0032, 0.008, 0.009);
+  s.lineTo(-0.008, 0.036);
+  s.lineTo(-0.026, 0.036);
+  s.lineTo(-0.013, 0.009);
+  s.quadraticCurveTo(-0.017, 0.0032, -0.031, 0.002);
+  s.closePath();
+  const depth = 0.007;
+  const geometry = new THREE.ExtrudeGeometry(s, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: 0.0015,
+    bevelSize: 0.0012,
+    bevelSegments: 3,
+    curveSegments: 10,
   });
-  for (let i = 0; i < stations.length - 1; i += 1) {
-    const from = cuts[i] ? cuts[i].p2 : stations[i].p;
-    const to = cuts[i + 1] ? cuts[i + 1].p1 : stations[i + 1].p;
-    pushLine(from, to, stations[i].r, stations[i + 1].r, 6);
-    const cut = cuts[i + 1];
-    if (!cut) continue;
-    const axis = new THREE.Vector3().crossVectors(cut.start, cut.end).normalize();
-    const ang = cut.start.angleTo(cut.end);
-    for (let s = 1; s <= 8; s += 1) {
-      push(cut.start.clone().applyAxisAngle(axis, ang * (s / 8)).add(cut.center), stations[i + 1].r);
-    }
-  }
-
-  const radial = 16;
-  const up = new THREE.Vector3(0, 1, 0);
-  const rings = samples.length;
-  const positions = [];
-  const indices = [];
-  const tangents = samples.map((s, i) => {
-    const prev = samples[Math.max(0, i - 1)].p;
-    const next = samples[Math.min(rings - 1, i + 1)].p;
-    return next.clone().sub(prev).normalize();
-  });
-  for (let i = 0; i < rings; i += 1) {
-    const side = new THREE.Vector3().crossVectors(up, tangents[i]).normalize();
-    const lift = new THREE.Vector3().crossVectors(tangents[i], side).normalize();
-    for (let k = 0; k < radial; k += 1) {
-      const a = (k / radial) * Math.PI * 2;
-      const p = samples[i].p.clone()
-        .addScaledVector(side, Math.cos(a) * samples[i].r)
-        .addScaledVector(lift, Math.sin(a) * samples[i].r);
-      positions.push(p.x, p.y, p.z);
-    }
-  }
-  for (let i = 0; i < rings - 1; i += 1) {
-    for (let k = 0; k < radial; k += 1) {
-      const k1 = (k + 1) % radial;
-      const a = i * radial + k;
-      const b = i * radial + k1;
-      const c = (i + 1) * radial + k;
-      const d = (i + 1) * radial + k1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-  const startCenter = positions.length / 3;
-  positions.push(samples[0].p.x, samples[0].p.y, samples[0].p.z);
-  for (let k = 0; k < radial; k += 1) {
-    const k1 = (k + 1) % radial;
-    indices.push(k, k1, startCenter);
-  }
-  const tip = samples[rings - 1].p;
-  const tipDir = tangents[rings - 1];
-  const capRings = 6;
-  const capStart = positions.length / 3;
-  for (let i = 1; i <= capRings; i += 1) {
-    const u = i / capRings;
-    const ang = u * Math.PI / 2;
-    const along = Math.sin(ang) * samples[rings - 1].r;
-    const rad = Math.cos(ang) * samples[rings - 1].r;
-    const center = tip.clone().addScaledVector(tipDir, along);
-    const side = new THREE.Vector3().crossVectors(up, tipDir).normalize();
-    const lift = new THREE.Vector3().crossVectors(tipDir, side).normalize();
-    for (let k = 0; k < radial; k += 1) {
-      const a = (k / radial) * Math.PI * 2;
-      const p = center.clone()
-        .addScaledVector(side, Math.cos(a) * rad)
-        .addScaledVector(lift, Math.sin(a) * rad);
-      positions.push(p.x, p.y, p.z);
-    }
-  }
-  const base = (rings - 1) * radial;
-  for (let k = 0; k < radial; k += 1) {
-    const k1 = (k + 1) % radial;
-    indices.push(base + k, capStart + k, base + k1, base + k1, capStart + k, capStart + k1);
-  }
-  for (let i = 0; i < capRings - 1; i += 1) {
-    for (let k = 0; k < radial; k += 1) {
-      const k1 = (k + 1) % radial;
-      const a = capStart + i * radial + k;
-      const b = capStart + i * radial + k1;
-      const c = capStart + (i + 1) * radial + k;
-      const d = capStart + (i + 1) * radial + k1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-  const nose = positions.length / 3;
-  const noseP = tip.clone().addScaledVector(tipDir, samples[rings - 1].r);
-  positions.push(noseP.x, noseP.y, noseP.z);
-  const noseRing = capStart + (capRings - 1) * radial;
-  for (let k = 0; k < radial; k += 1) {
-    indices.push(noseRing + k, nose, noseRing + (k + 1) % radial);
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  for (let i = 0; i < indices.length; i += 3) {
-    const swap = indices[i + 1];
-    indices[i + 1] = indices[i + 2];
-    indices[i + 2] = swap;
-  }
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
+  geometry.translate(0, 0, -depth / 2);
+  // Shape (u, v, depth) becomes reel (y, z, x).
+  geometry.applyMatrix4(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(1, 0, 0),
+  ));
   return geometry;
 }
 
-function addReel(root, dark, metal) {
-  // From the butt the camera looks toward the tip. The spool's rear face must sit
-  // inside the rotor, or that face reads as a white disk. The lip stays at the tip end.
+function bailWire(radius, y, lean) {
+  // Half circle between the two rotor arm tips, leaning forward over the spool lip.
+  const dir = new THREE.Vector3(0, Math.sin(lean), -Math.cos(lean));
+  const points = [];
+  for (let i = 0; i <= 28; i += 1) {
+    const a = (i / 28) * Math.PI;
+    points.push(new THREE.Vector3(Math.cos(a) * radius, y, 0).addScaledVector(dir, Math.sin(a) * radius));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 56, 0.0011, 8, false);
+}
+
+function addReel(root, dark) {
+  // Spinning reel, about a 2500 size. The main shaft is parallel to the blank and
+  // hangs below the seat. Body, rotor, spool and handle each have their own pivot:
+  // rotor turns about Y, spool slides along Y, handle turns about X.
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc9cdd1, roughness: 0.28, metalness: 0.9 });
+  const spoolMat = new THREE.MeshStandardMaterial({ color: 0xaeb3b8, roughness: 0.34, metalness: 0.85 });
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0xd3dcc6, roughness: 0.78, metalness: 0 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.9, metalness: 0 });
+
   const reel = new THREE.Group();
   reel.name = 'reel';
   const hang = 0.046;
-  reel.position.set(0, REAR_GRIP + SEAT * 0.4, 0.013);
+  reel.position.set(0, REAR_GRIP + SEAT * 0.5, 0.012);
 
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.052, 0.005), dark);
-  foot.position.set(0, 0, 0.0025);
+  reel.add(new THREE.Mesh(footAndStem(), dark));
 
-  const stem = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.02, 0.028), dark);
-  stem.position.set(0, -0.01, 0.018);
+  // Gear housing: a rounded disc whose axis is the handle axis.
+  const bodyY = -0.021;
+  const bodyZ = hang + 0.003;
+  const body = alongX(new THREE.Mesh(lathe([
+    [0, -0.0118], [0.013, -0.0118], [0.0185, -0.0098], [0.0212, -0.0055],
+    [0.0212, 0.0055], [0.0185, 0.0098], [0.013, 0.0118], [0, 0.0118],
+  ], 32), dark));
+  body.position.set(0, bodyY, bodyZ);
+  body.scale.set(1.12, 1, 1);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.0145, 0.012, 0.022, 24), dark);
+  neck.position.set(0, -0.005, hang);
+  const sideCap = alongX(new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0075, 0.003, 20), dark));
+  sideCap.position.set(-0.013, bodyY, bodyZ);
+  reel.add(body, neck, sideCap);
 
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.022, 18, 14), dark);
-  body.scale.set(0.9, 1.05, 0.82);
-  body.position.set(0, -0.018, hang);
+  // Rotor: cup behind the spool, two arms beside it, bail wire between the arm tips.
+  const rotor = new THREE.Group();
+  rotor.name = 'reel-rotor';
+  rotor.position.z = hang;
+  rotor.add(new THREE.Mesh(lathe([
+    [0.012, 0.004], [0.0245, 0.0062], [0.0262, 0.0095], [0.0262, 0.019],
+    [0.0238, 0.0212], [0.021, 0.0212], [0.021, 0.03], [0, 0.03],
+  ]), dark));
+  const armTipY = 0.041;
+  const armX = 0.0292;
+  for (const sign of [1, -1]) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.0058, 0.025, 6, 14), dark);
+    arm.scale.set(0.52, 1, 1);
+    arm.position.set(sign * armX, 0.0265, 0);
+    const pivot = alongX(new THREE.Mesh(new THREE.CylinderGeometry(0.0056, 0.0056, 0.0042, 18), dark));
+    pivot.position.set(sign * (armX + 0.0035), armTipY, 0);
+    rotor.add(arm, pivot);
+  }
+  const bailRadius = armX + 0.0052;
+  const lean = 0.72;
+  rotor.add(new THREE.Mesh(bailWire(bailRadius, armTipY, lean), steel));
+  // Line roller sits where the wire leaves the first arm.
+  const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.0048, 14), steel);
+  roller.position.set(bailRadius - 0.0006, armTipY + 0.0052 * Math.sin(lean), -0.0052 * Math.cos(lean));
+  roller.rotation.x = lean - Math.PI / 2;
+  const rollerCap = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 12, 10), dark);
+  rollerCap.position.copy(roller.position);
+  rollerCap.position.y += 0.0042 * Math.sin(lean);
+  rollerCap.position.z -= 0.0042 * Math.cos(lean);
+  rotor.add(roller, rollerCap);
 
-  const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.024, 0.02, 20), dark);
-  rotor.position.set(0, 0.006, hang);
+  // Spool: skirt over the rotor, line between two flanges, drag knob on the front.
+  const spool = new THREE.Group();
+  spool.name = 'reel-spool';
+  spool.position.z = hang;
+  spool.add(new THREE.Mesh(lathe([
+    [0.0222, 0.0228], [0.0243, 0.0232], [0.0243, 0.0322], [0.025, 0.0332],
+    [0.025, 0.0344], [0.017, 0.0344], [0.017, 0.0476], [0.025, 0.0476],
+    [0.0254, 0.0486], [0.0246, 0.0497], [0.0195, 0.0504], [0.0165, 0.0488], [0, 0.0488],
+  ], 36), spoolMat));
+  spool.add(new THREE.Mesh(lathe([
+    [0.017, 0.0345], [0.0221, 0.0347], [0.0228, 0.041], [0.0221, 0.0473], [0.017, 0.0475],
+  ], 36), lineMat));
+  spool.add(new THREE.Mesh(lathe([
+    [0.0118, 0.0486], [0.0118, 0.0552], [0.0106, 0.057], [0, 0.0574],
+  ], 24), dark));
+  const dragBar = new THREE.Mesh(new THREE.BoxGeometry(0.019, 0.0032, 0.0042), dark);
+  dragBar.position.y = 0.0585;
+  spool.add(dragBar);
 
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.012, 20), dark);
-  barrel.position.set(0, 0.016, hang);
-  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.0235, 0.0235, 0.0025, 24), dark);
-  lip.position.set(0, 0.024, hang);
-  const drag = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.005, 14), dark);
-  drag.position.set(0, 0.028, hang);
+  // Handle on the angler's left: shaft out of the body, flat arm, paddle knob.
+  const handle = new THREE.Group();
+  handle.name = 'reel-handle';
+  handle.position.set(0, bodyY, bodyZ);
+  handle.rotation.x = 0.7;
+  const boss = alongX(new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0078, 0.006, 18), dark));
+  boss.position.x = 0.0145;
+  const shaft = alongX(new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.014, 12), steel));
+  shaft.position.x = 0.023;
+  const armLength = 0.05;
+  const armOut = 0.006;
+  const armFrom = new THREE.Vector3(0.029, 0, 0);
+  const armTo = new THREE.Vector3(0.029 + armOut, 0, armLength);
+  const crank = new THREE.Mesh(new THREE.CapsuleGeometry(0.0042, armFrom.distanceTo(armTo), 6, 12), steel);
+  crank.scale.set(0.45, 1, 1);
+  crank.position.copy(armFrom).lerp(armTo, 0.5);
+  crank.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), armTo.clone().sub(armFrom).normalize());
+  const knobStem = alongX(new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.008, 10), steel));
+  knobStem.position.set(armTo.x + 0.004, 0, armTo.z);
+  const knob = alongX(new THREE.Mesh(lathe([
+    [0, 0], [0.0048, 0.0006], [0.0046, 0.005], [0.0078, 0.013], [0.0088, 0.021],
+    [0.0074, 0.0275], [0.004, 0.0306], [0, 0.0312],
+  ], 20), rubber));
+  knob.scale.set(1, 1, 0.62);
+  knob.position.set(armTo.x + 0.006, 0, armTo.z);
+  handle.add(boss, shaft, crank, knobStem, knob);
 
-  const bail = new THREE.Mesh(
-    new THREE.TorusGeometry(0.027, 0.002, 8, 24, Math.PI * 1.35),
-    dark,
-  );
-  bail.rotation.x = Math.PI / 2;
-  bail.position.set(0, 0.012, hang);
-
-  // One swept crank: hub, both joint balls, arm and grip. Radius changes
-  // with a smoothstep so the old mesh seams do not show.
-  const crank = new THREE.Mesh(crankGeometry(hang), dark);
-  reel.add(foot, stem, body, rotor, barrel, lip, drag, bail, crank);
+  reel.add(rotor, spool, handle);
   root.add(reel);
 }
 
