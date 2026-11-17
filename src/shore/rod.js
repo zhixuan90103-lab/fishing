@@ -1,12 +1,25 @@
 /**
- * First-person spinning lure rod.
+ * First-person spinning lure rod: the model, and the one place its parts are put together.
+ *
+ * Owns: the blank, grip, reel seat and guides as geometry, the bones, and laying the bones
+ * along the curve each frame.
+ * Does not own: where the rod sits and how it trails the view (rodHold.js), how the blank
+ * moves (rodFlex.js), what the blank is made of (rodBeam.js), the reel (reel.js), or any
+ * fishing rule.
+ *
  * The blank is one skinned shaft from butt to tip. Grip and reel seat are sleeves on that axis.
  * Local +Y runs butt to tip. Local +Z is the underside: guides and the spinning reel hang there.
- * The reel is its own model in reel.js. Here it is only seated on the reel seat.
+ *
+ * Each frame: the hold places the root and says where the grip is, the flex moves the
+ * blank from that, the bones are laid along the flex's curve.
  */
 
 import * as THREE from 'three/webgpu';
 import { createSpinningReel } from './reel.js';
+import { createRodFlex } from './rodFlex.js';
+import { ROD_POSE, createRodHold } from './rodHold.js';
+
+export { ROD_POSE };
 
 const LENGTH = 2.13;
 const REAR_GRIP = 0.2;
@@ -17,17 +30,8 @@ const BONES = 18;
 const RINGS = 64;
 const RADIAL = 12;
 
-const REST_BEND = 0.06;
-
-// Camera-space mount, metres and degrees.
-export const ROD_POSE = {
-  x: 0.1,
-  y: -0.32,
-  z: -0.42,
-  aimUp: 30,
-  aimSide: -4,
-  roll: 0,
-};
+// Where the hand holds it, metres up from the butt: the middle of the rear grip.
+const HAND_AT = REAR_GRIP * 0.5;
 
 export function createSpinningRod() {
   const root = new THREE.Group();
@@ -80,59 +84,79 @@ export function createSpinningRod() {
   root.add(reel.object);
   addGuides(bones, seg, metal);
 
-  const pose = { ...ROD_POSE };
-  const blankDir = new THREE.Vector3();
-  const down = new THREE.Vector3();
-  const side = new THREE.Vector3();
-  const rollQ = new THREE.Quaternion();
-  const basis = new THREE.Matrix4();
-  function applyPose() {
-    aimDirection(pose.aimUp, pose.aimSide, blankDir);
-    down.set(0, -1, 0).addScaledVector(blankDir, -down.dot(blankDir));
-    if (down.lengthSq() < 1e-8) down.set(0, 0, 1);
-    down.normalize();
-    if (pose.roll) {
-      rollQ.setFromAxisAngle(blankDir, pose.roll * Math.PI / 180);
-      down.applyQuaternion(rollQ);
-    }
-    side.crossVectors(blankDir, down).normalize();
-    root.quaternion.setFromRotationMatrix(basis.makeBasis(side, blankDir, down));
-    root.position.set(pose.x, pose.y, pose.z);
-  }
-  applyPose();
   root.traverse((obj) => {
     obj.frustumCulled = false;
   });
 
-  let bend = REST_BEND;
-  let vel = 0;
+  const hold = createRodHold(root, HAND_AT);
+  const count = bones.length;
+  const flex = createRodFlex({
+    length: LENGTH,
+    nodes: count,
+    rigidBelow: REAR_GRIP + SEAT + FORE_GRIP,
+  });
+  const pos = Array.from({ length: count }, () => new THREE.Vector3());
+  const curve = new Float64Array(count * 3);
+  const dir = new THREE.Vector3();
+  const localDir = new THREE.Vector3();
+  const axisX = new THREE.Vector3();
+  const axisZ = new THREE.Vector3();
+  const boneBasis = new THREE.Matrix4();
+  const parentQ = new THREE.Quaternion();
+  const invQ = new THREE.Quaternion();
 
-  function applyBend(amount) {
-    const steps = bones.length - 1;
-    const gripEnd = (REAR_GRIP + SEAT + FORE_GRIP) / LENGTH;
-    for (let i = 0; i < bones.length; i += 1) {
-      const t = i / steps;
-      const flex = Math.max(0, (t - gripEnd) / (1 - gripEnd));
-      bones[i].rotation.x = (amount * flex * flex) / steps;
+  // The flex gives each node relative to the butt, in the axes it was driven with.
+  // Bring that into the rod's own frame, then out through the real transform.
+  function layBlank() {
+    flex.shape(hold.grip.axis, curve);
+    invQ.copy(hold.grip.quaternion).invert();
+    for (let i = 0; i < count; i += 1) {
+      pos[i].set(curve[i * 3], curve[i * 3 + 1], curve[i * 3 + 2]).applyQuaternion(invQ);
+      pos[i].applyMatrix4(root.matrixWorld);
     }
   }
-  applyBend(bend);
+
+  // Point each bone's local +Y along the solved segment. Local +Z stays the underside.
+  function poseBones() {
+    mesh.updateWorldMatrix(true, false);
+    mesh.getWorldQuaternion(parentQ);
+    for (let i = 0; i < count; i += 1) {
+      if (i < count - 1) dir.copy(pos[i + 1]).sub(pos[i]);
+      else dir.copy(pos[i]).sub(pos[i - 1]);
+      if (dir.lengthSq() < 1e-10) dir.set(0, 1, 0);
+      invQ.copy(parentQ).invert();
+      localDir.copy(dir).applyQuaternion(invQ).normalize();
+      axisZ.set(0, 0, 1).addScaledVector(localDir, -axisZ.dot(localDir));
+      if (axisZ.lengthSq() < 1e-8) axisZ.set(1, 0, 0);
+      axisZ.normalize();
+      axisX.crossVectors(localDir, axisZ).normalize();
+      bones[i].quaternion.setFromRotationMatrix(boneBasis.makeBasis(axisX, localDir, axisZ));
+      parentQ.multiply(bones[i].quaternion);
+    }
+  }
 
   return {
     object: root,
     // rotor, spool and handle groups, each on its own axis. See reel.js.
     reel,
-    // Camera space, metres and degrees. aimUp rises off the view axis, aimSide yaws it, roll spins the reel around the blank.
+    // Where the rod sits in the view's space. Any of the ROD_POSE fields.
     setPose(next) {
-      Object.assign(pose, next);
-      applyPose();
+      hold.setPose(next);
+      flex.settle();
     },
-    update(dt, swingRate) {
-      const target = REST_BEND + Math.min(Math.abs(swingRate) * 0.0018, 0.45);
-      const acc = (target - bend) * 90 - vel * 9;
-      vel += acc * dt;
-      bend += vel * dt;
-      applyBend(bend);
+    // Extra mass on the tip, kg: the lure while it hangs there.
+    setTipLoad(kg) {
+      flex.setTipLoad(kg);
+    },
+    // Pull on the tip, world space, newtons: the line. Only the part across the blank bends it.
+    setTipForce(force) {
+      flex.setTipForce(force.x, force.y, force.z);
+    },
+    update(dt) {
+      hold.carry(dt);
+      flex.step(dt, hold.grip.butt, hold.grip.axis);
+      layBlank();
+      poseBones();
     },
     dispose() {
       reel.dispose();
@@ -140,16 +164,6 @@ export function createSpinningRod() {
       for (const m of [blankMat, cork, seatMat, metal]) m.dispose();
     },
   };
-}
-
-function aimDirection(aimUpDeg, aimSideDeg, target) {
-  const aimUp = aimUpDeg * Math.PI / 180;
-  const aimSide = aimSideDeg * Math.PI / 180;
-  return target.set(
-    Math.sin(aimSide) * Math.cos(aimUp),
-    Math.sin(aimUp),
-    -Math.cos(aimSide) * Math.cos(aimUp),
-  ).normalize();
 }
 
 function blankGeometry(boneCount) {

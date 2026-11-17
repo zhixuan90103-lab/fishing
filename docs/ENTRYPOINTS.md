@@ -86,7 +86,11 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 设计分辨率 | `design.ts` + `style.css` |
 | 岸边与设置 | `src/shore/startShore.js` |
 | 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
-| 鱼竿和渔轮 | [ROD.md](./ROD.md)，`src/shore/rod.js`，`src/shore/reel.js` |
+| 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
+| 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
+| 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |
+| 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
+| 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
 | 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 鱼的摆幅和骨骼 | `src/fish/dorade.js` 的 `SPINE` 表 |

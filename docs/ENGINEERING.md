@@ -23,7 +23,10 @@ Fishing/
 │   ├── main.ts             # 安全区、舞台、startShore、震动 HUD
 │   ├── shore/
 │   │   ├── startShore.js   # 岸边启动、设置面板、镜头。只创建和每帧调用
-│   │   ├── rod.js          # 鱼竿，代码建模
+│   │   ├── rod.js          # 鱼竿：模型、骨骼，串起下面三层
+│   │   ├── rodHold.js      # 握：竿在镜头前的位置和滞后
+│   │   ├── rodBeam.js      # 梁：沿竿的软硬和轻重，启动时解一次。不依赖 Three
+│   │   ├── rodFlex.js      # 弯：每帧的惯性和回弹。不依赖 Three
 │   │   ├── reel.js         # 渔轮，四个可动部件
 │   │   └── minamo/         # 水面与场景，MIT
 │   ├── fish/
@@ -191,3 +194,4 @@ npm run cap:sync
 | 2026-11-17 | 鱼不再横移：让开、归队、绕石头只改朝向和速度 |
 | 2026-11-17 | 鱼群拆成 `shoal` / `behaviors` / `swim` / `flock` / `school` 五层，加 `take` / `giveBack` 给玩法取鱼 |
 | 2026-11-17 | 增加 CONVENTIONS.md 和 ROD.md，FISH-SCHOOL.md 改写成设计文档 |
+| 2026-11-17 | 竿的运动重做并分层：`rodHold`（握，随镜头滞后）/ `rodBeam`（梁）/ `rodFlex`（弯）。竿身按渐细的梁解出三阶振动，力从握把传到竿尖，加竿尖负重和拉力两个口子 |

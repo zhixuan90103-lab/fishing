@@ -15,7 +15,7 @@
 | Web 启动 | `index.html` → `src/main.ts` |
 | 岸边场景 | `src/shore/startShore.js` |
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节 |
-| 鱼竿和渔轮 | `docs/ROD.md`，`src/shore/rod.js`，`src/shore/reel.js` |
+| 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。渔轮是 `src/shore/reel.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -53,7 +53,7 @@
 8. **无 WebGPU 则明确失败**，不静默 WebGL。Minamo 同样拒绝非 WebGPU。
 9. **水面外观已定，先不要改。** 不要换掉三层 256² FFT，也不要再调浪高、雾、粗糙、曝光、太阳和反射压暗。落点和咬口的局部涟漪以后另加，不借机重做整片海。数值见 `docs/ENGINEERING.md` 第 6 节。
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
-11. **物料里不写玩法。** 水面、鱼群、鱼竿不含咬口和拔河。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel` 的三个部件。
+11. **物料里不写玩法。** 水面、鱼群、鱼竿不含咬口和拔河。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel` 的三个部件，竿是 `rod.setTipLoad` / `rod.setTipForce`。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。
 
 第 11、12 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
@@ -74,7 +74,7 @@ npm run ios           # sync 并打开 Xcode
 ## 还没做
 
 - 钓鱼状态机、手机即鱼竿、咬口和拔河。规则在需求文档，不要在场景里另写一套。上钩的鱼从鱼群里取，接口见 `docs/FISH-SCHOOL.md` 第 6 节。
-- 鱼线，以及竿按受力方向弯。见 `docs/ROD.md`。
+- 鱼线，以及用鱼线的拉力去弯竿。竿上的口子已有，见 `docs/ROD.md`。
 - 落水水花、气泡、咬口涟漪。
 - 音效。按 `docs/AUDIO.md`，禁止热路径 `new Audio()`。
 - Android。

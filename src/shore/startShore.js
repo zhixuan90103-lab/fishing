@@ -147,6 +147,8 @@ export async function startShore(container, hooks = {}) {
     rodAimUp: ROD_POSE.aimUp,
     rodAimSide: ROD_POSE.aimSide,
     rodRoll: ROD_POSE.roll,
+    // Grams on the rod tip. Trial only: nothing hangs there yet.
+    rodLoad: 0,
   };
   const applyCamera = () => {
     camera.position.set(tune.x, tune.y, tune.z);
@@ -174,10 +176,8 @@ export async function startShore(container, hooks = {}) {
       aimSide: tune.rodAimSide,
       roll: tune.rodRoll,
     });
+    rod.setTipLoad(tune.rodLoad / 1000);
   };
-  let prevYaw = tune.yaw;
-  let prevPitch = tune.pitch;
-
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -267,10 +267,7 @@ export async function startShore(container, hooks = {}) {
       waveDirty = false;
     }
     particles.update(camera, time);
-    const swingRate = Math.hypot(tune.yaw - prevYaw, tune.pitch - prevPitch) / Math.max(dt, 1e-4);
-    prevYaw = tune.yaw;
-    prevPitch = tune.pitch;
-    rod.update(dt, swingRate);
+    rod.update(dt);
     shoreSchool.update(dt, tune.swimRate, world.rocks, {
       x: tune.x,
       z: tune.z,
@@ -378,6 +375,7 @@ function mountTunePanel(container, tune, hooks) {
       ['抬起', 'rodAimUp', -30, 70, 0.5],
       ['侧偏', 'rodAimSide', -45, 45, 0.5],
       ['滚转', 'rodRoll', -180, 180, 1],
+      ['竿尖负重 g', 'rodLoad', 0, 30, 1],
     ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],

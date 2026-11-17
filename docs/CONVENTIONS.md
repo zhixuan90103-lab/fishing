@@ -15,7 +15,7 @@
 |---|---|---|
 | 鱼群 | `fishes`、`take(fish, brain)`、`giveBack(fish)` | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 6 节 |
 | 渔轮 | `rod.reel.rotor` / `spool` / `handle` 三个组 | [ROD.md](./ROD.md) |
-| 鱼竿 | `rod.update(dt, swingRate)`，以后换成按受力弯 | [ROD.md](./ROD.md) |
+| 鱼竿 | `rod.setTipLoad(kg)`、`rod.setTipForce(force)`、`rod.setPose(pose)` | [ROD.md](./ROD.md) 第 6 节 |
 | 震动 | `haptics.*` | [HAPTICS.md](./HAPTICS.md) |
 
 - 每个物料有自己的单看页面或单看办法，不必进游戏才能检查。鱼是 `fish.html`。
@@ -56,8 +56,8 @@
 | `src/fish/` | 鱼的模型和游动 | JavaScript |
 
 - `npm run build` 里的 `tsc` 只严格检查 TypeScript。`.js` 文件不做类型检查，写错属性名不会报错，所以 JS 的改动要跑起来看。
-- **一个文件一件事，文件头写清它管什么、不管什么。** 分层的例子是 `src/fish/`：`shoal`（整群）、`behaviors`（想做什么）、`swim`（怎么游）、`flock`（一帧流程）、`school`（接到场景）。
-- **模拟和渲染分开。** `flock.js` 往下不引 Three，一条鱼只要有个能摆姿态的 `holder` 就行。这样游动可以在 Node 里用固定随机种子跑。
+- **一个文件一件事，文件头写清它管什么、不管什么。** 分层的例子是 `src/fish/`：`shoal`（整群）、`behaviors`（想做什么）、`swim`（怎么游）、`flock`（一帧流程）、`school`（接到场景）。竿也一样：`rodHold`（握）、`rodBeam`（梁）、`rodFlex`（弯）、`rod`（模型和接线）。
+- **模拟和渲染分开。** `flock.js` 往下不引 Three，一条鱼只要有个能摆姿态的 `holder` 就行。这样游动可以在 Node 里用固定随机种子跑。竿的弯曲同理，在 `rodBeam.js` 和 `rodFlex.js`。
 - **`startShore.js` 只负责创建和每帧调用。** 不要把游动、建模、玩法写进去。
 - **尺寸和调节量放在文件顶部的常量里**，带一句说明。形状用数据表（比如渔轮的 `[半径, y]` 轮廓、鱼的 `SPINE` 表），改形状就是改表。
 - **代码建模的东西按能动的部件分组**，每个组的原点放在它自己的转轴上。
@@ -93,6 +93,7 @@
 | 模型外形 | 从几个角度截图看；再看第一人称镜头里的样子 |
 | 只整理结构、不该改变结果 | 证明前后一致：画面逐像素比，或同一随机种子逐帧比数值 |
 | 鱼的游动 | 在 Node 里跑 `flock.js` 几分钟，量：运动方向和鱼头的夹角（应为 0）、鱼群散布、两条鱼贴得太近的比例。和改之前的数对比 |
+| 竿的弯曲 | 在 Node 里跑 `rodFlex.js`：甩一下再急停，量各阶频率、每次回摆的幅度、竿长、各段开始落后的先后；匀速转动时的偏移应接近 0。和改之前的数对比 |
 | 鱼的身体姿态 | `fish.html` 把发力、弯身拉到最大，看有没有撕裂、方向对不对 |
 | 手感、震动、甩竿 | 只能真机。桌面没有马达，也不能甩 |
 
@@ -113,6 +114,7 @@
 | [FISHING-FEEL.md](./FISHING-FEEL.md)、[FISHING-RESEARCH.md](./FISHING-RESEARCH.md) | 参考材料，不是本版范围 |
 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) | 鱼群的设计 |
 | [ROD.md](./ROD.md) | 鱼竿和渔轮的设计 |
+| [LINE-RESEARCH.md](./LINE-RESEARCH.md) | 鱼线做法的检索纪要，不是规格 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
 
