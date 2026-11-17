@@ -6,12 +6,16 @@
  * line bends the rod.
  * Does not own: the shape of the hanging part (lineCurve.js), where the guides are
  * (rod.js), how the rod answers the pull (rodFlex.js), where the far end goes, how much
- * line is out, or any fishing rule. The outside sets the end and the length through
- * setEnd and setLength. The tension follows from those two and from where the tip is.
+ * line is out, or any fishing rule.
  *
- * Along the rod the line is straight from stop to stop: the reel's line roller, then
- * every guide ring. From the tip to the far end it hangs by how much line is out:
- * a catenary when there is more than the gap, straight when there is not.
+ * The outside gives two things: where the far end is, and how much line is out past the
+ * tip. Everything else follows. Slack is the length minus the gap. With slack the line
+ * hangs in a catenary and pulls nothing. Without it the line is straight, and stretched
+ * by however much the gap exceeds it. The tension is that stretch times the line's
+ * stiffness, and the rod works it out, not this file: see setTipTether in rodFlex.js.
+ *
+ * Each frame, after rod.update(): read the guides, draw, hand the rod the end and length
+ * for its next step.
  *
  * Everything is in world space. Units: metres, newtons.
  */
@@ -32,9 +36,11 @@ const STRETCH_FORCE = 120;
 const STIFFEST = 60;
 
 export function createFishingLine(rod) {
+  // The strand: `stops` points along the rod, then HANG_POINTS more out to the far end.
+  // The last stop is the tip, and the hanging part starts from it.
   const stops = rod.lineStops;
-  const points = stops + HANG_POINTS;
-  const positions = new Float32Array(points * 3);
+  const positions = new Float32Array((stops + HANG_POINTS) * 3);
+  const hangAt = (stops - 1) * 3;
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const material = new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: OPACITY });
@@ -47,14 +53,19 @@ export function createFishingLine(rod) {
   const end = new THREE.Vector3();
   let length = 0;
   let slack = 0;
-  // Set by tighten(): take the length from the gap on the next update.
-  let spare = 0;
+  // tighten() asks for the length to be taken from the gap. That needs the tip, so it
+  // waits for the next update. null: nothing asked.
+  let fitSpare = 0;
 
   return {
     object,
     // World space. tip is where the line leaves the rod. Both valid after update().
     tip,
     end,
+    // Line out past the tip, metres.
+    get length() {
+      return length;
+    },
     // Line out minus the straight gap from tip to end, metres. Above zero the line hangs
     // loose. Below zero it is stretched by that much and pulling.
     get slack() {
@@ -65,10 +76,6 @@ export function createFishingLine(rod) {
     get tension() {
       return rod.tipTension;
     },
-    // Line out past the tip, metres.
-    get length() {
-      return length;
-    },
 
     // Where the far end is: the lure, or the fish's mouth.
     setEnd(x, y, z) {
@@ -77,28 +84,24 @@ export function createFishingLine(rod) {
     // How much line is out past the tip, metres.
     setLength(metres) {
       length = Math.max(0, metres);
-      spare = null;
+      fitSpare = null;
     },
-    // Set the length from where the ends are at the next update: just taut, plus `extra`.
-    tighten(extra = 0) {
-      spare = extra;
+    // Take the length from where the ends are at the next update: just taut, plus `spare`.
+    // A negative spare leaves the line shorter than the gap, so it starts out pulling.
+    tighten(spare = 0) {
+      fitSpare = spare;
     },
 
-    // Call after rod.update(): the line follows the guides as they are this frame.
     update() {
       rod.linePath(path);
       for (let i = 0; i < stops; i += 1) path[i].toArray(positions, i * 3);
       tip.copy(path[stops - 1]);
-      if (spare !== null) {
-        length = tip.distanceTo(end) + spare;
-        spare = null;
+      if (fitSpare !== null) {
+        length = tip.distanceTo(end) + fitSpare;
+        fitSpare = null;
       }
-      const at = (stops - 1) * 3;
-      slack = hangLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, positions, at, HANG_POINTS + 1);
+      slack = hangLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, positions, hangAt, HANG_POINTS + 1);
       geometry.attributes.position.needsUpdate = true;
-
-      // The rod works out the pull itself, inside its own small steps, from where its tip
-      // is against this end and length.
       rod.setTipTether(end, length, Math.min(STIFFEST, STRETCH_FORCE / Math.max(length, 1e-3)));
     },
 

@@ -1,12 +1,12 @@
 # Engineering — Fishing
 
-配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
+配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [LINE.md](./LINE.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
 
 壳的底座叫 portrait-webgpu-base，`package.json` 的 `name` 还是这个名字。App 的包名以 `capacitor.config.ts` 为准。
 
 ## 1. 定位
 
-竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿已经接上，都是物料。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线已经接上，都是物料。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
 
 ## 2. 目录
 
@@ -130,7 +130,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
-- 鱼竿和渔轮是代码建模，见 [ROD.md](./ROD.md)。  
+- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `rod.update` 再 `line.update`。
 
 ## 7. Haptics
 
@@ -196,5 +196,6 @@ npm run cap:sync
 | 2026-11-17 | 鱼不再横移：让开、归队、绕石头只改朝向和速度 |
 | 2026-11-17 | 鱼群拆成 `shoal` / `behaviors` / `swim` / `flock` / `school` 五层，加 `take` / `giveBack` 给玩法取鱼 |
 | 2026-11-17 | 增加 CONVENTIONS.md 和 ROD.md，FISH-SCHOOL.md 改写成设计文档 |
-| 2026-11-17 | 增加鱼线：从渔轮穿过导环到远端，松时悬链线、绷时直线。线绷直后把竿尖系在远端上，竿被线拉弯，张力由线长和两端距离得出。远端和线长先由设置面板给 |
 | 2026-11-17 | 竿的运动重做并分层：`rodHold`（握，随镜头滞后）/ `rodBeam`（梁）/ `rodFlex`（弯）。竿身按渐细的梁解出三阶振动，力从握把传到竿尖，加竿尖负重和拉力两个口子 |
+| 2026-11-17 | 增加鱼线：从渔轮穿过导环到远端，松时悬链线、绷时直线。线绷直后把竿尖系在远端上，竿被线拉弯，张力由线长和两端距离得出。远端和线长先由设置面板给 |
+| 2026-11-17 | 规范整理：会动的东西的通则、分层和验证办法写进 CONVENTIONS.md，物料设计文档定了统一的写法 |

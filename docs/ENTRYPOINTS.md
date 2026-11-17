@@ -25,7 +25,7 @@ index.html
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
             → 每帧：rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
-            → 设置面板（雾 / 水 / 鱼 / 镜头；震动测试移入面板）
+            → 设置面板（雾 / 水 / 鱼 / 鱼竿 / 鱼线 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
@@ -40,6 +40,19 @@ school.js update
        → 量每条鱼的拥挤
        → 对每条鱼：状态（或被取走后的 brain）→ 习性 → 归队 → swimFish
   → 尾巴动画 mixer.update → 脊柱波 poseSpine
+```
+
+竿和线一帧（`rod.update` 再 `line.update`，顺序不能换）：
+
+```
+rod.js update
+  → rodHold.carry：读镜头朝向 → 平滑 → 滞后 → 摆好根节点，报出握把在世界里的位置
+  → rodFlex.step：细步长里推进各阶振动，其间按系着的线算竿尖受的拉力
+  → 把骨骼摆到 rodFlex 给的曲线上
+line.js update
+  → rod.linePath：导线轮和各导环现在在哪
+  → lineCurve.hangLine：竿尖到远端的形状，得出余线
+  → rod.setTipTether：把远端和线长交给竿，下一帧用
 ```
 
 单看一条鱼是另一个入口：`fish.html` → `src/fish/preview.js`，不经过 `main.ts`。
@@ -85,7 +98,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | base / 端口 | `vite.config.ts` |
 | appId / appName | `capacitor.config.ts`（现为 `com.wangzhixuan.fishing` / Fishing） |
 | 设计分辨率 | `design.ts` + `style.css` |
-| 岸边与设置 | `src/shore/startShore.js` |
+| 岸边、每帧的顺序、设置面板 | `src/shore/startShore.js` |
 | 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
 | 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
 | 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
@@ -93,7 +106,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
 | 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
-| 鱼线：外观、接到竿上 | `src/shore/line.js` |
+| 鱼线：外观、软硬、接到竿上 | `src/shore/line.js` |
+| 线在竿上走哪些点 | `src/shore/rod.js` 的 `linePath` 和导环表 |
 | 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 鱼的摆幅和骨骼 | `src/fish/dorade.js` 的 `SPINE` 表 |

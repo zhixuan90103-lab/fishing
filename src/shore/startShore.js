@@ -158,8 +158,6 @@ export async function startShore(container, hooks = {}) {
     lineReach: 12,
     lineSpare: 0,
   };
-  const castYaw = (tune.yaw * Math.PI) / 180;
-  const castFrom = { x: tune.x, z: tune.z };
   const applyCamera = () => {
     camera.position.set(tune.x, tune.y, tune.z);
     const yaw = (tune.yaw * Math.PI) / 180;
@@ -190,6 +188,9 @@ export async function startShore(container, hooks = {}) {
   };
   const line = createFishingLine(rod);
   scene.add(line.object);
+  // Trial only: the far end stays where the view first pointed, however the view turns.
+  const castYaw = (tune.yaw * Math.PI) / 180;
+  const castFrom = { x: tune.x, z: tune.z };
   const applyLine = () => {
     line.setEnd(
       castFrom.x + Math.sin(castYaw) * tune.lineReach,

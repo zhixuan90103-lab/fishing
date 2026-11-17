@@ -17,6 +17,16 @@
  * load bends only the tip and a heavy one moves the bend down the blank. The fast modes
  * tilt each segment on top of that. Segments keep their length.
  *
+ * Three things can act on the tip from outside, and all three enter the same way, as a
+ * pull on the tip shared out among the modes:
+ *   a weight riding on it   setTipLoad     changes the modes themselves
+ *   a steady force          setTipForce    the same whatever the rod does
+ *   a tether                setTipTether   a line to a fixed point: pulls only when the
+ *                                          bent tip is further away than the line is long
+ * The tether is worked out again in every small step from where the bent tip is then.
+ * Worked out once a frame and handed in as a force, a stiff line shakes itself apart at
+ * low frame rates.
+ *
  * Units: metres, seconds, kilograms, newtons. World +Y is up.
  */
 
@@ -42,25 +52,29 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
   let modes = beam.modes(0, count);
   const angles = new Float64Array(segs);
 
-  // Per mode, world space, three numbers each. z is the mode's inertial point, v its
-  // velocity, q its offset from where a rigid rod puts it, base that rigid place last frame.
+  // The modes. Per mode, world space, three numbers each. z is the mode's inertial point,
+  // v its velocity, q its offset from where a rigid rod puts it. base is that rigid place
+  // last frame, next is where it is this frame.
   const z = new Float64Array(count * 3);
   const v = new Float64Array(count * 3);
   const q = new Float64Array(count * 3);
   const base = new Float64Array(count * 3);
   const next = new Float64Array(count * 3);
+  // The grip last frame.
   let prevAx = 0, prevAy = 1, prevAz = 0;
+  let prevBx = 0, prevBy = 0, prevBz = 0;
+  let stale = true;
+
+  // What acts on the tip from outside.
   let load = 0;
   let extX = 0, extY = 0, extZ = 0;
-  let stale = true;
-  // A line tied from the tip to a fixed point. It pulls only when the gap is longer than
-  // the line. Solved inside the substeps, so a stiff line stays stable.
   let tied = false;
   let tieX = 0, tieY = 0, tieZ = 0;
   let tieLength = 0;
   let tieStiffness = 0;
   let tension = 0;
-  let prevBx = 0, prevBy = 0, prevBz = 0;
+  // The total of those for the substep in hand. Written by tipPull().
+  let pullX = 0, pullY = 0, pullZ = 0;
   const bent = new Float64Array(nodes * 3);
 
   function rigidPlace(out, butt, axis) {
@@ -100,7 +114,108 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     }
   }
 
-  // Settle at rest under gravity and the current pull. The tether is left to pull it in.
+  /**
+   * The pull on the tip at the start of a substep, into pullX, pullY, pullZ.
+   * (bx, by, bz) is the butt and (ax, ay, az) the grip axis at that moment.
+   * The steady force, plus the tether if the bent tip is further from its anchor than the
+   * line is long. Also sets `tension`.
+   */
+  function tipPull(bx, by, bz, ax, ay, az) {
+    pullX = extX;
+    pullY = extY;
+    pullZ = extZ;
+    if (!tied) return;
+    curve(ax, ay, az, bent);
+    const e = (nodes - 1) * 3;
+    const gx = tieX - (bx + bent[e]);
+    const gy = tieY - (by + bent[e + 1]);
+    const gz = tieZ - (bz + bent[e + 2]);
+    const gap = Math.hypot(gx, gy, gz);
+    tension = gap > tieLength ? tieStiffness * (gap - tieLength) : 0;
+    if (tension > 0) {
+      pullX += (gx / gap) * tension;
+      pullY += (gy / gap) * tension;
+      pullZ += (gz / gap) * tension;
+    }
+  }
+
+  /**
+   * One substep for mode m. dt is the whole frame and f how far through it this substep
+   * ends. (ax, ay, az) is the grip axis at that end. Reads pullX, pullY, pullZ.
+   */
+  function advanceMode(m, sub, dt, f, ax, ay, az) {
+    const mode = modes[m];
+    const o = m * 3;
+    // The rigid place moves in a straight line over the frame.
+    const bx = (next[o] - base[o]) / dt;
+    const by = (next[o + 1] - base[o + 1]) / dt;
+    const bz = (next[o + 2] - base[o + 2]) / dt;
+    // q is the offset at the start of the substep. The spring reads this one, not the
+    // offset to the rigid place's next position, or the rigid rod's own travel would
+    // count as bend.
+    let dx = q[o];
+    let dy = q[o + 1];
+    let dz = q[o + 2];
+    let spring = mode.omega * mode.omega;
+    if (m === 0) spring *= beam.stiffening(mode.tip * Math.hypot(dx, dy, dz));
+    const rx = v[o] - bx;
+    const ry = v[o + 1] - by;
+    const rz = v[o + 2] - bz;
+    const tipSpeed = Math.abs(mode.tip) * Math.hypot(rx, ry, rz);
+    const loss = 2 * DAMPING[m] * mode.omega * (1 + tipSpeed / LOSS_DOUBLES_AT);
+    v[o] += (-spring * dx - loss * rx + mode.tip * pullX) * sub;
+    v[o + 1] += (-spring * dy - loss * ry + mode.tip * pullY - mode.push * GRAVITY) * sub;
+    v[o + 2] += (-spring * dz - loss * rz + mode.tip * pullZ) * sub;
+    z[o] += v[o] * sub;
+    z[o + 1] += v[o + 1] * sub;
+    z[o + 2] += v[o + 2] * sub;
+
+    // The blank does not stretch: it only moves across the grip axis, and no further
+    // than it can reach.
+    const cx = base[o] + (next[o] - base[o]) * f;
+    const cy = base[o + 1] + (next[o + 1] - base[o + 1]) * f;
+    const cz = base[o + 2] + (next[o + 2] - base[o + 2]) * f;
+    dx = z[o] - cx;
+    dy = z[o + 1] - cy;
+    dz = z[o + 2] - cz;
+    let a = dx * ax + dy * ay + dz * az;
+    dx -= ax * a;
+    dy -= ay * a;
+    dz -= az * a;
+    let ux = v[o] - bx;
+    let uy = v[o + 1] - by;
+    let uz = v[o + 2] - bz;
+    a = ux * ax + uy * ay + uz * az;
+    ux -= ax * a;
+    uy -= ay * a;
+    uz -= az * a;
+    const r = Math.hypot(dx, dy, dz);
+    const most = (m === 0 ? reach : reach * RIPPLE_REACH) / Math.abs(mode.tip);
+    if (r > most) {
+      const s = most / r;
+      dx *= s;
+      dy *= s;
+      dz *= s;
+      const out = (ux * dx + uy * dy + uz * dz) / (most * most);
+      if (out > 0) {
+        ux -= dx * out;
+        uy -= dy * out;
+        uz -= dz * out;
+      }
+    }
+    q[o] = dx;
+    q[o + 1] = dy;
+    q[o + 2] = dz;
+    z[o] = cx + dx;
+    z[o + 1] = cy + dy;
+    z[o + 2] = cz + dz;
+    v[o] = bx + ux;
+    v[o + 1] = by + uy;
+    v[o + 2] = bz + uz;
+  }
+
+  // Come to rest under gravity and the steady force. A tether is not settled here: it
+  // pulls the tip in over the next moments.
   function reset(butt, axis) {
     rigidPlace(base, butt, axis);
     for (let m = 0; m < modes.length; m += 1) {
@@ -156,8 +271,8 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       stale = true;
     },
 
-    // A steady pull on the tip, world space, newtons: the line. Only the part across the
-    // blank bends it.
+    // A steady force on the tip, world space, newtons. Only the part across the blank
+    // bends it. For a line, use the tether: its pull has to follow the rod.
     setTipForce(x, y, z0) {
       extX = x;
       extY = y;
@@ -167,8 +282,8 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     /**
      * Tie the tip to a world point with `length` metres of line. The line pulls along
      * itself with `stiffness` newtons for each metre the gap exceeds the length, and not
-     * at all while the gap is shorter. Unlike setTipForce, the pull answers the rod's own
-     * motion: swing the tip away and it loads up, let it come back and it goes slack.
+     * at all while the gap is shorter. Swing the tip away and it loads up, let it come
+     * back and it goes slack.
      */
     setTipTether(x, y, z0, length, stiffness) {
       tied = true;
@@ -208,9 +323,16 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       // Grip axis at the start of the substep, to go with the offsets q.
       let sx = prevAx, sy = prevAy, sz = prevAz;
       for (let j = 1; j <= n; j += 1) {
-        const f = j / n;
+        const f0 = (j - 1) / n;
+        tipPull(
+          prevBx + (butt.x - prevBx) * f0,
+          prevBy + (butt.y - prevBy) * f0,
+          prevBz + (butt.z - prevBz) * f0,
+          sx, sy, sz,
+        );
         // The grip turns through the frame too. With only the end axis, a steady turn
         // reads as a sideways pull.
+        const f = j / n;
         let ax = prevAx + (axis.x - prevAx) * f;
         let ay = prevAy + (axis.y - prevAy) * f;
         let az = prevAz + (axis.z - prevAz) * f;
@@ -224,97 +346,10 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
           ay = axis.y;
           az = axis.z;
         }
-        // Pull on the tip for this substep: the steady force, plus the tether if the bent
-        // tip is further from its anchor than the line is long.
-        let tx = extX, ty = extY, tz = extZ;
-        if (tied) {
-          const f0 = (j - 1) / n;
-          curve(sx, sy, sz, bent);
-          const e = (nodes - 1) * 3;
-          const gx = tieX - (prevBx + (butt.x - prevBx) * f0 + bent[e]);
-          const gy = tieY - (prevBy + (butt.y - prevBy) * f0 + bent[e + 1]);
-          const gz = tieZ - (prevBz + (butt.z - prevBz) * f0 + bent[e + 2]);
-          const gap = Math.hypot(gx, gy, gz);
-          tension = gap > tieLength ? tieStiffness * (gap - tieLength) : 0;
-          if (tension > 0) {
-            tx += (gx / gap) * tension;
-            ty += (gy / gap) * tension;
-            tz += (gz / gap) * tension;
-          }
-        }
+        for (let m = 0; m < modes.length; m += 1) advanceMode(m, sub, dt, f, ax, ay, az);
         sx = ax;
         sy = ay;
         sz = az;
-        for (let m = 0; m < modes.length; m += 1) {
-          const mode = modes[m];
-          const o = m * 3;
-          // The rigid place moves in a straight line over the frame.
-          const bx = (next[o] - base[o]) / dt;
-          const by = (next[o + 1] - base[o + 1]) / dt;
-          const bz = (next[o + 2] - base[o + 2]) / dt;
-          // q is the offset at the start of the substep. The spring reads this one, not
-          // the offset to the rigid place's next position, or the rigid rod's own travel
-          // would count as bend.
-          let dx = q[o];
-          let dy = q[o + 1];
-          let dz = q[o + 2];
-          let spring = mode.omega * mode.omega;
-          if (m === 0) spring *= beam.stiffening(mode.tip * Math.hypot(dx, dy, dz));
-          const rx = v[o] - bx;
-          const ry = v[o + 1] - by;
-          const rz = v[o + 2] - bz;
-          const tipSpeed = Math.abs(mode.tip) * Math.hypot(rx, ry, rz);
-          const loss = 2 * DAMPING[m] * mode.omega * (1 + tipSpeed / LOSS_DOUBLES_AT);
-          v[o] += (-spring * dx - loss * rx + mode.tip * tx) * sub;
-          v[o + 1] += (-spring * dy - loss * ry + mode.tip * ty - mode.push * GRAVITY) * sub;
-          v[o + 2] += (-spring * dz - loss * rz + mode.tip * tz) * sub;
-          z[o] += v[o] * sub;
-          z[o + 1] += v[o + 1] * sub;
-          z[o + 2] += v[o + 2] * sub;
-
-          // The blank does not stretch: it only moves across the grip axis, and no
-          // further than it can reach.
-          const cx = base[o] + (next[o] - base[o]) * f;
-          const cy = base[o + 1] + (next[o + 1] - base[o + 1]) * f;
-          const cz = base[o + 2] + (next[o + 2] - base[o + 2]) * f;
-          dx = z[o] - cx;
-          dy = z[o + 1] - cy;
-          dz = z[o + 2] - cz;
-          let a = dx * ax + dy * ay + dz * az;
-          dx -= ax * a;
-          dy -= ay * a;
-          dz -= az * a;
-          let ux = v[o] - bx;
-          let uy = v[o + 1] - by;
-          let uz = v[o + 2] - bz;
-          a = ux * ax + uy * ay + uz * az;
-          ux -= ax * a;
-          uy -= ay * a;
-          uz -= az * a;
-          const r = Math.hypot(dx, dy, dz);
-          const most = (m === 0 ? reach : reach * RIPPLE_REACH) / Math.abs(mode.tip);
-          if (r > most) {
-            const s = most / r;
-            dx *= s;
-            dy *= s;
-            dz *= s;
-            const out = (ux * dx + uy * dy + uz * dz) / (most * most);
-            if (out > 0) {
-              ux -= dx * out;
-              uy -= dy * out;
-              uz -= dz * out;
-            }
-          }
-          q[o] = dx;
-          q[o + 1] = dy;
-          q[o + 2] = dz;
-          z[o] = cx + dx;
-          z[o + 1] = cy + dy;
-          z[o + 2] = cz + dz;
-          v[o] = bx + ux;
-          v[o + 1] = by + uy;
-          v[o + 2] = bz + uz;
-        }
       }
       base.set(next);
       prevAx = axis.x;
