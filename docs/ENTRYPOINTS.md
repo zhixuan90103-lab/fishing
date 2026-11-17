@@ -51,8 +51,8 @@ fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
   → 读上一帧线画出来的竿尖 line.tip
   → ready：swing.step 量瞄准的俯仰往下掉得多快；松手且够快 → lureMove.launch，lockLook(true)
            否则饵留在竿尖：line.stow
-  → flight：lureMove.fly，按着就停线；线长跟着饵；落水 → line.setTied(true)
-  → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lureMove.tow
+  → flight：lureMove.fly，按着就停线；线长跟着饵；落水 → line.setTied(true)，余线留给下一段收掉
+  → water：先把落水时的余线收掉（约半秒）；retrieve.step 得出这一帧收多少线 → rod.reel.wind → lureMove.tow
            靠近竿尖 → lureMove.hang；线收完 → ready，lockLook(false)
   → line.setEnd / setLength，lure.place
 fishing.js follow()

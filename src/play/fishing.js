@@ -29,6 +29,11 @@ import { SWING_FULL, SWING_MIN, castReach, createSwing } from './swing.js';
 const STOW_LENGTH = 0.025;
 // Extra line in the air during the flight, as a share of the gap, so it bellies a little.
 const FLIGHT_SPARE = 0.04;
+// After the lure lands, how fast that belly is drawn out of the line, 1/s. The line
+// straightens over about half a second instead of snapping straight.
+const SETTLE_RATE = 5;
+// Belly smaller than this is gone, metres.
+const SETTLE_DONE = 0.002;
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
 const LIFT_WITHIN = 1.6;
@@ -62,9 +67,11 @@ export function createFishing({ rod, line, lure, lockLook }) {
   let released = 0;
   // flight: the line has been stopped.
   let stopped = false;
-  // water: the finger has been up since landing; the lure has left the water.
+  // water: the finger has been up since landing; the lure has left the water; how much
+  // of the flight's belly is still in the line, metres.
   let armed = false;
   let lifted = false;
+  let belly = 0;
 
   function toReady() {
     stage = 'ready';
@@ -114,9 +121,11 @@ export function createFishing({ rod, line, lure, lockLook }) {
     const landed = move.fly(dt, stopped);
     out = move.gap(tip) * (1 + FLIGHT_SPARE);
     if (!landed) return;
-    // In the water the line is straight at once. This press, if any, is not a retrieve.
+    // In the water the line comes straight by itself, quickly but not in one frame: the
+    // belly it flew with is kept and drawn out in water(). This press, if any, is not a
+    // retrieve.
     stage = 'water';
-    out = move.gap(tip);
+    belly = out - move.gap(tip);
     armed = !input.finger;
     lifted = false;
     retrieve.reset();
@@ -126,10 +135,18 @@ export function createFishing({ rod, line, lure, lockLook }) {
   function water(dt, input, tip) {
     if (!input.finger) armed = true;
     const taken = Math.min(retrieve.step(dt, input.finger && armed), out - STOW_LENGTH);
-    out -= taken;
     rod.reel.wind(taken);
+    if (belly > 0) {
+      // Still straightening. Winding takes belly out too, before it moves the lure.
+      belly = belly * Math.exp(-SETTLE_RATE * dt) - taken;
+      if (belly < SETTLE_DONE) belly = 0;
+      out = Math.max(STOW_LENGTH, move.gap(tip) + belly);
+    } else {
+      out -= taken;
+    }
     if (!lifted) {
-      move.tow(dt, tip, out, taken, line.stiffness);
+      // While it straightens, the wind is spent on the belly and does not reach the lure.
+      move.tow(dt, tip, out, belly > 0 ? 0 : taken, line.stiffness);
       const level = Math.hypot(tip.x - move.x, tip.z - move.z);
       if (level < LIFT_WITHIN || out <= STOW_LENGTH + 1e-6) {
         // From here it is a weight on the line again. Give back any stretch so it does
