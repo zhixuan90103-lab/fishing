@@ -4,8 +4,8 @@
 
 | 命令 | 结果 |
 |------|------|
-| `npm run dev` | http://127.0.0.1:5190/ |
-| `npm run build` | `tsc` 检查 + `dist/`（相对路径） |
+| `npm run dev` | http://127.0.0.1:5190/ 是游戏，`/fish.html` 单看一条鱼 |
+| `npm run build` | `tsc` 检查（只严格查 `.ts`）+ `dist/`（相对路径） |
 | `npm run cap:sync` | build + cap sync ios |
 | `npm run ios:bootstrap` | add ios + 拷插件 + 改 storyboard **和 SceneDelegate** + pbx + sync |
 | `npm run ios` | sync + open Xcode |
@@ -21,12 +21,27 @@ index.html
             → WebGPURenderer（Three canvas 隐藏）
             → #shore-view 接最终画面
             → 天空 HDRI、沙滩石头、三层 FFT 海面、后期
-            → 岸边鱼群（docs/FISH-SCHOOL.md）
-            → 设置面板（雾 / 水 / 镜头；震动测试移入面板）
+            → 岸边鱼群 createShoreSchool（docs/FISH-SCHOOL.md）
+            → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
+            → 每帧：rod.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
+            → 设置面板（雾 / 水 / 鱼 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
 ```
+
+鱼群一帧（`shoreSchool.update`）：
+
+```
+school.js update
+  → flock.step
+       → shoal：整群的快慢、深度、朝向
+       → 量每条鱼的拥挤
+       → 对每条鱼：状态（或被取走后的 brain）→ 习性 → 归队 → swimFish
+  → 尾巴动画 mixer.update → 脊柱波 poseSpine
+```
+
+单看一条鱼是另一个入口：`fish.html` → `src/fish/preview.js`，不经过 `main.ts`。
 
 `createRenderer` 仍在，岸边路径不调用它。没有 `navigator.gpu` 时 `main.ts` 走 `showFatal`。
 
@@ -37,7 +52,8 @@ index.html
   #viewport
     #app
       #stage
-        canvas
+        canvas          Three 画布，岸边路径里隐藏
+        #shore-view     岸边最终画面
         #ui-root
 #device-switcher / #device-label   (web only)
 ```
@@ -73,7 +89,10 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿和渔轮 | [ROD.md](./ROD.md)，`src/shore/rod.js`，`src/shore/reel.js` |
 | 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
+| 鱼的摆幅和骨骼 | `src/fish/dorade.js` 的 `SPINE` 表 |
+| 渔轮的形状和尺寸 | `src/shore/reel.js` 顶部常量和各部件的轮廓表 |
 | 震动原生 | `plugins/native-haptics/*.swift` + bootstrap |
 | 启动 HUD | `index.html` + `main.ts` |
 | 音效（规划） | [AUDIO.md](./AUDIO.md) |
 | 震动接线 | [HAPTICS.md](./HAPTICS.md) |
+| 规范 | [CONVENTIONS.md](./CONVENTIONS.md) |

@@ -1,11 +1,12 @@
 # AGENTS.md — Fishing
 
 > 打开本仓库时的第一入口。  
-> 壳来自 niantu 的适配和 three-webgpu-cap-shell 的打包。玩法规则以 `docs/FISHING-REQUIREMENTS.md` 为准。
+> 壳来自 niantu 的适配和 three-webgpu-cap-shell 的打包。玩法规则以 `docs/FISHING-REQUIREMENTS.md` 为准。  
+> 做内容时的规矩在 `docs/CONVENTIONS.md`。
 
 ## 一句话
 
-**TypeScript + Three.js WebGPU + Vite + Capacitor iOS** 的竖屏钓鱼。设计空间 **390×844**。当前启动的是岸边水面，不是钓鱼状态机。
+**TypeScript + Three.js WebGPU + Vite + Capacitor iOS** 的竖屏钓鱼。设计空间 **390×844**。当前启动的是岸边：水面、鱼群、第一人称鱼竿。这些都是物料，钓鱼状态机还没做。
 
 ## 入口地图
 
@@ -16,7 +17,8 @@
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节 |
 | 鱼竿和渔轮 | `docs/ROD.md`，`src/shore/rod.js`，`src/shore/reel.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
-| 岸边资源（CC0） | `public/assets/`，路径前缀 `./assets/` |
+| 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
+| 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
 | 设计舞台 | `src/adapt/design.ts` |
 | 设备预览 | `src/adapt/devicePreview.ts` |
 | Safe Area | `src/adapt/safeArea.ts` + `src/style.css` |
@@ -25,6 +27,7 @@
 | 震动 Swift 真源 | `plugins/native-haptics/*` |
 | 包名 | `capacitor.config.ts`：`com.wangzhixuan.fishing` |
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
+| 规范 | `docs/CONVENTIONS.md` |
 
 岸边不用 `createRenderer()`。`startShore` 自己建 `WebGPURenderer`，Three 的 canvas 隐藏，最终画面画到 `#shore-view`。
 
@@ -50,6 +53,10 @@
 8. **无 WebGPU 则明确失败**，不静默 WebGL。Minamo 同样拒绝非 WebGPU。
 9. **水面外观已定，先不要改。** 不要换掉三层 256² FFT，也不要再调浪高、雾、粗糙、曝光、太阳和反射压暗。落点和咬口的局部涟漪以后另加，不借机重做整片海。数值见 `docs/ENGINEERING.md` 第 6 节。
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
+11. **物料里不写玩法。** 水面、鱼群、鱼竿不含咬口和拔河。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel` 的三个部件。
+12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。
+
+第 11、12 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
 
 ## 命令
 

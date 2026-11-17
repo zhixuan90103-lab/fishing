@@ -1,26 +1,39 @@
-# Engineering — portrait-webgpu-base
+# Engineering — Fishing
 
-配套：[AGENTS.md](../AGENTS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [MERGE.md](./MERGE.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md)
+配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
+
+壳的底座叫 portrait-webgpu-base，`package.json` 的 `name` 还是这个名字。App 的包名以 `capacitor.config.ts` 为准。
 
 ## 1. 定位
 
-竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面已经接上。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿已经接上，都是物料。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
 
 ## 2. 目录
 
 ```
-portrait-webgpu-base/
+Fishing/
 ├── AGENTS.md
 ├── README.md
 ├── docs/
-├── index.html
-├── vite.config.ts          # base: './' · port 5190
+├── index.html              # 游戏
+├── fish.html               # 单看一条鱼
+├── vite.config.ts          # base: './' · port 5190 · 两个入口页
 ├── capacitor.config.ts     # contentInset never · scrollEnabled false
 ├── src/
 │   ├── main.ts             # 安全区、舞台、startShore、震动 HUD
 │   ├── shore/
-│   │   ├── startShore.js   # 岸边启动、设置面板、镜头
+│   │   ├── startShore.js   # 岸边启动、设置面板、镜头。只创建和每帧调用
+│   │   ├── rod.js          # 鱼竿，代码建模
+│   │   ├── reel.js         # 渔轮，四个可动部件
 │   │   └── minamo/         # 水面与场景，MIT
+│   ├── fish/
+│   │   ├── school.js       # 岸边入口：40 条真鱼 + 动画
+│   │   ├── flock.js        # 一帧的流程，不依赖 Three
+│   │   ├── shoal.js        # 整群的朝向、深度、节奏
+│   │   ├── behaviors.js    # 状态、习性、归队
+│   │   ├── swim.js         # 怎么游过去
+│   │   ├── dorade.js       # 模型、对象池、脊柱姿态
+│   │   └── preview.js      # fish.html 用
 │   ├── create-renderer.ts  # showFatal；岸边不走 createRenderer
 │   ├── style.css
 │   ├── adapt/
@@ -28,7 +41,7 @@ portrait-webgpu-base/
 │   │   ├── devicePreview.ts
 │   │   └── safeArea.ts
 │   └── utils/haptics.ts
-├── public/assets/          # HDRI、沙滩、石头。cap sync 时拷进 iOS
+├── public/assets/          # HDRI、沙滩、石头、鲷鱼。cap sync 时拷进 iOS
 ├── plugins/native-haptics/ # Swift 真源
 └── scripts/bootstrap-ios.mjs
 ```
@@ -108,7 +121,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 海浪是三层 256² FFT（约 250 m / 37 m / 7.3 m）。改风速、涌浪、翻卷会 `ocean.rebuildSpectrum()`。
 - 雾只混在水面着色器里，按视线仰角和距离。反射先往深水色拉一档（天空占 0.8），薄雾里雾色占 0.55。天空 HDRI 保持清晰。
 - 陆地在 +z，海在 −z。拖画面改 yaw/pitch，并写回设置滑条。这还不是「手机就是鱼竿」。
-- 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。
+- 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
@@ -172,3 +185,9 @@ npm run cap:sync
 | 2026-08-14 | 增加 AUDIO.md：音效不卡帧方案 |
 | 2026-08-14 | 增加 HAPTICS.md：震动一次接对 |
 | 2026-08-31 | 真机震动验通。根因：Capacitor 8 `SceneDelegate` 绕过 storyboard。bootstrap 现会改 SceneDelegate；HUD 用「点我震动」+ `plugin` 标志验收 |
+| 2026-11-16 | 岸边水面定稿。40 条鲷鱼的鱼群。第一人称纺车竿 |
+| 2026-11-17 | 渔轮按真实纺车轮重做，独立成 `reel.js`，四个部件可单独驱动 |
+| 2026-11-17 | 鱼的身体加脊柱行波、转弯弯身和侧倾；每条鱼有自己的游走和窜；整群节奏随机 |
+| 2026-11-17 | 鱼不再横移：让开、归队、绕石头只改朝向和速度 |
+| 2026-11-17 | 鱼群拆成 `shoal` / `behaviors` / `swim` / `flock` / `school` 五层，加 `take` / `giveBack` 给玩法取鱼 |
+| 2026-11-17 | 增加 CONVENTIONS.md 和 ROD.md，FISH-SCHOOL.md 改写成设计文档 |
