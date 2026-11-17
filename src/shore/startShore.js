@@ -225,7 +225,9 @@ export async function startShore(container, hooks = {}) {
     lockLook(locked) { lookLocked = locked; },
   });
   let fishingBegun = false;
-  let frameCount = 0;
+  // The panel's cast readout is refreshed every this many frames.
+  const READOUT_EVERY = 6;
+  let readoutIn = 0;
   const fishingInput = { finger: false, sensor: false, viewYaw: 0, aimPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
@@ -358,7 +360,9 @@ export async function startShore(container, hooks = {}) {
     line.update();
     if (fishingBegun) {
       fishing.follow();
-      if (tuneUi.open && (frameCount += 1) % 6 === 0) {
+      readoutIn -= 1;
+      if (tuneUi.open && readoutIn <= 0) {
+        readoutIn = READOUT_EVERY;
         tuneUi.setCast(
           `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 甩 ${Math.round(fishing.swing)}°/秒 · 上次松手 ${Math.round(fishing.lastRelease)}°/秒`,
         );
@@ -532,7 +536,7 @@ function mountTunePanel(container, tune, hooks) {
   // What the cast is reading, for tuning it against a real hand. Not a player hint.
   const cast = document.createElement('div');
   cast.className = 'tune-block';
-  cast.innerHTML = '<p class="tune-title">这一竿</p><p class="tune-cast" style="margin:0;font-size:12px"></p>';
+  cast.innerHTML = '<p class="tune-title">这一竿</p><p class="tune-cast"></p>';
   panel.appendChild(cast);
   const castText = cast.querySelector('.tune-cast');
   const haptic = root.querySelector('.panel');

@@ -50,11 +50,11 @@ school.js update
 fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
   → 读上一帧线画出来的竿尖 line.tip
   → ready：swing.step 量瞄准的俯仰往下掉得多快；松手且够快 → lureMove.launch，lockLook(true)
-           否则饵留在竿尖：line.stow
-  → flight：lureMove.fly，按着就停线；线长跟着饵；落水 → line.setTied(true)，余线留给下一段收掉
-  → water：先把落水时的余线收掉（约半秒）；retrieve.step 得出这一帧收多少线 → rod.reel.wind → lureMove.tow
+           否则饵留在竿尖：lureMove.hold，line.stow
+  → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → lineOut.land，line.setTied(true)
+  → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
            靠近竿尖 → lureMove.hang；线收完 → ready，lockLook(false)
-  → line.setEnd / setLength，lure.place
+  → line.setEnd / setLength，lureMove.point，lure.place
 fishing.js follow()
   → ready：把饵摆到这一帧的 line.end 上，鼻尖朝上
 ```
@@ -143,7 +143,9 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 这一竿怎么走、手指是什么意思 | [PLAY.md](./PLAY.md)，`src/play/fishing.js` |
 | 抛多远、多用力才算抛 | `src/play/swing.js` |
 | 收线的快慢 | `src/play/retrieve.js` |
-| 饵怎么飞、怎么荡、在水里怎么跟线 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |
+| 线上的弧多大、落水后直得多快、收好时留多长 | `src/play/lineOut.js` |
+| 设置面板里"这一竿"的读数 | `src/shore/startShore.js` 的 `tuneUi.setCast`，样式 `.tune-cast` |
+| 饵怎么飞、怎么荡、在水里怎么跟线、鼻尖怎么转 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |
 | 饵的外形 | `src/shore/lure.js` |
 | 渔轮收线时怎么转 | `src/shore/reel.js` 的 `wind` 和顶部常量 |
 | 桌面用什么代替手指 | `src/shore/startShore.js` 的 `onKey` |

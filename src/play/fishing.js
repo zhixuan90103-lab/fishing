@@ -1,12 +1,13 @@
 /**
- * One cast, from the lure hanging at the rod tip to the line wound back in.
+ * One cast, from the lure held at the rod tip to the line wound back in.
  *
- * Owns: which stage the cast is in, what the finger means in each, how much line is out,
- * where the line's far end is, and when the view is locked.
- * Does not own: how the lure moves (lureMove.js), how fast line comes in (retrieve.js),
- * how a swing becomes a distance (swing.js), the rod, line, reel and lure themselves, or
- * the phone. Bites and the fight are not here yet.
- * No Three: it only wires the layers above to the materials' openings.
+ * Owns: which stage the cast is in, what the finger means in each, and telling the
+ * materials: the line its far end and length, the lure where it is, the reel how much
+ * was wound, the view when to hold still.
+ * Does not own: how hard a swing is (swing.js), how fast line comes in (retrieve.js), how
+ * much line is out (lineOut.js), how the lure moves (lureMove.js), the rod, line, reel
+ * and lure themselves, or the phone. Bites and the fight are not here yet.
+ * No Three: it only joins the layers above to the materials' openings.
  * Rules: docs/FISHING-REQUIREMENTS.md sections 5 to 7. Design: docs/PLAY.md.
  *
  * Stages:
@@ -15,32 +16,19 @@
  *           forward swing, the lure flies. Released otherwise, nothing happens.
  *   flight  the lure is in the air and line follows it. Finger down stops the line and
  *           the lure drops where it is.
- *   water   the lure is in the water on a straight line. Finger down winds line in, once
- *           the finger has been up since landing. Finger up, the lure stays. With all the
- *           line back in, the cast is over and the stage is ready again.
+ *   water   the lure is in the water and the line comes straight. Finger down winds line
+ *           in, once the finger has been up since landing. Finger up, the lure stays.
+ *           With all the line back in, the cast is over and the stage is ready again.
  */
 
 import { createLureMove } from '../shore/lureMove.js';
+import { STOW_LENGTH, createLineOut } from './lineOut.js';
 import { createRetrieve } from './retrieve.js';
 import { SWING_FULL, SWING_MIN, castReach, createSwing } from './swing.js';
 
-// Line past the tip with the lure wound in, metres: the lure's nose sits just under the
-// tip ring. The cast ends when the line is back to this.
-const STOW_LENGTH = 0.025;
-// Extra line in the air during the flight, as a share of the gap, so it bellies a little.
-const FLIGHT_SPARE = 0.04;
-// After the lure lands, how fast that belly is drawn out of the line, 1/s. The line
-// straightens over about half a second instead of snapping straight.
-const SETTLE_RATE = 5;
-// Belly smaller than this is gone, metres.
-const SETTLE_DONE = 0.002;
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
 const LIFT_WITHIN = 1.6;
-// How fast the lure's nose turns to follow the line, 1/s.
-const NOSE_RATE = 10;
-// In the water the nose lies nearer level than the line: this share of the line's slope.
-const NOSE_LEVEL = 0.25;
 // Desktop stand-in only, no motion sensor: holding this long counts as a full swing, s.
 const DESK_FULL_HOLD = 1;
 
@@ -51,31 +39,28 @@ const DESK_FULL_HOLD = 1;
  */
 export function createFishing({ rod, line, lure, lockLook }) {
   const move = createLureMove();
+  const out = createLineOut();
   const retrieve = createRetrieve();
   const swing = createSwing();
   const lastTip = { x: 0, y: 0, z: 0 };
-  const nose = { x: 0, y: 1, z: 0 };
 
   let stage = 'ready';
-  let out = STOW_LENGTH;
-  // ready: the finger has been up since the stage began, and is it down now.
+  // ready: the finger has been up since the stage began, it is down now, and for how long.
   let fresh = true;
   let down = false;
   let heldFor = 0;
-  // ready: how hard the rod is being swung now, and how hard at the last release, °/s.
+  // ready: how fast the aim is tipping forward now, and at the last release, °/s.
   let swung = 0;
   let released = 0;
   // flight: the line has been stopped.
   let stopped = false;
-  // water: the finger has been up since landing; the lure has left the water; how much
-  // of the flight's belly is still in the line, metres.
+  // water: the finger has been up since landing, and the lure has left the water.
   let armed = false;
   let lifted = false;
-  let belly = 0;
 
   function toReady() {
     stage = 'ready';
-    out = STOW_LENGTH;
+    out.stow();
     fresh = false;
     down = false;
     heldFor = 0;
@@ -85,9 +70,25 @@ export function createFishing({ rod, line, lure, lockLook }) {
     lockLook(false);
   }
 
+  function toFlight(reach, forwardX, forwardZ) {
+    stage = 'flight';
+    stopped = false;
+    move.launch(reach, forwardX, forwardZ);
+    lockLook(true);
+  }
+
+  // The line comes straight by itself from here, quickly but not in one frame. A press
+  // carried over from the flight is not a retrieve.
+  function toWater(input, tip) {
+    stage = 'water';
+    out.land(move.gap(tip));
+    armed = !input.finger;
+    lifted = false;
+    retrieve.reset();
+    line.setTied(true);
+  }
+
   function ready(dt, input, tip) {
-    const forwardX = Math.sin(input.viewYaw);
-    const forwardZ = Math.cos(input.viewYaw);
     // Only what is swung with the finger down counts toward the cast.
     if (fresh && input.finger && !down) swing.reset();
     swung = swing.step(dt, input.aimPitch);
@@ -105,81 +106,62 @@ export function createFishing({ rod, line, lure, lockLook }) {
       down = false;
       heldFor = 0;
       if (reach > 0) {
-        move.launch(reach, forwardX, forwardZ);
-        stage = 'flight';
-        stopped = false;
-        lockLook(true);
+        toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw));
         return;
       }
     }
-    // Held at the tip, not hanging from it: a swing must not set it swinging.
-    move.place(tip.x, tip.y - STOW_LENGTH, tip.z);
+    // Held at the tip, not hanging from it: a swing must not set it swinging. This is the
+    // tip of last frame, good enough to launch from. follow() puts it on this frame's.
+    move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
   }
 
   function flight(dt, input, tip) {
     if (input.finger) stopped = true;
     const landed = move.fly(dt, stopped);
-    out = move.gap(tip) * (1 + FLIGHT_SPARE);
-    if (!landed) return;
-    // In the water the line comes straight by itself, quickly but not in one frame: the
-    // belly it flew with is kept and drawn out in water(). This press, if any, is not a
-    // retrieve.
-    stage = 'water';
-    belly = out - move.gap(tip);
-    armed = !input.finger;
-    lifted = false;
-    retrieve.reset();
-    line.setTied(true);
+    out.fly(move.gap(tip));
+    if (landed) toWater(input, tip);
   }
 
   function water(dt, input, tip) {
     if (!input.finger) armed = true;
-    const taken = Math.min(retrieve.step(dt, input.finger && armed), out - STOW_LENGTH);
+    const taken = Math.min(retrieve.step(dt, input.finger && armed), out.room);
     rod.reel.wind(taken);
-    if (belly > 0) {
-      // Still straightening. Winding takes belly out too, before it moves the lure.
-      belly = belly * Math.exp(-SETTLE_RATE * dt) - taken;
-      if (belly < SETTLE_DONE) belly = 0;
-      out = Math.max(STOW_LENGTH, move.gap(tip) + belly);
-    } else {
-      out -= taken;
-    }
+    const pulled = out.wind(dt, taken, move.gap(tip));
     if (!lifted) {
-      // While it straightens, the wind is spent on the belly and does not reach the lure.
-      move.tow(dt, tip, out, belly > 0 ? 0 : taken, line.stiffness);
+      move.tow(dt, tip, out.length, pulled, line.stiffness);
       const level = Math.hypot(tip.x - move.x, tip.z - move.z);
-      if (level < LIFT_WITHIN || out <= STOW_LENGTH + 1e-6) {
-        // From here it is a weight on the line again. Give back any stretch so it does
-        // not snap inward.
+      if (level < LIFT_WITHIN || out.stowed) {
+        // From here it is a weight on the line again.
         lifted = true;
-        out = Math.max(out, move.gap(tip));
+        out.ease(move.gap(tip));
         line.setTied(false);
       }
     } else {
-      move.hang(dt, tip, lastTip, out);
+      move.hang(dt, tip, lastTip, out.length);
     }
-    if (out <= STOW_LENGTH + 1e-6) toReady();
+    if (out.stowed) toReady();
   }
 
+  // Tell the line and the lure where things are now.
   function show(dt, tip) {
     if (stage === 'ready') {
-      // The line carries the end with the tip. follow() puts the lure there.
+      // The line carries its end with the tip. follow() puts the lure there.
       line.stow(STOW_LENGTH);
       return;
     }
     line.setEnd(move.x, move.y, move.z);
-    line.setLength(out);
-    // The nose follows the line toward the tip, flatter while it swims.
-    let tx = tip.x - move.x;
-    let ty = tip.y - move.y;
-    let tz = tip.z - move.z;
-    if (stage === 'water' && !lifted) ty *= NOSE_LEVEL;
-    const len = Math.hypot(tx, ty, tz) || 1;
-    const k = 1 - Math.exp(-NOSE_RATE * dt);
-    nose.x += (tx / len - nose.x) * k;
-    nose.y += (ty / len - nose.y) * k;
-    nose.z += (tz / len - nose.z) * k;
-    lure.place(move.x, move.y, move.z, nose.x, nose.y, nose.z, move.swum);
+    line.setLength(out.length);
+    move.point(dt, tip, stage === 'water' && !lifted);
+    lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum);
+  }
+
+  // With the line wound in, the lure goes exactly where this frame's tip is, so it never
+  // trails the rod.
+  function follow() {
+    if (stage !== 'ready') return;
+    const end = line.end;
+    move.hold(end.x, end.y, end.z);
+    lure.place(end.x, end.y, end.z, move.nose.x, move.nose.y, move.nose.z, move.swum);
   }
 
   return {
@@ -189,7 +171,7 @@ export function createFishing({ rod, line, lure, lockLook }) {
     },
     // Line out past the tip, metres.
     get lineOut() {
-      return out;
+      return out.length;
     },
     // How fast the aim is tipping forward right now, and what the last release was read
     // at, degrees per second. For tuning the cast against a real hand.
@@ -202,25 +184,15 @@ export function createFishing({ rod, line, lure, lockLook }) {
     // Where the lure is and how it is moving. Read only.
     lure: move,
 
-    // Once, after the line's first update: hang the lure under the tip.
+    // Once, after the line's first update: the lure at the tip, line in.
     begin() {
       const tip = line.tip;
-      move.place(tip.x, tip.y - STOW_LENGTH, tip.z);
+      move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
       lastTip.x = tip.x; lastTip.y = tip.y; lastTip.z = tip.z;
       toReady();
       fresh = true;
       show(0, tip);
-      this.follow();
-    },
-
-    // Once a frame, after the line's update. With the line wound in, the lure goes
-    // exactly where this frame's tip is, nose up, so it never trails the rod.
-    follow() {
-      if (stage !== 'ready') return;
-      const end = line.end;
-      move.place(end.x, end.y, end.z);
-      nose.x = 0; nose.y = 1; nose.z = 0;
-      lure.place(end.x, end.y, end.z, 0, 1, 0, move.swum);
+      follow();
     },
 
     /**
@@ -239,5 +211,8 @@ export function createFishing({ rod, line, lure, lockLook }) {
       show(dt, tip);
       lastTip.x = tip.x; lastTip.y = tip.y; lastTip.z = tip.z;
     },
+
+    // Once a frame, after the line's update.
+    follow,
   };
 }

@@ -19,7 +19,7 @@
 | 手机瞄准 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，分给镜头和竿 `src/shore/aim.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js` |
-| 玩法（抛投、收线） | `docs/PLAY.md`，入口 `src/play/fishing.js`，甩的力度 `src/play/swing.js`，收线速度 `src/play/retrieve.js` |
+| 玩法（抛投、收线） | `docs/PLAY.md`，入口 `src/play/fishing.js`，甩的力度 `src/play/swing.js`，收线速度 `src/play/retrieve.js`，线放出多长 `src/play/lineOut.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -57,7 +57,7 @@
 8. **无 WebGPU 则明确失败**，不静默 WebGL。Minamo 同样拒绝非 WebGPU。
 9. **水面外观已定，先不要改。** 不要换掉三层 256² FFT，也不要再调浪高、雾、粗糙、曝光、太阳和反射压暗。落点和咬口的局部涟漪以后另加，不借机重做整片海。数值见 `docs/ENGINEERING.md` 第 6 节。
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
-11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线、饵不含抛投、咬口和拔河。规则只写在 `src/play/`。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel.wind`，竿是 `rod.setTipLoad`，线是 `line.setEnd` / `setLength` / `setTied`，读 `line.slack` / `line.tension`，饵是 `lureMove` 的 `hang` / `fly` / `tow`，镜头是 `lockLook`。物料只报数，这个数意味着什么由玩法判断。
+11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线、饵不含抛投、咬口和拔河。规则只写在 `src/play/`。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel.wind`，竿是 `rod.setTipLoad`，线是 `line.setEnd` / `setLength` / `setTied`，读 `line.slack` / `line.tension`，饵是 `lureMove` 的 `hold` / `hang` / `fly` / `tow`，镜头是 `lockLook`。物料只报数，这个数意味着什么由玩法判断。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。
 
 13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。见 `docs/ROD.md` 第 2 节。

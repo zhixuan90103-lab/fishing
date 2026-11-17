@@ -1,15 +1,16 @@
 /**
- * How the lure's body moves: hanging from the tip, flying through the air, towed through
- * the water by the line.
+ * How the lure's body moves: held at the tip, hanging from it, flying through the air,
+ * towed through the water by the line.
  *
- * Owns: the lure's position and velocity, and the three ways it moves.
+ * Owns: the lure's position, velocity and the way its nose points, and the ways it moves.
  * Does not own: the model (lure.js), the line or its length (line.js and whoever sets it),
  * which of the three applies, when a cast starts or ends, or any fishing rule.
  * No Three, no scene: it runs in Node. Design: docs/LURE.md.
  *
- * The caller picks one of hang / fly / tow each frame and passes what the line is doing.
- * Each is exact for the frame it is given or runs on a fixed small step, so the path does
- * not depend on the frame rate.
+ * The caller picks one of hold / hang / fly / tow each frame and passes what the line is
+ * doing. Each is exact for the frame it is given or runs on a fixed small step, so the
+ * path does not depend on the frame rate. Unless it is held, point() then turns the nose
+ * along the line.
  *
  * Units: metres, seconds, newtons. World +Y is up, the water surface is y = 0.
  */
@@ -40,6 +41,11 @@ const DEPTH_RATE = 3;
 const DEPTH_NEAR = 1.5;
 const DEPTH_FAR = 4;
 
+// How fast the nose turns to follow the line, 1/s.
+const NOSE_RATE = 10;
+// In the water the nose lies nearer level than the line: this share of the line's slope.
+const NOSE_LEVEL = 0.25;
+
 function smooth(t) {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
@@ -52,11 +58,33 @@ export function createLureMove() {
     vx: 0, vy: 0, vz: 0,
     // Metres it has swum through the water, level distance. The model wiggles on this.
     swum: 0,
+    // Which way the nose points. Not kept to unit length: the model normalises it.
+    nose: { x: 0, y: 1, z: 0 },
 
     // Put it somewhere, at rest.
     place(x, y, z) {
       m.x = x; m.y = y; m.z = z;
       m.vx = 0; m.vy = 0; m.vz = 0;
+    },
+
+    // Held at a point, nose up, going wherever that point goes. Not a weight on a line:
+    // nothing sets it swinging.
+    hold(x, y, z) {
+      m.place(x, y, z);
+      m.nose.x = 0; m.nose.y = 1; m.nose.z = 0;
+    },
+
+    // Turn the nose toward the tip, along the line. swimming: lie flatter than the line.
+    point(dt, tip, swimming) {
+      const tx = tip.x - m.x;
+      let ty = tip.y - m.y;
+      const tz = tip.z - m.z;
+      if (swimming) ty *= NOSE_LEVEL;
+      const len = Math.hypot(tx, ty, tz) || 1;
+      const k = 1 - Math.exp(-NOSE_RATE * dt);
+      m.nose.x += (tx / len - m.nose.x) * k;
+      m.nose.y += (ty / len - m.nose.y) * k;
+      m.nose.z += (tz / len - m.nose.z) * k;
     },
 
     // Straight-line distance to a point.

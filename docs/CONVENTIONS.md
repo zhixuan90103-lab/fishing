@@ -17,7 +17,7 @@
 | 鱼竿 | `setPose(pose)`、`setTipLoad(kg)` | — | [ROD.md](./ROD.md) 第 6 节 |
 | 渔轮 | `rod.reel.wind(米)`，或单独转 `rotor` / `handle`、移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
 | 鱼线 | `setEnd`、`setLength` / `tighten`、`stow`、`setTied` | `slack`、`tension`、`stiffness`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
-| 饵 | `lureMove` 的 `hang` / `launch` / `fly` / `tow`，`lure.place` | 位置、速度、`swum` | [LURE.md](./LURE.md) 第 5 节 |
+| 饵 | `lureMove` 的 `hold` / `hang` / `launch` / `fly` / `tow` / `point`，`lure.place` | 位置、速度、鼻尖朝向、`swum` | [LURE.md](./LURE.md) 第 5 节 |
 | 手机瞄准 | `lockLook` | — | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
 | 震动 | `haptics.*` | — | [HAPTICS.md](./HAPTICS.md) |
 
@@ -31,7 +31,7 @@
 | 鱼群的游动 | Node 里跑 `flock.js` |
 | 鱼竿 | 设置面板"鱼竿"一栏；Node 里跑 `rodFlex.js` |
 | 鱼线 | Node 里跑 `lineCurve.js`；页面里甩一竿，饵落水后带竿 |
-| 饵 | Node 里跑 `lureMove.js` 的挂、飞、拖 |
+| 饵 | Node 里跑 `lureMove.js` 的固定、挂、飞、拖 |
 | 一竿的流程 | Node 里用假的竿和线跑 `fishing.js`；桌面用空格键代替手指 |
 | 手机瞄准 | Node 里给 `phoneLook.js` 喂合成的 `deviceorientation` 事件，读 `look()`；给 `aim.js` 喂转动和按住，读镜头和竿各得多少 |
 
@@ -96,7 +96,7 @@
 | 鱼竿 | 镜头 → `rodHold`（握）→ `rodFlex`（弯）→ `rod`（摆骨骼）；`rodBeam`（梁）在启动时解一次，供 `rodFlex` 查 |
 | 鱼线 | `rod.linePath`（竿上的点）→ `lineCurve`（形状）→ `line`（画）；`line` 再把远端和线长交回 `rod` |
 | 饵 | 玩法选动法 → `lureMove`（位置）→ 线的远端和 `lure`（模型） |
-| 玩法 | `swing`（甩多用力）和 `retrieve`（收多快）→ `fishing`（这一竿走到哪）→ 物料的口子 |
+| 玩法 | `swing`（甩多用力）、`retrieve`（收多快）、`lineOut`（线放出多长）→ `fishing`（这一竿走到哪）→ 物料的口子 |
 | 手机瞄准 | `phoneLook`（读姿态）→ `aim`（分给镜头和竿）→ 镜头，以及 `rodHold`（握）；`startShore` 的 `applyPhone` 串一帧 |
 
 - **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`phoneLook.js`、`aim.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
@@ -154,10 +154,11 @@
 | 镜头和竿怎么分 | 在 Node 里给 `aim.js` 喂一段转动：每一帧镜头加竿应当正好等于瞄准；按住时镜头的数不变，松开后镜头回到瞄准、竿回到 0；`reset` 之后镜头在给定的方向上 |
 | 饵的运动 | 在 Node 里跑 `lureMove.js`，20 到 120 帧各一遍：飞行的落点等于要的距离，按停以后落得更近；拖的时候饵的位置和线长各帧率一致，停手后拉长量回到 0；挂的时候离竿尖不超过线长，最后停在正下方 |
 | 收线的速度 | 在 Node 里跑 `retrieve.js`：各帧率下收的线长一个数都不差；松手再按，线速不跳 |
+| 线放出多长 | 在 Node 里跑 `lineOut.js`，或经 `fishing.js` 量落水前后的余线：各帧率下余线是渐渐退掉的，每帧的变化折合成速度没有尖峰 |
 | 一竿的流程 | 在 Node 里用假的竿和线跑 `fishing.js`：三段按顺序走完，落水那一下按着不收线，落水前后线上的余线是渐渐收掉的、没有一帧的突变，飞行中按下落得更近，收完回到空杆并解开镜头；每一帧饵的位移不能有突跳 |
 | 手感、震动、甩竿、手机瞄准的方向 | 只能真机。桌面没有马达，也没有姿态传感器；桌面用拖动看画面 |
 
-**证明前后一致的办法。** 画面可以逐像素比。会动的东西用录数的办法：写一段固定的输入（镜头怎么转、哪一帧改什么），每帧把要比的数全录下来，改之前存一份，改之后再跑一遍，逐个数比。鱼用同一个随机种子比位置和朝向。竿和线比每节骨骼的世界矩阵、线上每个点、张力和余线。只是挪代码、不改算式的整理，差值应当正好是 0，不是"很小"。输入里要有不同的帧长、一帧的突跳和每个口子的调用，不然比不出问题。
+**证明前后一致的办法。** 画面可以逐像素比。会动的东西用录数的办法：写一段固定的输入（镜头怎么转、哪一帧改什么），每帧把要比的数全录下来，改之前存一份，改之后再跑一遍，逐个数比。鱼用同一个随机种子比位置和朝向。竿和线比每节骨骼的世界矩阵、线上每个点、张力和余线。玩法用假的竿、线、饵把它对物料的每一次调用和参数录下来比。只是挪代码、不改算式的整理，差值应当正好是 0，不是"很小"。输入里要有不同的帧长、一帧的突跳和每个口子的调用，不然比不出问题。
 
 动起来好不好看，截图和数值都判断不了，要人看。交付时把这一点说明白，不要说成已经确认。
 
