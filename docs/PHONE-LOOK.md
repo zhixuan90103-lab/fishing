@@ -1,49 +1,131 @@
 # 手机瞄准
 
-状态：已接上。传感器在 `src/shore/phoneLook.js`，镜头和竿的用法在 `src/shore/startShore.js`。数字以 [ROD.md](./ROD.md) 第 3 节的表为准。玩法规则在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md)，这一层不含咬口和抛投。
+状态：已实现，真机上的方向和手感还没确认。手机瞄准是物料：它把手机的姿态变成镜头的视线和竿的指向，不含抛投、抬杆和咬口。  
+玩法规则在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 第 5 节。竿拿到瞄准以后怎么动见 [ROD.md](./ROD.md)。
+
+手机就是鱼竿。手机指向哪，竿就指向哪。没按住时镜头跟着转过去；按住时镜头停住，手机只动竿。
 
 ## 1. 分层
 
-数据只往一个方向走。`phoneLook` 不拿镜头，也不拿竿。
+| 步 | 回答什么 | 文件 |
+|---|---|---|
+| 读 | 手机现在是什么姿态：三个互不串的角，展开并平滑 | `src/shore/phoneLook.js` |
+| 分 | 这个姿态里多少归镜头、多少归竿 | `src/shore/aim.js` |
+| 握 | 竿拿到归它的那一份，加在安装姿态上 | `src/shore/rodHold.js` 的 `setAim` |
+
+数据只往一个方向走：手机 → 读 → 分 → 镜头和握。读不知道有镜头和竿，分不知道传感器，也不碰镜头对象和竿对象。`phoneLook.js` 和 `aim.js` 都不引 Three，可以在 Node 里跑。
+
+`src/shore/startShore.js` 只接线：每帧在 `applyPhone` 里把 `look()` 交给 `aim.step`，按 `aim` 给的角度摆镜头，把剩下的交给 `rod.setAim`。谁算"按住"也在它那里：手指按着，或玩法调了 `setLookLocked`。
 
 ```
 按钮「允许手机转动」
   → enable()：一次 requestPermission
-  → deviceorientation（beta、gamma）
-  → devicemotion（acceleration.x）
-phoneLook 报出 tilt、axes().lift、slideMetres
-  → startShore.applyPhone
-       → 没按住：placeLook 摆视线
-       → 无论按没按住：aimRod → rod.setAim
-rodHold 把瞄准加在安装姿态上，FOLLOW_MAX 不管它
+  → deviceorientation（alpha、beta、gamma）
+phoneLook：欧拉角 → yaw / pitch / roll → 展开 → 平滑 → look()
+aim.step(look, 按住没有, dt)
+       → 瞄准 = 基准 + 手机转过的角度
+       → 没按住：镜头追瞄准
+       → 竿 = 瞄准 − 镜头
+startShore：placeLook(aim.viewYaw, aim.viewPitch)，rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll)
+rodHold 把它加在安装姿态上，FOLLOW_MAX 不管它
 ```
 
 ## 2. 不能破的规则
 
-- 只用 Web 的 `deviceorientation` 和 `devicemotion`。不加 Core Motion，也不把 `@capacitor/motion` 当成另一套传感器。
-- `enable()` 只由「允许手机转动」的点击调用。一次点击里只请求一个接口。`MotionPromptProxy` 必须 `decisionHandler(.prompt)`，不能静默 `.grant`。
-- 眼高不变，`camera.up` 是世界 +Y，地平线不跟着滚。倾斜不改镜头的位置。
-- 左右看靠手机的左右平移，不靠 `gamma`，也不靠罗盘 `alpha`。向左移动，视线向镜头左。符号是 `yawOff = slideMetres * 120`。
-- 这段平移是视线的偏航，不是竿上的力。不要把加速度或 `slideMetres` 送进 `setTipForce` / `setTipTether`。
-- 竿的零点是手机竖着（`beta` 约 90°），不是屏幕朝上平放。瞄准只过死区，不再做 1€ 低通。`FOLLOW_MAX` 只限制视线滞后。
-- 按住，或玩法调用 `setLookLocked(true)`，先把当前偏航和俯仰烤进基准，再冻住镜头。松开不跳。冻住时竿仍跟着手机。
-- 没有传感器样本时用指针拖动，和手机走同一套 `placeLook`。
+**同一个手机姿态永远是同一个瞄准。** 角度从姿态直接读，不从加速度积分，也不逐帧累加偏移。手机拿回原来的姿态，镜头和竿就回到原来的位置。朝向的读法只看当前姿态，不看走过的路，不许按"上一帧用的哪一种"来选。
 
-## 3. 每帧顺序
+**镜头和竿只有一条式子，没有模式切换。** 瞄准 = 镜头 + 竿。按下和松开都不改基准、不拷贝镜头，按住只是让镜头不追。所以按下、松开都不会跳：松开后镜头追上手机，竿在画面里回到正中，竿在世界里的指向不变。
 
-`applyPhone` 在 `rod.update` 之前：
+**竿的瞄准不设上限，也不在握那一层再平滑。** 快速上抬要原样传到竿身，竿才甩得起来。噪声在 `phoneLook` 里已经去掉。`FOLLOW_MAX` 只管竿跟镜头的滞后，不管瞄准。
 
-1. 没有样本：瞄准归零，返回。
-2. 第一帧样本：记下眼高和当时的朝向，去掉按钮。
-3. 刚按下或刚锁住：烤进基准，再拷贝镜头。
-4. 刚松开：只清标志。
-5. 用原始 `beta` / `gamma` 摆竿。
-6. 仍锁住：把拷贝的镜头贴回去，不积分平移。
-7. 否则：积分这一帧的平移，再摆视线。
+## 3. 读（`phoneLook.js`）
 
-设置面板和拖动改的是 `tune`。只有手机已有样本、并且镜头没冻住时，才把 `tune` 写进基准并 `rebase`。冻住时不改基准。
+`look()` 给三个角，单位是度：
 
-## 4. 还没做
+| 角 | 是什么 | 正方向 | 零点 |
+|---|---|---|---|
+| `yaw` | 手机背面朝哪个方向，绕竖直轴 | 向持机人的左转 | 上次回正时的姿态 |
+| `pitch` | 屏幕前后倾多少 | 顶部倒向持机人，也就是把竿抬起来 | 上次回正时的姿态 |
+| `roll` | 在屏幕自己的平面里歪多少 | 右缘向下 | 水平。不随回正改变 |
 
-- 玩法还没有调用 `setLookLocked`。抛投、甩杆的力度不在这一层。
-- 桌面不能平移手机。左右看、上下看在桌面上靠拖动。
+- **不直接用 `beta` 和 `gamma`。** 手机竖着时 `gamma` 不再表示右缘向下，并且和 `alpha` 分不开。三个欧拉角先合成机身的轴在大地坐标里的方向，三个角从这些轴上读。
+- **朝向有两种读法，按倾角混合。** 从屏幕法线读：在屏幕平面里歪手机不会改变它，但手机放平时法线指着天。从右缘读：任何俯仰都能用，但歪手机会带偏它。法线接近水平时只用前者，接近放平时过渡到后者。混合的比例只由当前姿态决定。
+- **展开。** `yaw` 和 `pitch` 把每个样本相对上一个样本的变化加起来，转过 ±180° 不会跳。
+- **平滑。** 三个角各过一级，按目标在这一帧里匀速变化来精确积分，结果不随帧率变（`chaseAngle`）。它同时抹掉传感器噪声，和样本跟渲染帧对不齐造成的一步一步。
+- **`roll` 在接近放平时渐渐不读。** 放平以后它和 `yaw` 是同一个动作。
+
+| 常量 | 值 | 管什么 |
+|---|---|---|
+| `SMOOTH_RATE` | 32 /秒 | 三个角的平滑，约 30 毫秒延迟。调小更稳也更迟 |
+| `FACE_FULL` | 0.6 | 法线的水平分量大于它时，朝向只从法线读。对应前后倾约 53° 以内 |
+| `FACE_NONE` | 0.2 | 小于它时只从右缘读。对应前后倾约 78° 以外 |
+| `ROLL_FULL` | 0.5 | 手机立起来的程度大于它时 `roll` 全量读，小于它按比例减 |
+
+`recenter()` 把手机此刻的姿态定成 `yaw` 0、`pitch` 0。
+
+## 4. 分（`aim.js`）
+
+`createAim(yaw, pitch)` 记着一个方向和它的两份：
+
+| 量 | 是什么 |
+|---|---|
+| 瞄准 | 基准 + 手机转过的角度 × 增益。基准是手机在零点时视线的朝向 |
+| `viewYaw`、`viewPitch` | 镜头现在朝哪 |
+| `rodYaw`、`rodPitch`、`rodRoll` | 瞄准 − 镜头，在镜头空间里：左转、上抬、绕视线的歪斜。`rodRoll` 是手机的 `roll` 取反，右缘向下时竿尖向屏幕右 |
+
+`step(turned, held, dt)` 每帧一次：算出瞄准；`held` 为假时镜头按 `LOOK_RATE` 追它，为真时镜头不动；剩下的记进 `rod*`。`reset(yaw, pitch)` 把基准和镜头都定到这个方向，竿的那一份清零。
+
+单位都是度。偏航向镜头的左为正，俯仰向上为正。`roll` 只进竿，不进镜头。
+
+`applyPhone` 在 `rod.update` 之前，每帧：
+
+1. 没有样本：返回。镜头由拖动和设置面板摆，竿的瞄准是零。
+2. 第一帧样本：回正一次，去掉按钮。
+3. `phone.advance(dt)` 平滑，读 `look()`，交给 `aim.step`。
+4. `placeLook` 摆镜头。眼在设置面板给的位置，`camera.up` 是世界 +Y，地平线不跟着滚。
+5. `rod.setAim`。
+
+| 常量 | 值 | 管什么 |
+|---|---|---|
+| `AIM_YAW_GAIN` | 1 | 手机左右转 1°，瞄准转多少度。镜头和竿共用，调大两者都更灵敏 |
+| `AIM_PITCH_GAIN` | 1 | 手机前后倾 1°，瞄准抬多少度 |
+| `LOOK_RATE` | 10 /秒 | 镜头追瞄准的快慢。匀速转动时镜头落后转速除以它，60°/秒时约 6°，竿在画面里领先同样多 |
+| `PITCH_LIMIT` | 70° | 镜头的俯仰留在这个范围里。竿不受它限制 |
+
+没有死区。四个常量在 `aim.js` 顶部。
+
+**回正。** `aim.reset` 和 `phone.recenter` 一起调用：把手机此刻的姿态当成设置面板里的摄像机朝向。三处会调用：第一帧样本，设置面板的「镜头回正」，改「摄像机」的任一滑条。iOS 的朝向没有罗盘参照，时间长了会慢慢偏；人换了站姿也要用它。
+
+**没有传感器时**（桌面，或没给权限）用指针拖动改朝向，写回设置滑条，和手机走同一个 `placeLook`。这时竿不受控制，只跟着镜头。
+
+## 5. 给玩法留的口子
+
+`startShore()` 返回的对象上有：
+
+| 接口 | 作用 |
+|---|---|
+| `setLookLocked(true)` | 镜头停，竿继续跟手机。和手指按住是同一件事。整竿抛出、线在水里期间用它 |
+| `setLookLocked(false)` | 镜头自己追回手机指的方向，不跳 |
+
+玩法要读"手机抬得多快"来判抬杆和甩杆的力度时，从 `phoneLook` 的角度去量，不要在这一层写规则，也不要从竿的弯曲反推。这个读数的口子还没有。
+
+权限只由「允许手机转动」的点击去要：`enable()` 在那一次点击里同步调用，一次只请求一个接口。iOS 上 Capacitor 的 WebView 会静默放行而不弹框，所以 `BridgeViewController.swift` 里的 `MotionPromptProxy` 必须 `decisionHandler(.prompt)`。它的真源在 `plugins/native-haptics/`。
+
+## 6. 还没做
+
+- 真机上的方向和手感没有确认。现在只在合成的姿态数据上验过算式。
+- 玩法还没有调用 `setLookLocked`。抛投、甩杆、抬杆的判定和力度不在这一层。
+- 给玩法读手机转动快慢的口子。
+- 手机的平移不读。左右看靠转动手机。
+- 桌面上竿不受控制。
+
+## 7. 改的时候
+
+- 哪个方向反了：改 `phoneLook.js` 的 `onDevice` 里那一个角的符号。别处不改。
+- 想改灵敏度、镜头跟得多紧：改 `aim.js` 顶部的四个常量。
+- 想改镜头和竿怎么分：只改 `aim.js`，并且守住"瞄准 = 镜头 + 竿"。不要把这段算式写回 `startShore.js`。
+- 想改什么时候算按住：改 `startShore.js` 的 `applyPhone` 交给 `aim.step` 的那个布尔值。
+- 想改稳不稳：改 `SMOOTH_RATE`。不要在 `rodHold` 里给瞄准再加一级平滑。
+- 只用 Web 的 `deviceorientation`。不加 Core Motion，不把 `@capacitor/motion` 当成另一套传感器，不从 `devicemotion` 的加速度积分位移。
+- 改了常量，同一次改动里把第 3、4 节的表改掉。
+- 改完在 Node 里验，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 7 节：`phoneLook.js` 喂合成的姿态，`aim.js` 喂一段固定的转动和按住松开。方向和手感只能真机看。

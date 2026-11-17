@@ -16,6 +16,8 @@ Capacitor 8：**SceneDelegate** 创建 `BridgeViewController()`（不能是默�
 
 `ios:bootstrap` 会同时改 storyboard 和 SceneDelegate。
 
+`BridgeViewController.swift` 里还有 `MotionPromptProxy`：Capacitor 的 WebView 会静默放行转动传感器，系统不弹权限框。它接管 `uiDelegate` 里这一个回调，改成让系统弹框，其余调用原样转给原来的 delegate。手机瞄准靠它，见 [docs/PHONE-LOOK.md](../../docs/PHONE-LOOK.md) 第 5 节。`Info.plist` 里要有 `NSMotionUsageDescription`。
+
 正确接入步骤：[docs/HAPTICS.md §0](../../docs/HAPTICS.md)。  
 Swift **没有** `prepare`；`load()` 已起引擎。首次 / 改 Swift 必须 `ios:bootstrap`，只 `cap:sync` 不会注册插件。
 

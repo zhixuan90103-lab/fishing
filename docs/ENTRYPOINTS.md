@@ -25,7 +25,7 @@ index.html
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
             → 每帧：applyPhone → rod.update → line.update → shoreSchool.update → 海面 → 场景 → 水 → 后期
-            → 设置面板（雾 / 水 / 鱼 / 鱼竿 / 鱼线 / 镜头；震动测试移入面板）
+            → 设置面板（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 鱼线 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
@@ -42,11 +42,24 @@ school.js update
   → 尾巴动画 mixer.update → 脊柱波 poseSpine
 ```
 
+手机瞄准一帧（`applyPhone`，在 `rod.update` 之前）：
+
+```
+startShore.js applyPhone
+  → phone.advance：三个角平滑
+  → aim.step(phone.look(), 按住或锁住, dt)
+       → 瞄准 = 基准 + 转过的角度
+       → 没按住：镜头追瞄准；否则镜头不动
+       → 竿 = 瞄准 − 镜头
+  → placeLook 按 aim.viewYaw / viewPitch 摆镜头
+  → rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll)
+```
+
 竿和线一帧（`rod.update` 再 `line.update`，顺序不能换）：
 
 ```
 rod.js update
-  → rodHold.carry：读镜头朝向 → 平滑 → 滞后 → 摆好根节点，报出握把在世界里的位置
+  → rodHold.carry：读镜头朝向 → 平滑 → 滞后 → 加上手机的瞄准 → 摆好根节点，报出握把在世界里的位置
   → rodFlex.step：细步长里推进各阶振动，其间按系着的线算竿尖受的拉力
   → 把骨骼摆到 rodFlex 给的曲线上
 line.js update
@@ -84,6 +97,7 @@ ios:bootstrap
 Xcode Run 真机
   → SceneDelegate 创建 BridgeViewController
   → capacitorDidLoad → registerPluginInstance(AdvancedHapticsPlugin)
+                     → webView.uiDelegate = MotionPromptProxy（转动权限弹框）
   → load App/public (= dist)
   → 同上 Web 链
   → HUD「点我震动」→ haptics.impact('medium')
@@ -102,7 +116,10 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
 | 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
 | 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
-| 手机瞄准 | [PHONE-LOOK.md](./PHONE-LOOK.md)。传感器 `src/shore/phoneLook.js`，视线和瞄准 `src/shore/startShore.js` |
+| 手机瞄准：三个角怎么读、方向、平滑 | [PHONE-LOOK.md](./PHONE-LOOK.md)，`src/shore/phoneLook.js` |
+| 手机瞄准：灵敏度、镜头跟得多紧、镜头和竿怎么分 | `src/shore/aim.js` |
+| 手机瞄准：什么算按住、回正、摆镜头 | `src/shore/startShore.js` 的 `applyPhone`、`recenter`、`placeLook` |
+| 转动权限的弹框 | `plugins/native-haptics/BridgeViewController.swift` + bootstrap |
 | 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |

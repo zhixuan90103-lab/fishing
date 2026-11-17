@@ -16,7 +16,7 @@
 | 岸边场景 | `src/shore/startShore.js` |
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节 |
 | 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。渔轮是 `src/shore/reel.js` |
-| 手机瞄准 | `docs/PHONE-LOOK.md`，传感器 `src/shore/phoneLook.js`，用法在 `src/shore/startShore.js`。数字在 `docs/ROD.md` 第 3 节 |
+| 手机瞄准 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，分给镜头和竿 `src/shore/aim.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
@@ -55,12 +55,13 @@
 8. **无 WebGPU 则明确失败**，不静默 WebGL。Minamo 同样拒绝非 WebGPU。
 9. **水面外观已定，先不要改。** 不要换掉三层 256² FFT，也不要再调浪高、雾、粗糙、曝光、太阳和反射压暗。落点和咬口的局部涟漪以后另加，不借机重做整片海。数值见 `docs/ENGINEERING.md` 第 6 节。
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
-11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线不含咬口和拔河。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel` 的三个部件，竿是 `rod.setTipLoad`，线是 `line.setEnd` / `setLength`，读 `line.slack` / `line.tension`。物料只报数，这个数意味着什么由玩法判断。
+11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线不含咬口和拔河。玩法通过物料留的口子接：鱼群是 `take` / `giveBack`，渔轮是 `rod.reel` 的三个部件，竿是 `rod.setTipLoad`，线是 `line.setEnd` / `setLength`，读 `line.slack` / `line.tension`，镜头是 `setLookLocked`。物料只报数，这个数意味着什么由玩法判断。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。
 
 13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。见 `docs/ROD.md` 第 2 节。
+14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个视线和竿的指向。不从加速度积分位移，不逐帧累加偏移，按下和松开不切换算法。见 `docs/PHONE-LOOK.md` 第 2 节。
 
-第 11 到 13 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
+第 11 到 14 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
 
 ## 命令
 
@@ -78,7 +79,7 @@ npm run ios           # sync 并打开 Xcode
 ## 还没做
 
 - 钓鱼状态机、咬口和拔河。规则在需求文档，不要在场景里另写一套。上钩的鱼从鱼群里取，接口见 `docs/FISH-SCHOOL.md` 第 6 节。
-- 抛投和甩杆。瞄准已经接上：没按住时手机改视线，按住时镜头停、竿跟着倾斜。整竿抛出期间冻住镜头的口子是 `setLookLocked`，玩法还没调用。见 `docs/PHONE-LOOK.md`。
+- 抛投和甩杆。瞄准已经接上：手机指向哪竿就指向哪，没按住时镜头跟过去，按住时镜头停。设置面板有「镜头回正」。真机上的方向和手感还没确认。整竿抛出期间冻住镜头的口子是 `setLookLocked`，玩法还没调用。见 `docs/PHONE-LOOK.md`。
 - 饵和鱼钩。线的远端和放出的长度现在由设置面板给，要换成玩法来给。见 `docs/LINE.md`。
 - 渔轮跟着线长转。部件已有，没有东西驱动。
 - 拔河用的竿的软硬。现在从侧面拉约 7 牛就弯到头，见 `docs/ROD.md` 第 8 节。

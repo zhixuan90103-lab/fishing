@@ -13,14 +13,8 @@ import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
 import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
-import {
-  PITCH_DEAD_DEG,
-  ROD_DEAD_DEG,
-  UPRIGHT_BETA,
-  YAW_DEG_PER_METRE,
-  createPhoneLook,
-  pastDeadzone,
-} from './phoneLook.js';
+import { createPhoneLook } from './phoneLook.js';
+import { PITCH_LIMIT, createAim } from './aim.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
@@ -166,104 +160,48 @@ export async function startShore(container, hooks = {}) {
     lineReach: 12,
     lineSpare: 0,
   };
-  const applyCamera = () => {
-    if (phone.active && !viewHeld) {
-      baseX = tune.x;
-      baseY = tune.y;
-      baseZ = tune.z;
-      baseYaw = tune.yaw;
-      basePitch = tune.pitch;
-      phone.rebase();
-      placeLook(baseYaw, basePitch);
-      return;
-    }
-    placeLook(tune.yaw, tune.pitch, tune);
-  };
-  const qLock = new THREE.Quaternion();
-  const lockPos = new THREE.Vector3();
-  const qAim = new THREE.Quaternion();
-  const aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  // Phone to view and rod: phoneLook reads the attitude, aim shares it out, and this file
+  // only places the camera and hands the rod its part. docs/PHONE-LOOK.md.
   const phone = createPhoneLook();
+  const aim = createAim(tune.yaw, tune.pitch);
   let phoneAsked = false;
   let phonePrimed = false;
-  let viewHeld = false;
   // Gameplay sets this for the whole cast. The finger does the same while it is down.
   let lookLocked = false;
-  let baseX = tune.x;
-  let baseY = tune.y;
-  let baseZ = tune.z;
-  let baseYaw = tune.yaw;
-  let basePitch = tune.pitch;
-  // One look formula. Height is the point passed in, or the stored eye line.
-  // Positive yaw turns toward the camera's left. Device acceleration.x grows
-  // when the phone moves left, so the slide is added to yaw.
-  const IDENTITY = new THREE.Quaternion();
-  const aimRod = (betaDeg, gammaDeg) => {
-    const pitch = pastDeadzone(betaDeg - UPRIGHT_BETA, ROD_DEAD_DEG);
-    const side = pastDeadzone(-gammaDeg, ROD_DEAD_DEG);
-    aimEuler.set(pitch * Math.PI / 180, side * Math.PI / 180, 0, 'YXZ');
-    qAim.setFromEuler(aimEuler);
-    rod.setAim(qAim);
-  };
-  const placeLook = (yawDeg, pitchDeg, at) => {
+  // Positive yaw turns toward the camera's left. The eye stays at the panel's position
+  // and the horizon never rolls.
+  const placeLook = (yawDeg, pitchDeg) => {
     const yaw = yawDeg * Math.PI / 180;
-    const pitch = THREE.MathUtils.clamp(pitchDeg, -70, 70) * Math.PI / 180;
+    const pitch = THREE.MathUtils.clamp(pitchDeg, -PITCH_LIMIT, PITCH_LIMIT) * Math.PI / 180;
     const fx = Math.sin(yaw) * Math.cos(pitch);
     const fy = Math.sin(pitch);
     const fz = Math.cos(yaw) * Math.cos(pitch);
-    const x = at ? at.x : baseX;
-    const y = at ? at.y : baseY;
-    const z = at ? at.z : baseZ;
     camera.up.set(0, 1, 0);
-    camera.position.set(x, y, z);
-    camera.lookAt(x + fx, y + fy, z + fz);
+    camera.position.set(tune.x, tune.y, tune.z);
+    camera.lookAt(tune.x + fx, tune.y + fy, tune.z + fz);
     camera.updateMatrixWorld();
   };
-  const takeLook = () => {
-    const yawOff = phone.slideMetres() * YAW_DEG_PER_METRE;
-    const pitchOff = pastDeadzone(phone.axes().lift, PITCH_DEAD_DEG);
-    baseYaw += yawOff;
-    basePitch = THREE.MathUtils.clamp(basePitch + pitchOff, -70, 70);
-    phone.rebase();
-    placeLook(baseYaw, basePitch);
+  // The phone as it is held right now looks along the panel's camera. Also the way back
+  // to the default view after the sensor's heading has wandered.
+  const recenter = () => {
+    aim.reset(tune.yaw, tune.pitch);
+    phone.recenter();
+  };
+  const applyCamera = () => {
+    recenter();
+    placeLook(aim.viewYaw, aim.viewPitch);
   };
   const applyPhone = (dt) => {
-    if (!phone.sample()) {
-      rod.setAim(IDENTITY);
-      return;
-    }
+    if (!phone.active) return;
     if (!phonePrimed) {
-      phone.rebase();
-      baseX = camera.position.x;
-      baseY = camera.position.y;
-      baseZ = camera.position.z;
-      baseYaw = tune.yaw;
-      basePitch = tune.pitch;
+      recenter();
       phonePrimed = true;
       if (phoneHint) phoneHint.remove();
     }
-    const held = pressing || lookLocked;
-    if (held && !viewHeld) {
-      takeLook();
-      qLock.copy(camera.quaternion);
-      lockPos.copy(camera.position);
-      viewHeld = true;
-    } else if (!held && viewHeld) {
-      viewHeld = false;
-    }
-    const pose = phone.tilt();
-    aimRod(pose.beta, pose.gamma);
-    if (viewHeld) {
-      camera.quaternion.copy(qLock);
-      camera.position.copy(lockPos);
-      camera.updateMatrixWorld();
-      return;
-    }
     phone.advance(dt);
-    placeLook(
-      baseYaw + phone.slideMetres() * YAW_DEG_PER_METRE,
-      basePitch + pastDeadzone(phone.axes().lift, PITCH_DEAD_DEG),
-    );
+    aim.step(phone.look(), pressing || lookLocked, dt);
+    placeLook(aim.viewYaw, aim.viewPitch);
+    rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll);
   };
   applyCamera();
   shoreSchool.place(tune);
@@ -359,7 +297,7 @@ export async function startShore(container, hooks = {}) {
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging || phone.active) return;
     tune.yaw -= e.movementX * 0.17;
-    tune.pitch = Math.max(-70, Math.min(70, tune.pitch - e.movementY * 0.17));
+    tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - e.movementY * 0.17));
     if (yawInput.el) yawInput.el.value = String(Math.round(tune.yaw));
     if (pitchInput.el) pitchInput.el.value = String(Math.round(tune.pitch));
     applyCamera();
@@ -464,6 +402,7 @@ export async function startShore(container, hooks = {}) {
     onCamera() { applyCamera(); },
     onRod() { applyRod(); },
     onLine() { applyLine(); },
+    onRecenter() { applyCamera(); },
     yawInput,
     pitchInput,
   });
@@ -471,7 +410,8 @@ export async function startShore(container, hooks = {}) {
   return {
     resize,
     camera,
-    // True while a cast is out: the phone keeps moving the rod, not the camera.
+    // True while a cast is out: the view stays, the phone keeps moving the rod. When it
+    // goes false the view eases back onto the phone's aim.
     setLookLocked(locked) {
       lookLocked = locked;
     },
@@ -536,7 +476,7 @@ function mountTunePanel(container, tune, hooks) {
       ['俯仰', 'pitch', -70, 70, 1],
     ]],
   ];
-  panel.innerHTML = `<div class="tune-head"><span>场景参数</span><button type="button" class="tune-close">关闭</button></div>`;
+  panel.innerHTML = `<div class="tune-head"><span>场景参数</span><button type="button" class="tune-close tune-recenter">镜头回正</button><button type="button" class="tune-close tune-shut">关闭</button></div>`;
   const colorRow = document.createElement('label');
   colorRow.className = 'tune-row';
   colorRow.innerHTML = `<span>雾色</span><input type="color" value="${tune.fogColor}">`;
@@ -577,7 +517,10 @@ function mountTunePanel(container, tune, hooks) {
   const haptic = root.querySelector('.panel');
   if (haptic) panel.appendChild(haptic);
   toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; });
-  panel.querySelector('.tune-close').addEventListener('click', () => { panel.hidden = true; });
+  panel.querySelector('.tune-shut').addEventListener('click', () => { panel.hidden = true; });
+  // Takes the phone as it is held now for the default view. Without a sensor it only
+  // re-applies the panel's camera.
+  panel.querySelector('.tune-recenter').addEventListener('click', () => { hooks.onRecenter(); });
   root.append(toggle, panel);
   return {
     remove() { toggle.remove(); panel.remove(); },

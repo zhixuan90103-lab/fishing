@@ -1,7 +1,8 @@
 /**
  * How the hand carries the rod. Three is used for its maths only: no scene, no model.
  *
- * Owns: where the rod sits in front of the view, and how it trails the view when it turns.
+ * Owns: where the rod sits in front of the view, how it trails the view when it turns,
+ * and adding the phone's aim to that.
  * Does not own: how the blank bends (rodFlex.js), the model (rod.js), or any fishing rule.
  *
  * The rod's root is a child of the view (the camera). Each frame this places the root in
@@ -13,8 +14,8 @@
  *   2. Trail. The rod chases the smoothed view and turns about the hand by what it has
  *      not caught up yet: everything ahead of the handle hangs back, the hand stays put.
  *
- * When the phone becomes the rod, its orientation comes straight from the phone and this
- * file is the one to revisit.
+ * The phone's aim comes in through setAim and is added on top of the trail, untouched:
+ * startShore.js works out how much of the phone's turn the view has not taken.
  */
 
 import * as THREE from 'three/webgpu';
@@ -83,7 +84,7 @@ export function createRodHold(root, handAt) {
 
   function placeRoot() {
     // View lag first, then the phone aim at full size. The 5° cap belongs to the view
-    // lag only. The phone aim is the raw tilt past its own dead zone.
+    // lag only. The aim is where the phone points minus where the view points.
     swing.multiplyQuaternions(trail, aimQ);
     root.quaternion.multiplyQuaternions(swing, mountQ);
     root.position.copy(mountP).sub(hand).applyQuaternion(swing).add(hand);
@@ -135,9 +136,11 @@ export function createRodHold(root, handAt) {
     if (angle > 1e-6) trail.slerp(IDENTITY, 1 - (most * Math.tanh(angle / most)) / angle);
   }
 
-  // Phone aim in camera space, on top of the mount. Identity when the phone is still.
-  // Not chased and not capped. phoneLook does not low-pass this aim.
+  // Phone aim in the view's space, on top of the mount. Identity once the view has caught
+  // up with the phone. Not chased and not capped here: phoneLook has already smoothed it,
+  // and a fast lift has to reach the blank at full speed.
   const aimQ = new THREE.Quaternion();
+  const aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const swing = new THREE.Quaternion();
 
   // The grip in the world, as the bend should see it: built on the smoothed view.
@@ -165,9 +168,12 @@ export function createRodHold(root, handAt) {
       placeRoot();
     },
 
-    // Extra aim in camera space, on top of ROD_POSE. Full size, not limited by FOLLOW_MAX.
-    setAim(next) {
-      aimQ.copy(next);
+    // Extra aim in the view's space, on top of ROD_POSE, degrees: lift about the view's X,
+    // then turn about its Y, with the lean about the view axis applied first. Full size,
+    // not limited by FOLLOW_MAX. All zero is no aim.
+    setAim(pitch, yaw, roll) {
+      aimEuler.set(pitch * Math.PI / 180, yaw * Math.PI / 180, roll * Math.PI / 180, 'YXZ');
+      aimQ.setFromEuler(aimEuler);
     },
 
     // The bend is integrated in the smoothed view's frame. A world point (the line's far

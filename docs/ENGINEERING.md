@@ -24,7 +24,9 @@ Fishing/
 │   ├── shore/
 │   │   ├── startShore.js   # 岸边启动、设置面板、镜头。只创建和每帧调用
 │   │   ├── rod.js          # 鱼竿：模型、骨骼，串起下面三层
-│   │   ├── rodHold.js      # 握：竿在镜头前的位置和滞后
+│   │   ├── rodHold.js      # 握：竿在镜头前的位置和滞后，加上手机的瞄准
+│   │   ├── phoneLook.js    # 手机瞄准：把姿态读成三个角。不依赖 Three
+│   │   ├── aim.js          # 手机瞄准：一个方向分给镜头和竿。不依赖 Three
 │   │   ├── rodBeam.js      # 梁：沿竿的软硬和轻重，启动时解一次。不依赖 Three
 │   │   ├── rodFlex.js      # 弯：每帧的惯性和回弹。不依赖 Three
 │   │   ├── line.js         # 鱼线：画线，把竿尖系在远端上
@@ -125,7 +127,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 最终像素在 `#shore-view`。分辨率是设计尺寸 × min(dpr, 2) × `renderScale`。阴影贴图 2048。
 - 海浪是三层 256² FFT（约 250 m / 37 m / 7.3 m）。改风速、涌浪、翻卷会 `ocean.rebuildSpectrum()`。
 - 雾只混在水面着色器里，按视线仰角和距离。反射先往深水色拉一档（天空占 0.8），薄雾里雾色占 0.55。天空 HDRI 保持清晰。
-- 陆地在 +z，海在 −z。没有传感器时拖画面改 yaw/pitch，并写回设置滑条。真机的瞄准见 [PHONE-LOOK.md](./PHONE-LOOK.md)。
+- 陆地在 +z，海在 −z。没有传感器时拖画面改 yaw/pitch，并写回设置滑条。真机上视线和竿由手机姿态决定，设置面板的「镜头回正」把手机此刻的姿态当成默认视线，见 [PHONE-LOOK.md](./PHONE-LOOK.md)。
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
@@ -200,3 +202,6 @@ npm run cap:sync
 | 2026-11-17 | 增加鱼线：从渔轮穿过导环到远端，松时悬链线、绷时直线。线绷直后把竿尖系在远端上，竿被线拉弯，张力由线长和两端距离得出。远端和线长先由设置面板给 |
 | 2026-11-17 | 修竿被线用力拉时的不自然弯曲：拉力只交给第一阶，竿尖最多转到和线同向，深弯表延到 87° |
 | 2026-11-17 | 规范整理：会动的东西的通则、分层和验证办法写进 CONVENTIONS.md，物料设计文档定了统一的写法 |
+| 2026-11-17 | 手机瞄准重做：视线和竿从手机姿态直接读，不再从加速度积分平移，也不用死区。同一个姿态永远是同一个画面。镜头和竿合成一条式子，按住只是镜头不追。左右看改成转动手机，上下方向改成顶部倒向自己为抬。加「镜头回正」。PHONE-LOOK.md 改写成设计文档，数字从 ROD.md 挪过去 |
+| 2026-11-17 | 手机瞄准分层：镜头和竿怎么分从 `startShore.js` 挪进 `aim.js`，`rod.setAim` 改收三个角。只整理结构，同一段输入下握的结果逐数相同 |
+| 2026-11-17 | 弹出转动权限框的 `MotionPromptProxy` 补进真源 `plugins/native-haptics/BridgeViewController.swift`，之前只在 `ios/` 的副本里 |

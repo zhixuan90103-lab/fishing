@@ -149,9 +149,10 @@ export function createSpinningRod() {
       hold.setPose(next);
       flex.settle();
     },
-    // Camera-space aim from the phone. Does not settle the bend.
-    setAim(next) {
-      hold.setAim(next);
+    // The phone's aim in the view's space, degrees: lift, turn to the left, and lean
+    // about the view axis. Does not settle the bend, so a fast lift whips the blank.
+    setAim(pitch, yaw, roll) {
+      hold.setAim(pitch, yaw, roll);
     },
     // Extra mass on the tip, kg: the lure while it hangs there.
     setTipLoad(kg) {
