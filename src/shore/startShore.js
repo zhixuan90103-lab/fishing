@@ -11,7 +11,7 @@ import { makeOceanNodes, updateOceanUniforms } from './minamo/ocean/oceanNodes.j
 import { makeWaterMaterial, makeRadialGrid } from './minamo/ocean/waterMaterial.js';
 import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
-import { createSpinningRod } from './rod.js';
+import { ROD_POSE, createSpinningRod } from './rod.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
@@ -141,6 +141,12 @@ export async function startShore(container, hooks = {}) {
     yaw: 100,
     pitch: -10,
     swimRate: 1,
+    rodX: ROD_POSE.x,
+    rodY: ROD_POSE.y,
+    rodZ: ROD_POSE.z,
+    rodAimUp: ROD_POSE.aimUp,
+    rodAimSide: ROD_POSE.aimSide,
+    rodRoll: ROD_POSE.roll,
   };
   const applyCamera = () => {
     camera.position.set(tune.x, tune.y, tune.z);
@@ -159,6 +165,16 @@ export async function startShore(container, hooks = {}) {
   const rod = createSpinningRod();
   scene.add(camera);
   camera.add(rod.object);
+  const applyRod = () => {
+    rod.setPose({
+      x: tune.rodX,
+      y: tune.rodY,
+      z: tune.rodZ,
+      aimUp: tune.rodAimUp,
+      aimSide: tune.rodAimSide,
+      roll: tune.rodRoll,
+    });
+  };
   let prevYaw = tune.yaw;
   let prevPitch = tune.pitch;
 
@@ -309,6 +325,7 @@ export async function startShore(container, hooks = {}) {
   const tuneUi = mountTunePanel(container, tune, {
     onWave() { waveDirty = true; },
     onCamera() { applyCamera(); },
+    onRod() { applyRod(); },
     yawInput,
     pitchInput,
   });
@@ -354,6 +371,14 @@ function mountTunePanel(container, tune, hooks) {
     ['鱼', [
       ['游速', 'swimRate', 0.2, 2.5, 0.05],
     ]],
+    ['鱼竿', [
+      ['位置 X', 'rodX', -1, 1, 0.01],
+      ['位置 Y', 'rodY', -2, 0.5, 0.01],
+      ['位置 Z', 'rodZ', -5, -0.15, 0.01],
+      ['抬起', 'rodAimUp', -30, 70, 0.5],
+      ['侧偏', 'rodAimSide', -45, 45, 0.5],
+      ['滚转', 'rodRoll', -180, 180, 1],
+    ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],
       ['位置 Y', 'y', 0.3, 8, 0.1],
@@ -389,6 +414,7 @@ function mountTunePanel(container, tune, hooks) {
         value.textContent = formatTune(tune[key]);
         if (wave) hooks.onWave();
         if (title === '摄像机') hooks.onCamera();
+        if (title === '鱼竿') hooks.onRod();
       });
       row.append(Object.assign(document.createElement('span'), { textContent: label }), input, value);
       block.appendChild(row);

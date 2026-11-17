@@ -19,6 +19,16 @@ const RADIAL = 12;
 
 const REST_BEND = 0.06;
 
+// Camera-space mount, metres and degrees.
+export const ROD_POSE = {
+  x: 0.1,
+  y: -0.32,
+  z: -0.42,
+  aimUp: 30,
+  aimSide: -4,
+  roll: 0,
+};
+
 export function createSpinningRod() {
   const root = new THREE.Group();
   root.name = 'spinning-rod';
@@ -70,12 +80,26 @@ export function createSpinningRod() {
   root.add(reel.object);
   addGuides(bones, seg, metal);
 
-  const blankDir = new THREE.Vector3(-0.12, 0.5, -0.86).normalize();
-  const down = new THREE.Vector3(0, -1, 0);
-  down.addScaledVector(blankDir, -down.dot(blankDir)).normalize();
-  const side = new THREE.Vector3().crossVectors(blankDir, down).normalize();
-  root.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, blankDir, down));
-  root.position.set(0.08, -0.14, -0.42);
+  const pose = { ...ROD_POSE };
+  const blankDir = new THREE.Vector3();
+  const down = new THREE.Vector3();
+  const side = new THREE.Vector3();
+  const rollQ = new THREE.Quaternion();
+  const basis = new THREE.Matrix4();
+  function applyPose() {
+    aimDirection(pose.aimUp, pose.aimSide, blankDir);
+    down.set(0, -1, 0).addScaledVector(blankDir, -down.dot(blankDir));
+    if (down.lengthSq() < 1e-8) down.set(0, 0, 1);
+    down.normalize();
+    if (pose.roll) {
+      rollQ.setFromAxisAngle(blankDir, pose.roll * Math.PI / 180);
+      down.applyQuaternion(rollQ);
+    }
+    side.crossVectors(blankDir, down).normalize();
+    root.quaternion.setFromRotationMatrix(basis.makeBasis(side, blankDir, down));
+    root.position.set(pose.x, pose.y, pose.z);
+  }
+  applyPose();
   root.traverse((obj) => {
     obj.frustumCulled = false;
   });
@@ -98,6 +122,11 @@ export function createSpinningRod() {
     object: root,
     // rotor, spool and handle groups, each on its own axis. See reel.js.
     reel,
+    // Camera space, metres and degrees. aimUp rises off the view axis, aimSide yaws it, roll spins the reel around the blank.
+    setPose(next) {
+      Object.assign(pose, next);
+      applyPose();
+    },
     update(dt, swingRate) {
       const target = REST_BEND + Math.min(Math.abs(swingRate) * 0.0018, 0.45);
       const acc = (target - bend) * 90 - vel * 9;
@@ -111,6 +140,16 @@ export function createSpinningRod() {
       for (const m of [blankMat, cork, seatMat, metal]) m.dispose();
     },
   };
+}
+
+function aimDirection(aimUpDeg, aimSideDeg, target) {
+  const aimUp = aimUpDeg * Math.PI / 180;
+  const aimSide = aimSideDeg * Math.PI / 180;
+  return target.set(
+    Math.sin(aimSide) * Math.cos(aimUp),
+    Math.sin(aimUp),
+    -Math.cos(aimSide) * Math.cos(aimUp),
+  ).normalize();
 }
 
 function blankGeometry(boneCount) {
