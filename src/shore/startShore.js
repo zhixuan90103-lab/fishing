@@ -11,6 +11,7 @@ import { makeOceanNodes, updateOceanUniforms } from './minamo/ocean/oceanNodes.j
 import { makeWaterMaterial, makeRadialGrid } from './minamo/ocean/waterMaterial.js';
 import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
+import { createSpinningRod } from './rod.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
@@ -155,6 +156,11 @@ export async function startShore(container, hooks = {}) {
   };
   applyCamera();
   shoreSchool.place(tune);
+  const rod = createSpinningRod();
+  scene.add(camera);
+  camera.add(rod.object);
+  let prevYaw = tune.yaw;
+  let prevPitch = tune.pitch;
 
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
@@ -245,6 +251,10 @@ export async function startShore(container, hooks = {}) {
       waveDirty = false;
     }
     particles.update(camera, time);
+    const swingRate = Math.hypot(tune.yaw - prevYaw, tune.pitch - prevPitch) / Math.max(dt, 1e-4);
+    prevYaw = tune.yaw;
+    prevPitch = tune.pitch;
+    rod.update(dt, swingRate);
     shoreSchool.update(dt, tune.swimRate, world.rocks, {
       x: tune.x,
       z: tune.z,
@@ -309,6 +319,7 @@ export async function startShore(container, hooks = {}) {
     dispose() {
       running = false;
       tuneUi.remove();
+      rod.dispose();
       renderer.dispose();
       canvas.remove();
     },
