@@ -11,7 +11,9 @@
     "cap:sync": "npm run build && npx cap sync ios",
     "cap:open": "npx cap open ios",
     "ios": "npm run cap:sync && npm run cap:open",
-    "ios:bootstrap": "node scripts/bootstrap-ios.mjs"
+    "ios:bootstrap": "node scripts/bootstrap-ios.mjs",
+    "check": "node checks/check.mjs",
+    "record": "node checks/record.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.1.0",

@@ -19,6 +19,8 @@
  * Units: seconds, newtons.
  */
 
+import { toward } from './maths.js';
+
 // The line may break once the fish's pull and the hand's together pass this, N. Above
 // the hardest run of any fish (fishKind.js) and well above where the reel gives line.
 export const BREAK_AT = 11.5;
@@ -63,7 +65,7 @@ export function createSnap(random = Math.random) {
       if (!(dt > 0)) return false;
       const to = held && taking ? PRESS_MOST : 0;
       const rate = to > snap.press ? PRESS_ON : PRESS_OFF;
-      snap.press += (to - snap.press) * (1 - Math.exp(-rate * dt));
+      snap.press = toward(snap.press, to, rate, dt);
       if (snap.press < 1e-4 && to === 0) snap.press = 0;
       snap.load = pull + snap.press;
       if (snap.load > BREAK_AT) wear += WEAR_RATE * (snap.load - BREAK_AT) * dt;

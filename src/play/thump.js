@@ -17,6 +17,8 @@
  * Units: seconds, newtons.
  */
 
+import { between } from './maths.js';
+
 // A burst is this many shakes, then a pause this long, s.
 const BURST = [3, 7];
 const PAUSE = [0.25, 0.7];
@@ -53,8 +55,6 @@ export function createThump(random = Math.random) {
   let age = SNATCH_FOR;
   const shake = { intensity: 0, sharpness: SHARPNESS };
 
-  const between = (range) => range[0] + random() * (range[1] - range[0]);
-
   const thump = {
     // How much harder than the fish's steady pull the line is being snatched now, N.
     pull: 0,
@@ -63,7 +63,7 @@ export function createThump(random = Math.random) {
     begin(fish) {
       kind = fish;
       nextIn = 0;
-      burstLeft = Math.round(between(BURST));
+      burstLeft = Math.round(between(random, BURST));
       peak = 0;
       age = SNATCH_FOR;
       thump.pull = 0;
@@ -90,10 +90,10 @@ export function createThump(random = Math.random) {
           age = 0;
           burstLeft -= 1;
           if (burstLeft <= 0) {
-            burstLeft = Math.round(between(BURST));
-            nextIn = between(PAUSE);
+            burstLeft = Math.round(between(random, BURST));
+            nextIn = between(random, PAUSE);
           } else {
-            nextIn = between(kind.beat) * (1 + (SPENT_SLOW - 1) * (1 - stamina));
+            nextIn = between(random, kind.beat) * (1 + (SPENT_SLOW - 1) * (1 - stamina));
           }
           shake.intensity = SOFT + MORE * Math.min(1, peak / FULL_AT);
           felt = shake;

@@ -67,6 +67,10 @@ export const TIP_STEADY = 12;
 // rod would otherwise leave it out of the picture until the view caught up.
 export const KEEP_RATE = 8;
 export const KEEP_HURRY_BY = 10;
+// The window and the hurry come on over this long, s, from the moment the tip starts to
+// count. The tip may be far outside its window at that moment, and all at once that is
+// a lurch.
+export const KEEP_EASES_IN = 0.8;
 // After watching, the view does not snap back to the phone's aim. It starts back at this
 // rate, 1/s, which is nearly standing still, and picks up to LOOK_RATE again as fast as
 // RETURN_RECOVER, 1/s: it eases off, swings across and settles in about a second. A lower
@@ -119,6 +123,8 @@ export function createAim(yaw, pitch) {
   let tipPitch = 0;
   let lastTipYaw = 0;
   let lastTipPitch = 0;
+  // Seconds the tip has been counting.
+  let tipFor = 0;
 
   const aim = {
     // Where the view looks.
@@ -154,6 +160,9 @@ export function createAim(yaw, pitch) {
       const aimPitch = basePitch + turned.pitch * AIM_PITCH_GAIN;
       if (watch) turnTo(watch, dt, tip);
       else if (!held) followAim(aimYaw, aimPitch, dt);
+      // Held still, the phone may be swung anywhere. When the view is let go it starts
+      // back gently, the same as after watching.
+      else follow = RETURN_RATE;
       // The steadied tip is only good while it is being fed.
       if (!watch || !tip) tipKnown = false;
       watching = Boolean(watch);
@@ -189,17 +198,23 @@ export function createAim(yaw, pitch) {
         tipYaw = lastTipYaw = rawYaw;
         tipPitch = lastTipPitch = tip.pitch;
         tipKnown = true;
+        tipFor = 0;
       }
+      tipFor += dt;
       tipYaw = chaseAngle(nearest(tipYaw, aim.viewYaw), rawYaw, nearest(lastTipYaw, aim.viewYaw), TIP_STEADY, dt);
       tipPitch = chaseAngle(tipPitch, tip.pitch, lastTipPitch, TIP_STEADY, dt);
       lastTipYaw = rawYaw;
       lastTipPitch = tip.pitch;
       // The tip is in its window while the view looks between these. Yaw is positive to
       // the left, so a tip to the left of centre has the view to its right.
-      toYaw = within(toYaw, tipYaw - TIP_LEFT, tipYaw + TIP_RIGHT);
-      toPitch = within(toPitch, tipPitch - TIP_UP, tipPitch + TIP_DOWN);
+      // Both the window and the hurry come on over a moment from when the tip starts to
+      // count: `on` goes 0 to 1.
+      const begun = Math.min(1, tipFor / KEEP_EASES_IN);
+      const on = begun * begun * (3 - 2 * begun);
+      toYaw += (within(toYaw, tipYaw - TIP_LEFT, tipYaw + TIP_RIGHT) - toYaw) * on;
+      toPitch += (within(toPitch, tipPitch - TIP_UP, tipPitch + TIP_DOWN) - toPitch) * on;
       const behind = Math.hypot(toYaw - aim.viewYaw, toPitch - aim.viewPitch);
-      rate += (KEEP_RATE - WATCH_RATE) * Math.min(1, behind / KEEP_HURRY_BY);
+      rate += (KEEP_RATE - WATCH_RATE) * Math.min(1, behind / KEEP_HURRY_BY) * on;
     }
     if (!watching) {
       lastWatchYaw = toYaw;

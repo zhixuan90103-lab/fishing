@@ -28,13 +28,17 @@
  */
 
 import * as THREE from 'three/webgpu';
-import { hangLine } from './lineCurve.js';
+import { shapeLine } from './lineCurve.js';
 
 // Points drawn between the tip and the far end. More makes a deep sag smoother.
 const HANG_POINTS = 48;
 // One pixel wide whatever the distance: a real line is far thinner than a pixel.
 const COLOR = 0xe6efe9;
 const OPACITY = 0.6;
+// Under the water the line fades: it is this many metres down before it is at about a
+// third of its strength. A line as bright below the surface as above it reads as lying
+// on the water, and a lure sinking on it looks as if it were sliding in toward the rod.
+const FADE_DEPTH = 0.45;
 // How hard the line resists stretching: newtons to stretch it by its own length. About
 // right for 0.25 mm nylon. A longer line is softer end to end, as a real one is.
 const STRETCH_FORCE = 120;
@@ -50,7 +54,10 @@ export function createFishingLine(rod) {
   const hangAt = (stops - 1) * 3;
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: OPACITY });
+  // White with its own strength at every point: 1 in the air, less the deeper it lies.
+  const shade = new Float32Array((stops + HANG_POINTS) * 4).fill(1);
+  geometry.setAttribute('color', new THREE.BufferAttribute(shade, 4));
+  const material = new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: OPACITY, vertexColors: true });
   const object = new THREE.Line(geometry, material);
   object.name = 'fishing-line';
   object.frustumCulled = false;
@@ -68,6 +75,8 @@ export function createFishingLine(rod) {
   // Wound right in: the far end rides this far straight below the tip. null: it is a
   // place in the world, given by setEnd.
   let stowed = null;
+  // How slack the line lies on the water, 0 to 1.
+  let lay = 0;
   const stiffnessAt = (metres) => Math.min(STIFFEST, STRETCH_FORCE / Math.max(metres, 1e-3));
 
   return {
@@ -110,6 +119,13 @@ export function createFishingLine(rod) {
     stow(drop) {
       stowed = drop;
     },
+    // How slack the line lies on the water, 0 to 1. Taut, at 0, it runs straight from the
+    // tip to its far end. Slack, at 1, with its far end under water, it runs over the
+    // water to above the far end and goes down there: line let out after a sinking lure.
+    // The caller eases this. It changes only how the line is drawn, not what it pulls.
+    setLay(amount) {
+      lay = Math.min(1, Math.max(0, amount));
+    },
     // How much line is out past the tip, metres.
     setLength(metres) {
       length = Math.max(0, metres);
@@ -134,8 +150,13 @@ export function createFishingLine(rod) {
         length = tip.distanceTo(end) + fitSpare;
         fitSpare = null;
       }
-      slack = hangLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, positions, hangAt, HANG_POINTS + 1);
+      slack = shapeLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, stowed === null ? lay : 0, positions, hangAt, HANG_POINTS + 1);
+      for (let i = 0; i < stops + HANG_POINTS; i += 1) {
+        const depth = -positions[i * 3 + 1];
+        shade[i * 4 + 3] = depth > 0 ? Math.exp(-depth / FADE_DEPTH) : 1;
+      }
       geometry.attributes.position.needsUpdate = true;
+      geometry.attributes.color.needsUpdate = true;
       if (tied) rod.setTipTether(end, length, stiffnessAt(length));
       else rod.setTipTether(null);
     },

@@ -21,19 +21,21 @@ import { chaseAngle as chase } from '../shore/phoneLook.js';
 // 1 / TRAIL_RATE seconds old. Lower is steadier and later.
 const TRAIL_RATE = 18;
 // A release a little after the fastest part of the swing still gets most of it: the best
-// rate fades at this speed, 1/s. Lower forgives a later release.
-const BEST_FADE = 4;
+// rate fades at this speed, 1/s. Lower forgives a later release. At 4 a release 0.15 s
+// late read half its swing, and a hard cast that was let go a moment late fell short.
+const BEST_FADE = 2.5;
 // Forward tipping rate, degrees per second. Below SWING_MIN a release is not a cast and
 // the line stays in. At SWING_FULL and above the lure goes the full distance.
 export const SWING_MIN = 120;
-export const SWING_FULL = 750;
+export const SWING_FULL = 550;
 // Nearest and furthest a cast lands from under the tip, metres.
 export const REACH_MIN = 4;
 export const REACH_MAX = 28;
 // How the distance grows between them. 1 is in step with the swing. Above 1 keeps gentle
-// and middling swings short and leaves the long casts to the hard ones, so the strength
-// of the swing shows in where the lure lands.
-const REACH_CURVE = 1.6;
+// swings short and leaves the long casts to the hard ones, so the strength of the swing
+// shows in where the lure lands. At 1.6, with SWING_FULL at 750, an ordinary swing went
+// ten metres and only a violent one went far.
+const REACH_CURVE = 1.3;
 
 export function createSwing() {
   let trail = 0;

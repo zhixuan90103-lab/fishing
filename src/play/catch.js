@@ -10,10 +10,11 @@
  * Does not own: the stage of the cast or what the finger means before a fish is on
  * (fishing.js), the lure's own motion and the line's length (it is handed both), or any
  * of the sums: what a fish of a kind and size is like (fishKind.js), how it comes
- * (visit.js), pulls (fight.js), shakes its head (thump.js) and kicks (kick.js), how line
- * comes in and runs out (haul.js), whether it breaks (snap.js), the reel's clicks
- * (reelClick.js), the hand's effort (strain.js), the weight on the tip (tipWeight.js),
- * the net's path (scoop.js).
+ * (visit.js), pulls (fight.js), which way its runs head (course.js), how the rod leads
+ * it (lead.js), how it shakes its head (thump.js) and kicks (kick.js), how line comes in
+ * and runs out (haul.js), whether it breaks (snap.js), the reel's clicks (reelClick.js),
+ * the hand's effort (strain.js), the weight on the tip (tipWeight.js), the net's path
+ * (scoop.js).
  * No Three: like fishing.js it only joins those to the materials' openings.
  * Rules: docs/FISHING-REQUIREMENTS.md sections 8 to 13. Design: docs/PLAY.md.
  *
@@ -25,25 +26,27 @@
  * fight() says how it ended.
  */
 
+import { createCourse } from './course.js';
 import { createFight } from './fight.js';
 import { HARDEST_RUN, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
+import { leadFish } from './lead.js';
 import { STOW_LENGTH } from './lineOut.js';
+import { between, toward } from './maths.js';
 import { createReelClick } from './reelClick.js';
 import { createScoop } from './scoop.js';
 import { createSnap } from './snap.js';
-import { createStrain } from './strain.js';
+import { createStrain, handHolds } from './strain.js';
 import { createThump } from './thump.js';
 import { createTipWeight, dryness } from './tipWeight.js';
 import { steerToLure, touching } from './visit.js';
 
-// Hauling the rod to one side against a fish that will not be led, the hand works this
-// much harder, as a share of what it was holding, with the rod square to the fish.
-const AGAINST_MORE = 0.6;
+// What this file reports about the fish, for tuning against a real hand: the names of
+// the read-only values on the object createCatch returns. fishing.js passes them on.
+export const FISH_READOUT = ['fish', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
 // The one species in the water. Its numbers by size are in fishKind.js.
 const SPECIES = 'dorade';
-const GRAVITY = 9.81;
 
 // A fish sets off for the lure between these many seconds after it lands.
 const COME_AFTER = [1.5, 4];
@@ -87,6 +90,7 @@ const NET_NEARER = 0.45;
 export function createCatch({ rod, line, splash, school, net, haptics, random, move, out }) {
   const haul = createHaul();
   const fight = createFight(random);
+  const course = createCourse(random);
   const thump = createThump(random);
   const snap = createSnap(random);
   const strain = createStrain();
@@ -94,8 +98,10 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   const click = createReelClick();
   const weight = createTipWeight();
   const kick = createKick(random);
-  // What the fish on the line is like: fishOf() in fishKind.js. null with none on.
+  // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
+  // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
+  let takesLine = false;
   // What the hand on the rod is holding this frame, N, and the effort the rod was last
   // told.
   let holding = 0;
@@ -127,6 +133,11 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   let running = 0;
   let wound = 0;
   let bolting = false;
+  // Fighting, as its brain last saw it: where it is from the rod tip, how fast it is
+  // taking line, m/s, and what the rod's lead comes to.
+  const bearing = { x: 0, z: 1, far: 0 };
+  let bolt = 0;
+  const led = { across: 0, against: 0 };
   // Lifting: seconds the fish has still to hang before the net comes, and what is left
   // of the stretch the fight had put in the line, m.
   let showLeft = 0;
@@ -139,8 +150,16 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     school.mouth(fish, brainMouth);
     steerToLure(fish, aim, brainMouth, move, Math.hypot(move.vx, move.vz));
   };
+  // The hooked fish's aim is put together from three answers: how its pull sets it
+  // against the line (fight.js), which way this run heads (course.js), and where the rod
+  // is leading it (lead.js).
   const fightBrain = (fish, aim) => {
-    fight.steer(fish, aim, line.tip, stretch, line.stiffness, haul.speed, RUN_OUT_AT, homeX, homeZ, rodX, rodZ);
+    fight.bearing(fish, line.tip, homeX, homeZ, bearing);
+    course.keepInFront(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
+    bolt = fight.bolt(RUN_OUT_AT);
+    const own = course.across(fight.running, fight.stamina, kind.dash, bolt, bearing.far);
+    leadFish(bearing.x, bearing.z, rodX, rodZ, fight.running, fight.stamina, led);
+    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own + led.across);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.
@@ -171,15 +190,20 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     running = 0;
     wound = 0;
     bolting = false;
+    bolt = 0;
+    led.across = 0;
+    led.against = 0;
     kind = fishOf(SPECIES, hooked.size);
+    takesLine = kind.runFresh > RUN_OUT_AT;
     click.reset();
     fight.begin(kind);
+    course.begin();
     thump.begin(kind);
     snap.begin();
     haul.reset();
     school.take(hooked, fightBrain);
     // A fish that can take line lands on the rod harder than one that cannot.
-    haptics?.impact(kind.runFresh > RUN_OUT_AT ? 'heavy' : 'medium');
+    haptics?.impact(takesLine ? 'heavy' : 'medium');
   }
 
   // The line has parted, or the fish has taken all of it. The fish swims off, the lure
@@ -231,7 +255,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     const dry = dryness(move.y);
     weight.hang(dry, kind.load);
     // The hand is holding its weight up.
-    holding = weight.wanted * GRAVITY;
+    holding = weight.pull;
     // Half out of the water: it feels the air and kicks, and the water breaks round it.
     if (kick.rise(dry)) {
       splash.burst(move.x, move.z, BREAK_SPLASH);
@@ -309,7 +333,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       return kind ? kind.size : 0;
     },
     get big() {
-      return kind ? kind.runFresh > RUN_OUT_AT : false;
+      return kind ? takesLine : false;
     },
     // What a finger held down on a running fish is adding to the line, N, and how hard
     // the hand on the rod is working, 0 to 1.
@@ -330,7 +354,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     arm(dirX, dirZ) {
       homeX = dirX;
       homeZ = dirZ;
-      comeIn = COME_AFTER[0] + random() * (COME_AFTER[1] - COME_AFTER[0]);
+      comeIn = between(random, COME_AFTER);
     },
 
     // The lure is out of the water: a fish still on its way goes home.
@@ -367,7 +391,9 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     fight(dt, input, tip, spot) {
       rodX = Math.sin(input.rodYaw);
       rodZ = Math.cos(input.rodYaw);
-      fight.step(dt, wound);
+      // Its runs and rests, and which way a run that has just begun heads.
+      if (fight.step(dt, wound)) course.begin();
+      course.step(dt, fight.running, bolt);
       // A finger held down on a fish that is taking line leans on it, and may break it.
       if (snap.step(dt, input.finger, fight.force > RUN_OUT_AT, fight.force)) {
         lose('broke');
@@ -385,7 +411,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       tension = line.tension;
       // What the hand holds: the fish's pull as far as the reel passes it on, and what
       // the finger adds.
-      holding = Math.min(fight.force, RUN_OUT_AT) * (1 + AGAINST_MORE * fight.against) + snap.press;
+      holding = handHolds(fight.force, RUN_OUT_AT, led.against, snap.press);
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       wound = taken;
@@ -408,9 +434,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       const tick = click.step(given, taken, Math.min(1, tension / RUN_OUT_AT));
       if (tick) haptics?.playTransient(tick.intensity, tick.sharpness);
       // The view drifts after it, along the water.
-      const k = 1 - Math.exp(-WATCH_FOLLOW * dt);
-      spot.x += (mouth.x - spot.x) * k;
-      spot.z += (mouth.z - spot.z) * k;
+      spot.x = toward(spot.x, mouth.x, WATCH_FOLLOW, dt);
+      spot.z = toward(spot.z, mouth.z, WATCH_FOLLOW, dt);
       if (!(fight.force < RUN_OUT_AT && Math.hypot(tip.x - mouth.x, tip.z - mouth.z) < LAND_WITHIN)) return '';
       bringIn(tip);
       return 'landed';

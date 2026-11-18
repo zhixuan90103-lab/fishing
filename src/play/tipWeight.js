@@ -14,6 +14,10 @@
  * Units: metres, seconds, kilograms.
  */
 
+import { toward } from './maths.js';
+
+const GRAVITY = 9.81;
+
 // What a fish weighs on the rod tip once it is out of the water is the fish's own: hang()
 // is handed it (the `load` of fishKind.js).
 // Still in the water it weighs this share of that. The weight comes on as the hook rises
@@ -37,9 +41,9 @@ export function createTipWeight() {
   let told = 0;
 
   return {
-    // What should be on the tip now, kg. What is on it follows.
-    get wanted() {
-      return aim;
+    // What the hand has to hold up for it right now, N.
+    get pull() {
+      return aim * GRAVITY;
     },
     // A fish hangs on the hook, this far out of the water, 0 to 1. load: what it weighs
     // on the tip once clear, kg.
@@ -53,7 +57,7 @@ export function createTipWeight() {
 
     // Once a frame. Returns the weight to tell the rod, kg, or null if it has not changed.
     step(dt) {
-      now += (aim - now) * (1 - Math.exp(-LOAD_RATE * dt));
+      now = toward(now, aim, LOAD_RATE, dt);
       const step = Math.round(now / LOAD_STEP) * LOAD_STEP;
       if (step === told) return null;
       told = step;

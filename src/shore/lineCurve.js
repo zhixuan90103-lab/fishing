@@ -106,3 +106,87 @@ export function hangLine(ax, ay, az, bx, by, bz, length, out, at, count) {
   }
   return slack;
 }
+
+// A far end this far under the water, m, has all of its line lain. Shallower, less: the
+// lain shape comes in as the lure goes down, it is not there the moment it is wet.
+const LAY_BELOW = 0.5;
+
+/**
+ * A line lying slack on the water: from a point above the water it runs to where it
+ * goes in, and from there down to its far end below. Fills `out` like hangLine.
+ *
+ * lay is how slack it lies, 0 to 1. At 1 it goes in straight above the far end and
+ * drops plumb to it: a lure sinking on a free line. At 0 the going-in point is where
+ * the straight line from end to end crosses the surface, so the two pieces are that one
+ * straight line. Between, the point slides from one to the other, so a line taken up
+ * comes straight without a jump.
+ * With the first end not above the water or the far end not under it there is no going
+ * in: it is drawn straight.
+ */
+export function layLine(ax, ay, az, bx, by, bz, lay, out, at, count) {
+  const last = count - 1;
+  if (!(ay > 0 && by < 0) || !(lay > 0)) {
+    for (let i = 0; i < count; i += 1) {
+      const t = i / last;
+      out[at + i * 3] = ax + (bx - ax) * t;
+      out[at + i * 3 + 1] = ay + (by - ay) * t;
+      out[at + i * 3 + 2] = az + (bz - az) * t;
+    }
+    return;
+  }
+  // Where the straight line crosses the surface, slid toward the point above the far end.
+  const cross = ay / (ay - by);
+  const w = Math.min(1, lay);
+  const ix = ax + (bx - ax) * (cross + (1 - cross) * w);
+  const iz = az + (bz - az) * (cross + (1 - cross) * w);
+  // Samples shared out by length, with one on the surface.
+  const d1 = Math.hypot(ix - ax, ay, iz - az);
+  const d2 = Math.hypot(bx - ix, by, bz - iz);
+  const n1 = Math.min(last - 1, Math.max(1, Math.round((last * d1) / (d1 + d2))));
+  for (let i = 0; i <= n1; i += 1) {
+    const t = i / n1;
+    const o = at + i * 3;
+    out[o] = ax + (ix - ax) * t;
+    out[o + 1] = ay * (1 - t);
+    out[o + 2] = az + (iz - az) * t;
+  }
+  for (let i = n1 + 1; i <= last; i += 1) {
+    const t = (i - n1) / (last - n1);
+    const o = at + i * 3;
+    out[o] = ix + (bx - ix) * t;
+    out[o + 1] = by * t;
+    out[o + 2] = iz + (bz - iz) * t;
+  }
+}
+
+// Slack much smaller than this, m, hardly shows. See shapeLine.
+const SLACK_SOFT = 0.08;
+// Scratch for shapeLine: the line as it would lie fully slack on the water.
+let lain = new Float64Array(0);
+
+/**
+ * The line from (ax, ay, az) to (bx, by, bz) with `length` of it out, lying `lay` slack
+ * on the water, 0 to 1. Fills `out` like hangLine and returns the same slack.
+ *
+ * This is the one place the two shapes meet. At 0 it is hangLine: straight, or sagging by
+ * whatever slack it has. At 1 it is layLine fully lain: over the water to above the far
+ * end and down. Between, every point is that far from one toward the other, so neither
+ * a changing `lay` nor slack coming and going can move the line in one step.
+ */
+export function shapeLine(ax, ay, az, bx, by, bz, length, lay, out, at, count) {
+  // A line sags by the square root of its slack: the first centimetre of slack on ten
+  // metres of line drops its middle by a hand's breadth, in one frame. So the first of
+  // the slack is drawn in gently. Slack well past SLACK_SOFT is drawn as it is.
+  const gap = Math.hypot(bx - ax, by - ay, bz - az);
+  const slack = length - gap;
+  const drawn = slack > 0 ? gap + (slack * slack) / (slack + SLACK_SOFT) : length;
+  hangLine(ax, ay, az, bx, by, bz, drawn, out, at, count);
+  if (!(lay > 0) || !(ay > 0 && by < 0)) return slack;
+  if (lain.length < count * 3) lain = new Float64Array(count * 3);
+  layLine(ax, ay, az, bx, by, bz, 1, lain, 0, count);
+  // How far under the water the far end is decides how much there is to lay: a lure
+  // just under the surface has no line hanging below it to speak of.
+  const w = Math.min(1, lay) * Math.min(1, -by / LAY_BELOW);
+  for (let i = 0; i < count * 3; i += 1) out[at + i] += (lain[i] - out[at + i]) * w;
+  return slack;
+}

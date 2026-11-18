@@ -24,6 +24,7 @@
 ```bash
 npm install
 npm run dev
+npm run check    # 不用手机能跑的检查，改了代码就跑
 # http://127.0.0.1:5190/
 ```
 

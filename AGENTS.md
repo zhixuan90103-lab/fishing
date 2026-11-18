@@ -15,14 +15,15 @@
 | Web 启动 | `index.html` → `src/main.ts` |
 | 岸边场景 | `src/shore/startShore.js` |
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节。出了水的鱼怎么摆在 `src/fish/hung.js` |
-| 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。渔轮是 `src/shore/reel.js` |
+| 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。吃力的手是 `src/shore/rodHand.js`，渔轮是 `src/shore/reel.js` |
+| 不用手机能跑的检查 | `checks/`：`rig.mjs` 在 Node 里搭一整竿，`check.mjs` 是常驻的检查，`record.mjs` 给只整理结构的改动做前后对比。见 `docs/CONVENTIONS.md` 第 7 节 |
 | 手机瞄准和镜头 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，镜头追什么、剩下的给竿 `src/shore/aim.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
 | 手指、设置面板和提示 | `src/shore/finger.js`（按没按着、拖了多远，桌面用空格键），`src/shore/tunePanel.js`（滑条、镜头回正、这一竿的读数），`src/shore/notice.js`（画面上一句会淡掉的话，只用来说线断了） |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
 | 水花 | `docs/SPLASH.md`，画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。放在海面上方，不动海面 |
-| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`fishKind`、`visit`、`fight`、`haul`、`snap`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
+| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`twitch`、`fishKind`、`visit`、`fight`、`course`、`lead`、`haul`、`snap`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -65,8 +66,9 @@
 13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量走 `rod.setTipLoad`，握竿的手多吃力走 `rod.setStrain`。见 `docs/ROD.md` 第 2、3 节。
 14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个瞄准。不从加速度积分位移，不逐帧累加偏移。镜头在追什么可以换（手机、不动、玩法指的点），换的只是目标，不切换算法。见 `docs/PHONE-LOOK.md` 第 2 节。
 15. **`startShore.js` 只创建、接线、定每帧的顺序。** 规则进 `src/play/`，物料进各自的文件，输入进 `finger.js`，面板进 `tunePanel.js`。
+16. **改了 `src/` 就跑 `npm run check`，只整理结构还要 `npm run record` 前后逐行相同。** 出了新的错，修的同时在 `checks/check.mjs` 加一项。它们判断不了手感和观感，那要真机。见 `docs/CONVENTIONS.md` 第 7 节。
 
-第 11 到 15 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
+第 11 到 16 条以及坐标、资源、验证、文档的规矩，展开写在 `docs/CONVENTIONS.md`。
 
 ## 命令
 
@@ -74,6 +76,8 @@
 npm install
 npm run dev           # http://127.0.0.1:5190/  端口被占就换端口
 npm run build
+npm run check         # 不用手机能跑的检查，改了 src/ 就跑。可以带一个词只跑名字里有它的
+npm run record        # 录数。只整理结构时前后各跑一遍，逐行相同才算没改行为
 npm run cap:sync      # 只改网页
 npm run ios:bootstrap # 首次 / 改 Swift
 npm run ios           # sync 并打开 Xcode

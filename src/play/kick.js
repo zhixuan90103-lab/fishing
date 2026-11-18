@@ -12,6 +12,8 @@
  * there.
  */
 
+import { between } from './maths.js';
+
 // How much harder than usual it kicks as it breaks the surface and as it lands in the
 // net, on top of 1, and how fast that dies away, 1/s.
 const KICK_SURFACE = 1.3;
@@ -29,7 +31,7 @@ export function createKick(random = Math.random) {
   let broke = false;
   let fitIn = 0;
 
-  const untilNext = () => FIT_EVERY[0] + random() * (FIT_EVERY[1] - FIT_EVERY[0]);
+  const untilNext = () => between(random, FIT_EVERY);
 
   return {
     // How hard it is kicking: 1 is the usual.
