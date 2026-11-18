@@ -33,6 +33,8 @@ Fishing/
 │   │   ├── lineCurve.js    # 鱼线的形状：直线或悬链线。不依赖 Three
 │   │   ├── lure.js         # 饵的模型
 │   │   ├── lureMove.js     # 饵怎么动：固定、挂、飞、拖，鼻尖朝哪。不依赖 Three
+│   │   ├── splash.js       # 水花：画水冠、水珠和圈
+│   │   ├── splashBurst.js  # 水花随时间的形状。不依赖 Three
 │   │   ├── reel.js         # 渔轮，四个可动部件，wind 按收的线长转
 │   │   └── minamo/         # 水面与场景，MIT
 │   ├── play/               # 玩法。唯一写钓鱼规则的地方，都不依赖 Three
@@ -137,7 +139,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 陆地在 +z，海在 −z。没有传感器时拖画面改 yaw/pitch，并写回设置滑条。真机上视线和竿由手机姿态决定，设置面板的「镜头回正」把手机此刻的姿态当成默认视线，见 [PHONE-LOOK.md](./PHONE-LOOK.md)。
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
-- 还没做、也不算改水面：落水水花、气泡、咬口涟漪。
+- 落水的水花是放在海面上方的几何体，不算改水面，见 [SPLASH.md](./SPLASH.md)。它半透明，所以不在主场景里，在水面之后单独画的 `onWater` 场景里；半透明的东西放进主场景会在水面上留洞。还没做、也不算改水面：气泡、咬口涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
 - 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `fishing.update`，再 `applyPhone`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
 
@@ -214,4 +216,8 @@ npm run cap:sync
 | 2026-11-17 | 增加饵和玩法层。默认线收到头，饵固定在竿尖，不随甩动晃；按住向前甩、途中松手，饵按手机向前倾的角速度飞出 6 到 28 米；落水后长按收线，先慢后匀速；收完回到空杆。规则在 `src/play/`，饵的运动在 `lureMove.js`。线加 `stow`、`setTied` 和 `stiffness`，渔轮加 `wind`。设置面板里替玩法送数的"落点距离""余线"拿掉。桌面用空格键代替手指 |
 | 2026-11-17 | 抛投的力度改成量手机向前倾的角速度，不再量竿尖：竿身软，竿尖跟不上手。落水后线上的余线约半秒内自己收掉，不再一帧跳直。设置面板加"这一竿"读数 |
 | 2026-11-17 | 玩法分层：线长和余线从 `fishing.js` 挪进 `lineOut.js`，饵的鼻尖朝向和"固定在竿尖"挪进 `lureMove.js`，`fishing.js` 每一段的进入各成一个函数。只整理结构，玩法对物料的每一次调用逐数相同 |
+| 2026-11-18 | 甩出去以后镜头转过去看着饵，直到它被提出水面，不再停在按下时的朝向（手抬高时那是天）。竿仍然指着手机指的方向。玩法只报出要看的点 `fishing.watch`，`lockLook` 拿掉；`aim.step` 多收一个要看的方向 |
+| 2026-11-18 | 镜头改成只转向落点一次、停在那里，不再跟着饵先仰后俯，收线时也不动。增加落水的水花：水冠、水珠和圈，放在海面上方，不动海面；大小按 10 克的饵定，远处的画得稍大 |
+| 2026-11-18 | 水花缩到 10 克的饵该有的大小，并改成半透明。为此加了一个在水面之后画的场景 `onWater`，落在水面上的半透明物都放这里 |
+| 2026-11-18 | 抛投距离重新分配：角速度范围从 90 到 420 拉宽到 120 到 750°/秒，曲线前缓后陡，最近 4 米，轻甩和重甩的落点分得开。镜头看完落点交还给手机时缓缓起步，约一秒转回去，不再一下甩过去 |
 | 2026-11-17 | 弹出转动权限框的 `MotionPromptProxy` 补进真源 `plugins/native-haptics/BridgeViewController.swift`，之前只在 `ios/` 的副本里 |

@@ -14,6 +14,7 @@ import { createShoreSchool } from '../fish/school.js';
 import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
 import { createLure } from './lure.js';
+import { createSplash } from './splash.js';
 import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
 import { PITCH_LIMIT, createAim } from './aim.js';
@@ -160,8 +161,18 @@ export async function startShore(container, hooks = {}) {
   const aim = createAim(tune.yaw, tune.pitch);
   let phoneAsked = false;
   let phonePrimed = false;
-  // Gameplay sets this for the whole cast. The finger does the same while it is down.
-  let lookLocked = false;
+  // Without a phone the aim never turns: it stays on the panel's camera.
+  const NOT_TURNED = { yaw: 0, pitch: 0, roll: 0 };
+  // The direction from the eye to what the cast wants watched, for the aim. Reused.
+  const watchDir = { yaw: 0, pitch: 0 };
+  const directionTo = (point) => {
+    const dx = point.x - tune.x;
+    const dy = point.y - tune.y;
+    const dz = point.z - tune.z;
+    watchDir.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+    watchDir.pitch = Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI;
+    return watchDir;
+  };
   // Positive yaw turns toward the camera's left. The eye stays at the panel's position
   // and the horizon never rolls.
   const placeLook = (yawDeg, pitchDeg) => {
@@ -185,15 +196,22 @@ export async function startShore(container, hooks = {}) {
     recenter();
     placeLook(aim.viewYaw, aim.viewPitch);
   };
+  // The view and the rod for this frame. With a phone, the phone aims. Without one the
+  // aim stays put and only the watching moves the view.
   const applyPhone = (dt) => {
-    if (!phone.active) return;
-    if (!phonePrimed) {
+    if (phone.active && !phonePrimed) {
       recenter();
       phonePrimed = true;
       if (phoneHint) phoneHint.remove();
     }
-    phone.advance(dt);
-    aim.step(phone.look(), pressing || lookLocked, dt);
+    if (phone.active) phone.advance(dt);
+    const watch = fishingBegun && fishing.watch;
+    aim.step(
+      phone.active ? phone.look() : NOT_TURNED,
+      phone.active && pressing,
+      dt,
+      watch ? directionTo(watch) : null,
+    );
     placeLook(aim.viewYaw, aim.viewPitch);
     rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll);
   };
@@ -217,13 +235,13 @@ export async function startShore(container, hooks = {}) {
   scene.add(line.object);
   const lure = createLure();
   scene.add(lure.object);
-  // The cast: it alone says where the line ends, how much is out and when the view locks.
-  const fishing = createFishing({
-    rod,
-    line,
-    lure,
-    lockLook(locked) { lookLocked = locked; },
-  });
+  // The cast: it alone says where the line ends, how much is out and what the view watches.
+  // Things lying on the water that are see-through. Drawn after the water, or they would
+  // be blended with the sea bed and left as holes in it.
+  const onWater = new THREE.Scene();
+  const splash = createSplash();
+  onWater.add(splash.object);
+  const fishing = createFishing({ rod, line, lure, splash });
   let fishingBegun = false;
   // The panel's cast readout is refreshed every this many frames.
   const READOUT_EVERY = 6;
@@ -300,7 +318,7 @@ export async function startShore(container, hooks = {}) {
   canvas.addEventListener('pointerup', endPress);
   canvas.addEventListener('pointercancel', endPress);
   canvas.addEventListener('pointermove', (e) => {
-    if (!dragging || phone.active || lookLocked) return;
+    if (!dragging || phone.active || fishing.watch) return;
     tune.yaw -= e.movementX * 0.17;
     tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - e.movementY * 0.17));
     if (yawInput.el) yawInput.el.value = String(Math.round(tune.yaw));
@@ -351,13 +369,15 @@ export async function startShore(container, hooks = {}) {
     if (fishingBegun) {
       fishingInput.sensor = phone.active;
       fishingInput.finger = phone.active ? pressing : spaceDown;
-      fishingInput.viewYaw = (phone.active ? aim.viewYaw : tune.yaw) * Math.PI / 180;
+      fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
       fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
       fishing.update(dt, fishingInput);
     }
     applyPhone(dt);
     rod.update(dt);
     line.update();
+    splash.seenFrom(camera.position);
+    splash.update(dt);
     if (fishingBegun) {
       fishing.follow();
       readoutIn -= 1;
@@ -404,6 +424,7 @@ export async function startShore(container, hooks = {}) {
       device.queue.submit([enc.finish()]);
       renderer.render(ws, camera);
     }
+    renderer.render(onWater, camera);
     renderer.autoClear = true;
 
     enc = device.createCommandEncoder({ label: 'post' });
@@ -441,6 +462,7 @@ export async function startShore(container, hooks = {}) {
       tuneUi.remove();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
+      splash.dispose();
       lure.dispose();
       line.dispose();
       rod.dispose();

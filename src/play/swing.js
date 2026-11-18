@@ -25,11 +25,15 @@ const TRAIL_RATE = 18;
 const BEST_FADE = 4;
 // Forward tipping rate, degrees per second. Below SWING_MIN a release is not a cast and
 // the line stays in. At SWING_FULL and above the lure goes the full distance.
-export const SWING_MIN = 90;
-export const SWING_FULL = 420;
+export const SWING_MIN = 120;
+export const SWING_FULL = 750;
 // Nearest and furthest a cast lands from under the tip, metres.
-export const REACH_MIN = 6;
+export const REACH_MIN = 4;
 export const REACH_MAX = 28;
+// How the distance grows between them. 1 is in step with the swing. Above 1 keeps gentle
+// and middling swings short and leaves the long casts to the hard ones, so the strength
+// of the swing shows in where the lure lands.
+const REACH_CURVE = 1.6;
 
 export function createSwing() {
   let trail = 0;
@@ -64,5 +68,5 @@ export function createSwing() {
 export function castReach(rate) {
   if (rate < SWING_MIN) return 0;
   const t = Math.min(1, (rate - SWING_MIN) / (SWING_FULL - SWING_MIN));
-  return REACH_MIN + (REACH_MAX - REACH_MIN) * t * t * (3 - 2 * t);
+  return REACH_MIN + (REACH_MAX - REACH_MIN) * t ** REACH_CURVE;
 }

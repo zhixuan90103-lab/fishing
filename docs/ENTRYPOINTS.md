@@ -25,8 +25,9 @@ index.html
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
             → 饵 createLure，加在场景根上（docs/LURE.md）
-            → 玩法 createFishing({ rod, line, lure, lockLook })（docs/PLAY.md）
-            → 每帧：fishing.update → applyPhone → rod.update → line.update → fishing.follow → shoreSchool.update → 海面 → 场景 → 水 → 后期
+            → 水花 createSplash，加在水面之后画的场景 onWater 里（docs/SPLASH.md）
+            → 玩法 createFishing({ rod, line, lure, splash })（docs/PLAY.md）
+            → 每帧：fishing.update → applyPhone → rod.update → line.update → splash.update → fishing.follow → shoreSchool.update → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
             → 设置面板（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
@@ -49,11 +50,11 @@ school.js update
 ```
 fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
   → 读上一帧线画出来的竿尖 line.tip
-  → ready：swing.step 量瞄准的俯仰往下掉得多快；松手且够快 → lureMove.launch，lockLook(true)
+  → ready：swing.step 量瞄准的俯仰往下掉得多快；松手且够快 → 记下落点，lureMove.launch，从这一帧起 watch 是落点
            否则饵留在竿尖：lureMove.hold，line.stow
-  → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → lineOut.land，line.setTied(true)
+  → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → splash.burst，落点换成真正的位置，lineOut.land，line.setTied(true)
   → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
-           靠近竿尖 → lureMove.hang；线收完 → ready，lockLook(false)
+           靠近竿尖 → lureMove.hang，watch 变空；线收完 → ready
   → line.setEnd / setLength，lureMove.point，lure.place
 fishing.js follow()
   → ready：把饵摆到这一帧的 line.end 上，鼻尖朝上
@@ -64,7 +65,9 @@ fishing.js follow()
 ```
 startShore.js applyPhone
   → phone.advance：三个角平滑
-  → aim.step(phone.look(), 按住或锁住, dt)
+  → fishing.watch 有点：算出从眼睛到它的方向
+  → aim.step(phone.look() 或"没转过", 按住, dt, 要看的方向)
+       → 有要看的方向：镜头转向它
        → 瞄准 = 基准 + 转过的角度
        → 没按住：镜头追瞄准；否则镜头不动
        → 竿 = 瞄准 − 镜头
@@ -134,7 +137,12 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
 | 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
 | 手机瞄准：三个角怎么读、方向、平滑 | [PHONE-LOOK.md](./PHONE-LOOK.md)，`src/shore/phoneLook.js` |
-| 手机瞄准：灵敏度、镜头跟得多紧、镜头和竿怎么分 | `src/shore/aim.js` |
+| 手机瞄准：灵敏度、镜头跟得多紧、镜头和竿怎么分、看饵时转多快 | `src/shore/aim.js` |
+| 甩出去以后镜头看着什么 | `src/play/fishing.js` 的 `watch` 和 `spot` |
+| 水花的大小、高度、持续多久 | [SPLASH.md](./SPLASH.md)，`src/shore/splashBurst.js` |
+| 水花的颜色和透明度 | `src/shore/splash.js` |
+| 水面之后再画一层的东西 | `src/shore/startShore.js` 的 `onWater` |
+| 多重的落水算多大的水花 | `src/play/fishing.js` 的 `SPLASH_FULL` |
 | 手机瞄准：什么算按住、回正、摆镜头 | `src/shore/startShore.js` 的 `applyPhone`、`recenter`、`placeLook` |
 | 转动权限的弹框 | `plugins/native-haptics/BridgeViewController.swift` + bootstrap |
 | 鱼竿：软硬和调性 | `src/shore/rodBeam.js` |

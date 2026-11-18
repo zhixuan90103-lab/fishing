@@ -3,7 +3,7 @@
  *
  * Owns: which stage the cast is in, what the finger means in each, and telling the
  * materials: the line its far end and length, the lure where it is, the reel how much
- * was wound, the view when to hold still.
+ * was wound, the splash where the lure lands. It also says where the view should look.
  * Does not own: how hard a swing is (swing.js), how fast line comes in (retrieve.js), how
  * much line is out (lineOut.js), how the lure moves (lureMove.js), the rod, line, reel
  * and lure themselves, or the phone. Bites and the fight are not here yet.
@@ -29,20 +29,25 @@ import { SWING_FULL, SWING_MIN, castReach, createSwing } from './swing.js';
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
 const LIFT_WITHIN = 1.6;
+// A lure hitting the water this fast makes the biggest splash, m/s. A stopped cast that
+// just drops in makes a smaller one.
+const SPLASH_FULL = 14;
 // Desktop stand-in only, no motion sensor: holding this long counts as a full swing, s.
 const DESK_FULL_HOLD = 1;
 
 /**
- * rod, line, lure: the materials. lockLook(bool): hold the view still.
+ * rod, line, lure, splash: the materials.
  * Call begin() once after the line's first update. Then every frame: update() first of
  * all, and follow() after the line's update.
  */
-export function createFishing({ rod, line, lure, lockLook }) {
+export function createFishing({ rod, line, lure, splash }) {
   const move = createLureMove();
   const out = createLineOut();
   const retrieve = createRetrieve();
   const swing = createSwing();
   const lastTip = { x: 0, y: 0, z: 0 };
+  // Where the view should look while the lure is out: the water where it lands.
+  const spot = { x: 0, y: 0, z: 0 };
 
   let stage = 'ready';
   // ready: the finger has been up since the stage began, it is down now, and for how long.
@@ -67,20 +72,27 @@ export function createFishing({ rod, line, lure, lockLook }) {
     swing.reset();
     retrieve.reset();
     line.setTied(false);
-    lockLook(false);
   }
 
   function toFlight(reach, forwardX, forwardZ) {
     stage = 'flight';
     stopped = false;
+    // The view goes straight to where the lure is going to land and stays there. It does
+    // not follow the lure up and over.
+    spot.x = move.x + forwardX * reach;
+    spot.y = 0;
+    spot.z = move.z + forwardZ * reach;
     move.launch(reach, forwardX, forwardZ);
-    lockLook(true);
   }
 
   // The line comes straight by itself from here, quickly but not in one frame. A press
   // carried over from the flight is not a retrieve.
   function toWater(input, tip) {
     stage = 'water';
+    // Where it really came down: the same place, unless the line was stopped short.
+    spot.x = move.x;
+    spot.z = move.z;
+    splash.burst(move.x, move.z, move.impact / SPLASH_FULL);
     out.land(move.gap(tip));
     armed = !input.finger;
     lifted = false;
@@ -183,6 +195,13 @@ export function createFishing({ rod, line, lure, lockLook }) {
     },
     // Where the lure is and how it is moving. Read only.
     lure: move,
+    // Where the view should look: the water where the lure lands, from the moment it
+    // leaves the tip until the line lifts it out again. A fixed point, not the lure: the
+    // view turns there once and rests. null the rest of the time, when the view is the
+    // phone's. An object with x, y, z, world space.
+    get watch() {
+      return stage === 'flight' || (stage === 'water' && !lifted) ? spot : null;
+    },
 
     // Once, after the line's first update: the lure at the tip, line in.
     begin() {
@@ -196,8 +215,8 @@ export function createFishing({ rod, line, lure, lockLook }) {
     },
 
     /**
-     * Once a frame, before the phone and the rod are moved, so a view lock set here holds
-     * from this very frame. The tip is the one the line drew last frame.
+     * Once a frame, before the phone and the rod are moved, so the view starts turning to
+     * the landing spot on the very frame the lure leaves. The tip is the one the line drew last frame.
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
      * input.aimPitch: how high the phone aims the rod, degrees, positive upward.

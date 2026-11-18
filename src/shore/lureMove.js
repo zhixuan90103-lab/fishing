@@ -58,6 +58,8 @@ export function createLureMove() {
     vx: 0, vy: 0, vz: 0,
     // Metres it has swum through the water, level distance. The model wiggles on this.
     swum: 0,
+    // How fast it was going when it last hit the water, m/s.
+    impact: 0,
     // Which way the nose points. Not kept to unit length: the model normalises it.
     nose: { x: 0, y: 1, z: 0 },
 
@@ -159,6 +161,7 @@ export function createLureMove() {
       m.vy -= GRAVITY * time;
       if (!lands) return false;
       m.y = 0;
+      m.impact = Math.hypot(m.vx, m.vy, m.vz);
       m.vx = 0; m.vy = 0; m.vz = 0;
       return true;
     },

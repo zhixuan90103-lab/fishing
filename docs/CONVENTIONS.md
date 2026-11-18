@@ -6,7 +6,7 @@
 
 ## 1. 物料和玩法分开
 
-水面、鱼群、鱼竿、渔轮、鱼线、饵、手机瞄准都是**物料**：自己能看、能动，不含钓鱼规则。玩法在 `src/play/`，通过物料留的口子驱动它们，见 [PLAY.md](./PLAY.md)。
+水面、鱼群、鱼竿、渔轮、鱼线、饵、水花、手机瞄准都是**物料**：自己能看、能动，不含钓鱼规则。玩法在 `src/play/`，通过物料留的口子驱动它们，见 [PLAY.md](./PLAY.md)。
 
 - 钓鱼的规则只写在 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md)，代码只写在 `src/play/`。不要在水面、鱼群、鱼竿、鱼线、饵里另写一套抛投、咬口或拔河。
 - 物料对外只给**口子**，不给内部状态。现有的口子：
@@ -18,7 +18,8 @@
 | 渔轮 | `rod.reel.wind(米)`，或单独转 `rotor` / `handle`、移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
 | 鱼线 | `setEnd`、`setLength` / `tighten`、`stow`、`setTied` | `slack`、`tension`、`stiffness`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
 | 饵 | `lureMove` 的 `hold` / `hang` / `launch` / `fly` / `tow` / `point`，`lure.place` | 位置、速度、鼻尖朝向、`swum` | [LURE.md](./LURE.md) 第 5 节 |
-| 手机瞄准 | `lockLook` | — | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
+| 水花 | `burst(x, z, 力度)` | — | [SPLASH.md](./SPLASH.md) 第 5 节 |
+| 手机瞄准 | 玩法报出 `fishing.watch`（要镜头看着的点） | 瞄准的俯仰 | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
 | 震动 | `haptics.*` | — | [HAPTICS.md](./HAPTICS.md) |
 
 - **物料之间也只走口子。** 线要拉竿，走 `rod.setTipTether`；线要知道导环在哪，走 `rod.linePath`。手机的瞄准要动竿，走 `rod.setAim`。这三个是给物料用的，玩法不要直接调。想让竿受力，改线的远端或线长。
@@ -32,6 +33,7 @@
 | 鱼竿 | 设置面板"鱼竿"一栏；Node 里跑 `rodFlex.js` |
 | 鱼线 | Node 里跑 `lineCurve.js`；页面里甩一竿，饵落水后带竿 |
 | 饵 | Node 里跑 `lureMove.js` 的固定、挂、飞、拖 |
+| 水花 | Node 里跑 `splashBurst.js`；页面里甩一竿对着落点截图 |
 | 一竿的流程 | Node 里用假的竿和线跑 `fishing.js`；桌面用空格键代替手指 |
 | 手机瞄准 | Node 里给 `phoneLook.js` 喂合成的 `deviceorientation` 事件，读 `look()`；给 `aim.js` 喂转动和按住，读镜头和竿各得多少 |
 
@@ -96,12 +98,13 @@
 | 鱼竿 | 镜头 → `rodHold`（握）→ `rodFlex`（弯）→ `rod`（摆骨骼）；`rodBeam`（梁）在启动时解一次，供 `rodFlex` 查 |
 | 鱼线 | `rod.linePath`（竿上的点）→ `lineCurve`（形状）→ `line`（画）；`line` 再把远端和线长交回 `rod` |
 | 饵 | 玩法选动法 → `lureMove`（位置）→ 线的远端和 `lure`（模型） |
+| 水花 | 调用的人给位置和力度 → `splash`（记时间、画）← `splashBurst`（这一刻的形状） |
 | 玩法 | `swing`（甩多用力）、`retrieve`（收多快）、`lineOut`（线放出多长）→ `fishing`（这一竿走到哪）→ 物料的口子 |
 | 手机瞄准 | `phoneLook`（读姿态）→ `aim`（分给镜头和竿）→ 镜头，以及 `rodHold`（握）；`startShore` 的 `applyPhone` 串一帧 |
 
-- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`phoneLook.js`、`aim.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
+- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`splashBurst.js`、`phoneLook.js`、`aim.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
 - **只在启动时算一次的东西单独放。** 梁的振动和深弯表在 `rodBeam.js`，每帧的运动在 `rodFlex.js`。热路径只查表。
-- **`startShore.js` 只负责创建、接线和每帧调用。** 不要把游动、建模、弯曲、玩法写进去。玩法它只做三件事：创建 `fishing`，每帧把手指、有没有传感器、镜头朝向交给它，给它一个锁镜头的回调。每帧的顺序写在 [ENTRYPOINTS.md](./ENTRYPOINTS.md) 第 2 节，后面的依赖前面的。
+- **`startShore.js` 只负责创建、接线和每帧调用。** 不要把游动、建模、弯曲、玩法写进去。玩法它只做三件事：创建 `fishing`，每帧把手指、有没有传感器、镜头朝向和瞄准的俯仰交给它，把它报出的 `watch` 换成方向交给 `aim`。每帧的顺序写在 [ENTRYPOINTS.md](./ENTRYPOINTS.md) 第 2 节，后面的依赖前面的。
 
 ### 写法
 
@@ -151,7 +154,7 @@
 | 鱼线的形状 | 在 Node 里跑 `lineCurve.js`：画出的长度等于线长，两端对上，余线正负对 |
 | 线拉竿 | 远端固定，把线收短、把竿抬起和带向旁边，看张力稳定在多少；在 20、30、60 帧下张力应当收敛到同一个数。把线收短到 2 米、把竿带偏到 70°，打印每个关节的弯角：应当同号，从竿尾到竿尖平缓变化，不能有反向和单个关节的折角。再在页面里把余线拉到两头各看一眼 |
 | 手机瞄准的角度 | 在 Node 里给 `phoneLook.js` 喂由已知姿态算出的 `alpha` / `beta` / `gamma`：只转一个方向时另两个角应为 0，包括手机正好竖直的时候；转一整圈、大幅乱晃后回到原姿态，三个角应回到原值；`chaseAngle` 在 20、30、60、120 帧下结果一样 |
-| 镜头和竿怎么分 | 在 Node 里给 `aim.js` 喂一段转动：每一帧镜头加竿应当正好等于瞄准；按住时镜头的数不变，松开后镜头回到瞄准、竿回到 0；`reset` 之后镜头在给定的方向上 |
+| 镜头和竿怎么分 | 在 Node 里给 `aim.js` 喂一段转动：每一帧镜头加竿应当正好等于瞄准；按住时镜头的数不变，松开后镜头回到瞄准、竿回到 0；`reset` 之后镜头在给定的方向上。给它一个要看的方向：镜头转过去，开始和结束都没有一帧的突跳，各帧率下最快的转速一样，俯仰不出上下限；方向不动时俯仰只朝一个方向变，不来回；看完交还时让瞄准离镜头几十度，量镜头最快转多快，不能是一下甩过去 |
 | 饵的运动 | 在 Node 里跑 `lureMove.js`，20 到 120 帧各一遍：飞行的落点等于要的距离，按停以后落得更近；拖的时候饵的位置和线长各帧率一致，停手后拉长量回到 0；挂的时候离竿尖不超过线长，最后停在正下方 |
 | 收线的速度 | 在 Node 里跑 `retrieve.js`：各帧率下收的线长一个数都不差；松手再按，线速不跳 |
 | 线放出多长 | 在 Node 里跑 `lineOut.js`，或经 `fishing.js` 量落水前后的余线：各帧率下余线是渐渐退掉的，每帧的变化折合成速度没有尖峰 |
@@ -180,7 +183,8 @@
 | [ROD.md](./ROD.md) | 鱼竿和渔轮的设计 |
 | [PHONE-LOOK.md](./PHONE-LOOK.md) | 手机瞄准的设计：手机姿态怎么变成视线和竿的指向 |
 | [LINE.md](./LINE.md) | 鱼线的设计 |
-| [LURE.md](./LURE.md) | 饵的设计：模型和它的三种动法 |
+| [LURE.md](./LURE.md) | 饵的设计：模型和它的几种动法 |
+| [SPLASH.md](./SPLASH.md) | 水花的设计：放在海面上方的水冠、水珠和圈 |
 | [LINE-RESEARCH.md](./LINE-RESEARCH.md) | 鱼线做法的检索纪要，不是规格。和实现有出入的地方记在 LINE.md 第 4 节 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
@@ -191,7 +195,7 @@
 
 ### 物料的设计文档
 
-FISH-SCHOOL、ROD、LINE、LURE、PHONE-LOOK 是同一个写法，新加的物料照着来：
+FISH-SCHOOL、ROD、LINE、LURE、SPLASH、PHONE-LOOK 是同一个写法，新加的物料照着来：
 
 1. **状态**：一两句。实现到哪了，是不是物料，规则在哪份文档。
 2. **分层**：每个文件回答什么问题，数据往哪个方向走。
