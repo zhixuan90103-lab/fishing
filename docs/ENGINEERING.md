@@ -1,12 +1,12 @@
 # Engineering — Fishing
 
-配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [PHONE-LOOK.md](./PHONE-LOOK.md) · [LINE.md](./LINE.md) · [LURE.md](./LURE.md) · [SPLASH.md](./SPLASH.md) · [PLAY.md](./PLAY.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
+配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [PHONE-LOOK.md](./PHONE-LOOK.md) · [LINE.md](./LINE.md) · [LURE.md](./LURE.md) · [SPLASH.md](./SPLASH.md) · [NET.md](./NET.md) · [PLAY.md](./PLAY.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
 
 壳的底座叫 portrait-webgpu-base，`package.json` 的 `name` 还是这个名字。App 的包名以 `capacitor.config.ts` 为准。
 
 ## 1. 定位
 
-竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线、饵、水花和手机瞄准已经接上，都是物料。玩法以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，写在 `src/play/`：一竿能走到头（甩出、落水、长按收线，鱼游来咬上，遛到身边），鱼这一半是最窄的一版，咬口的种类、抬杆、出线和大鱼还没写，见 [PLAY.md](./PLAY.md)。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线、饵、水花、抄网和手机瞄准已经接上，都是物料。玩法以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，写在 `src/play/`：一竿能走到头（甩出、落水、长按收线，鱼游来咬上，带着线冲，耗到没力收到身边，提出水面落进抄网），每条鱼都直接咬死是替身，咬口的种类、抬杆、线断和线放尽还没写，见 [PLAY.md](./PLAY.md)。
 
 ## 2. 目录
 
@@ -41,17 +41,22 @@ Fishing/
 │   │   ├── reel.js         # 渔轮，四个可动部件，wind 按收的线长转
 │   │   └── minamo/         # 水面与场景，MIT
 │   ├── play/               # 玩法。唯一写钓鱼规则的地方，都不依赖 Three
-│   │   ├── fishing.js      # 这一竿走到哪：空杆、飞行、水里、挂着鱼
+│   │   ├── fishing.js      # 接线：饵这一半，和整竿走到哪一段
+│   │   ├── catch.js        # 接线：鱼这一半，游来、咬上、遛、提、进网
 │   │   ├── swing.js        # 甩多用力，抛多远
 │   │   ├── retrieve.js     # 空竿按住时线收多快
 │   │   ├── lineOut.js      # 竿尖外放出多长的线，线上的余线
 │   │   ├── visit.js        # 鱼怎么游到饵跟前，多近算碰钩
 │   │   ├── fight.js        # 钩住的鱼用多大力，气力，往哪游
-│   │   ├── scoop.js        # 抄网的圈随时间走到哪
-│   │   └── haul.js         # 挂着鱼时线收多快，出线点，线出多少
+│   │   ├── haul.js         # 挂着鱼时线收多快，出线点，线出多少
+│   │   ├── reelClick.js    # 渔轮在手里什么时候咔一下
+│   │   ├── tipWeight.js    # 提出水面的鱼在竿尖上算多重
+│   │   ├── kick.js         # 挂着的鱼这一刻甩多用力
+│   │   └── scoop.js        # 抄网的圈走到哪，鱼怎么落进网
 │   ├── fish/
 │   │   ├── school.js       # 岸边入口：40 条真鱼 + 动画
 │   │   ├── flock.js        # 一帧的流程，不依赖 Three
+│   │   ├── hung.js         # 出了水的鱼：嘴在哪，怎么挂、怎么甩。不依赖 Three
 │   │   ├── shoal.js        # 整群的朝向、深度、节奏
 │   │   ├── behaviors.js    # 状态、习性、归队
 │   │   ├── swim.js         # 怎么游过去
@@ -169,7 +174,8 @@ SceneDelegate.rootViewController = BridgeViewController()
 只改 storyboard **不够**：Capacitor 8 用 SceneDelegate 直接 `CAPBridgeViewController()`，会绕过 storyboard，HUD 出现 `plugin: false`，按钮无震。
 
 Swift **没有** `prepare`；引擎在 `load()` 启动。UIKit 反馈在主线程触发。验收用 HUD **点我震动**（`impact`）和状态行 `plugin: true`。  
-业务节奏（具名事件、cooldown、开关）写在游戏层，不要改插件除非新增原生方法。
+业务节奏（具名事件、cooldown、开关）写在游戏层，不要改插件除非新增原生方法。  
+玩法现在在哪几处震：钩住、出线和收线的咔咔、到身边、出水、落网、网里每甩一阵、网出画面。表在 [PLAY.md](./PLAY.md) 第 11 节，咔咔的节奏在 `src/play/reelClick.js`。
 
 ## 7b. Audio（尚未实现）
 
@@ -229,6 +235,8 @@ npm run cap:sync
 | 2026-11-18 | 抛投距离重新分配：角速度范围从 90 到 420 拉宽到 120 到 750°/秒，曲线前缓后陡，最近 4 米，轻甩和重甩的落点分得开。镜头看完落点交还给手机时缓缓起步，约一秒转回去，不再一下甩过去 |
 | 2026-11-18 | 整理：`aim.js` 里镜头的三种追法各成一段，加 `directionTo`；指针和空格键从 `startShore.js` 挪进 `finger.js`，设置面板挪进 `tunePanel.js`。只整理结构，瞄准和玩法的录数逐数相同，页面里拖动、按键、面板各验过一遍 |
 | 2026-11-18 | 规范整理：代码分成物料、玩法、输入和界面、接线四种；会动的东西加四条通则（换状态只换目标、数量不在一帧归零、给定点不给动点、贴着别的东西要取当帧位置）；加画的顺序和大小、调手感的读数、先填的数、桌面替身的规矩；验证加页面里走一遍的办法。AGENTS 的硬性约定收短，加第 15 条 |
+| 2026-11-18 | 规范整理：加"什么时候归玩法、成什么样归物料"、替身要标、随机数从外面给；会动的东西加六条（硬的按位置追、隔一帧互相读的不要互相顶、任意方向不用朝向角、叠在姿态上的量不跳、按量不按时间、看不见才能一步挪）；加"让人感觉得到"一节；验证加多跑种子、页面跑不稳要说、整理前先留一份；文档加按现状重写、试过不行的留一句、节号动了全工程搜。ROD、LINE、SPLASH、PHONE-LOOK 里过时的"以后"改成现状 |
+| 2026-11-18 | 整理：`fishing.js` 只留饵这一半和整竿走到哪一段，鱼这一半挪进 `catch.js`；咔咔、鱼压竿多重、鱼甩多用力各成一个只算数的文件（`reelClick.js`、`tipWeight.js`、`kick.js`）；出了水的鱼怎么摆从 `flock.js` 挪进 `hung.js`。PLAY.md 按文件重写，FISH-SCHOOL.md 把出了水的鱼单列一节。只整理结构：五种按法、十条鱼，玩法对物料的每一次调用和每条鱼每帧的位置姿态，前后 1941 万个数逐个相同 |
 | 2026-11-18 | 抄网改成鱼落进去：网停在鱼下面，鱼脱钩落进网兜，圈被砸得一沉再弹回，网兜坠长、晃动，网把鱼端起来再带出画面；饵留在线上。挂着的鱼多了整条身子的左右荡，`hang` 多收一个"甩多用力"：出水时和落网时猛甩，在网里一阵一阵地甩。出水时溅一次水花 |
 | 2026-11-18 | 钓上来的鱼不再掉回水里：增加抄网（`src/shore/net.js`，路径 `src/play/scoop.js`，文档 NET.md），从左边进来兜住鱼、带出画面，这一竿结束，剩下的线自己收完。鱼群的 `drop` 换成 `keep`：看不见的鱼在画面外交还给鱼群。鱼嘴的位置按模型重新量：在中线下面 0.073 个体长，之前放在中线上，线连到了额头 |
 | 2026-11-18 | 饵按自重下沉（0.35 米/秒，到约 2.4 米停住），被拉着时顺着线上来、不浅过 0.4 米；需求第 5、7 节同步改。挂在线上和掉落的鱼改用鼻尖和背两个向量记方向，不再在鱼头过竖直时翻面，入水时背朝上。遛鱼把冲和歇拉开：冲是猛地加速、带着线左右急窜、往下扎，起冲时翻水花；歇是几乎不动；歇有时被掐短 |
