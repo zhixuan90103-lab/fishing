@@ -15,10 +15,12 @@ import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
 import { createLure } from './lure.js';
 import { createSplash } from './splash.js';
+import { createNet } from './net.js';
 import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
 import { PITCH_LIMIT, createAim, directionTo } from './aim.js';
 import { createFinger } from './finger.js';
+import { haptics } from '../utils/haptics';
 import { mountTunePanel } from './tunePanel.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
@@ -237,8 +239,11 @@ export async function startShore(container, hooks = {}) {
   const onWater = new THREE.Scene();
   const splash = createSplash();
   onWater.add(splash.object);
-  // The cast: it alone says where the line ends, how much is out and where the view looks.
-  const fishing = createFishing({ rod, line, lure, splash });
+  // The cast: it alone says where the line ends, how much is out, where the view looks
+  // and which fish is on the line.
+  const net = createNet();
+  scene.add(net.object);
+  const fishing = createFishing({ rod, line, lure, splash, school: shoreSchool, net, haptics });
   let fishingBegun = false;
   // The panel's cast readout is refreshed every this many frames.
   const READOUT_EVERY = 6;
@@ -343,6 +348,14 @@ export async function startShore(container, hooks = {}) {
       waveDirty = false;
     }
     particles.update(camera, time);
+    // The fish first: a lure in a fish's mouth is put where the mouth is this frame.
+    shoreSchool.update(dt, tune.swimRate, world.rocks, {
+      x: tune.x,
+      z: tune.z,
+      yaw: (tune.yaw * Math.PI) / 180,
+      fov: camera.fov,
+      aspect: camera.aspect,
+    });
     if (fishingBegun) {
       fishingInput.sensor = phone.active;
       // With a phone the touch is the finger. Without one a touch turns the view, so the
@@ -363,20 +376,14 @@ export async function startShore(container, hooks = {}) {
       if (tuneUi.open && readoutIn <= 0) {
         readoutIn = READOUT_EVERY;
         tuneUi.setCast(
-          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 甩 ${Math.round(fishing.swing)}°/秒 · 上次松手 ${Math.round(fishing.lastRelease)}°/秒`,
+          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 甩 ${Math.round(fishing.swing)}°/秒 · 上次松手 ${Math.round(fishing.lastRelease)}°/秒`
+            + ` · 鱼 ${fishing.fish} ${fishing.mood} · 张力 ${fishing.tension.toFixed(1)} 牛 · 鱼的力 ${fishing.pull.toFixed(1)} 牛 · 出线 ${fishing.running.toFixed(1)} 米/秒 · 气力 ${Math.round(fishing.stamina * 100)} · 钓到 ${fishing.landed}`,
         );
       }
     } else {
       fishing.begin();
       fishingBegun = true;
     }
-    shoreSchool.update(dt, tune.swimRate, world.rocks, {
-      x: tune.x,
-      z: tune.z,
-      yaw: (tune.yaw * Math.PI) / 180,
-      fov: camera.fov,
-      aspect: camera.aspect,
-    });
 
     let enc = device.createCommandEncoder({ label: 'ocean' });
     ocean.update(dt, enc, camera.position, sun.dir);
@@ -434,13 +441,14 @@ export async function startShore(container, hooks = {}) {
   return {
     resize,
     camera,
-    // The cast in progress: its stage and how much line is out. Read only.
+    // The cast in progress: its stage, how much line is out, the fish. Read only.
     fishing,
     dispose() {
       running = false;
       tuneUi.remove();
       finger.dispose();
       splash.dispose();
+      net.dispose();
       lure.dispose();
       line.dispose();
       rod.dispose();

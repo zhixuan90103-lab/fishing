@@ -74,6 +74,11 @@ export function createLineOut() {
       return taken;
     },
 
+    // Line pulled off the reel by a fish.
+    pay(metres) {
+      out.length += metres;
+    },
+
     // Let out whatever the line is stretched by, so the far end is not snapped inward.
     ease(gap) {
       out.length = Math.max(out.length, gap);

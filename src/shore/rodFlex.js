@@ -87,6 +87,9 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
   }
   sharePull();
   const bent = new Float64Array(nodes * 3);
+  // The grip last frame, as objects, for re-placing the modes when the tip load changes.
+  const held = { x: 0, y: 0, z: 0 };
+  const heldAxis = { x: 0, y: 1, z: 0 };
 
   function rigidPlace(out, butt, axis) {
     for (let m = 0; m < modes.length; m += 1) {
@@ -301,14 +304,32 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       return modes.map((m) => m.omega / (Math.PI * 2));
     },
 
-    // Extra mass riding on the tip, kg: the lure while it hangs there. Slows every mode.
+    // Extra mass riding on the tip, kg: the lure while it hangs there, or a fish lifted
+    // out of the water. Slows every mode and sags the blank. The blank keeps the bend and
+    // the motion it has and takes up the new weight from there, so put a heavy weight on
+    // in small steps, not all at once.
     setTipLoad(kg) {
       const value = Math.max(0, kg);
       if (value === load) return;
       load = value;
+      const before = modes;
       modes = beam.modes(load, count);
       sharePull();
-      stale = true;
+      if (stale) return;
+      // Each mode's shape is scaled by its mass, which has just changed. Keep where the
+      // tip is, not the number.
+      held.x = prevBx; held.y = prevBy; held.z = prevBz;
+      heldAxis.x = prevAx; heldAxis.y = prevAy; heldAxis.z = prevAz;
+      rigidPlace(base, held, heldAxis);
+      for (let m = 0; m < modes.length; m += 1) {
+        const same = before[m].tip / modes[m].tip;
+        for (let c = 0; c < 3; c += 1) {
+          const o = m * 3 + c;
+          q[o] *= same;
+          v[o] *= same;
+          z[o] = base[o] + q[o];
+        }
+      }
     },
 
     // A steady force on the tip, world space, newtons. Only the part across the blank

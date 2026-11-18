@@ -14,6 +14,8 @@ import { clamp, wrapPi, TURN_ALONE, ACCEL_DART } from './swim.js';
 export const SCHOOL = 'school';
 export const STRAY = 'stray';
 export const HELD = 'held';
+// Out of the water on someone's line. It does not swim.
+export const HUNG = 'hung';
 
 // Past this distance from the centre a schooling fish heads back in.
 const HOME_RANGE = 2.4;

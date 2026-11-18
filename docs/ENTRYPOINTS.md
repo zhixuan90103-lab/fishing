@@ -26,8 +26,9 @@ index.html
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
             → 饵 createLure，加在场景根上（docs/LURE.md）
             → 水花 createSplash，加在水面之后画的场景 onWater 里（docs/SPLASH.md）
-            → 玩法 createFishing({ rod, line, lure, splash })（docs/PLAY.md）
-            → 每帧：fishing.update → applyPhone → rod.update → line.update → splash.update → fishing.follow → shoreSchool.update → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
+            → 抄网 createNet，加在场景根上，平时藏着（docs/NET.md）
+            → 玩法 createFishing({ rod, line, lure, splash, school, net, haptics })（docs/PLAY.md）
+            → 每帧：shoreSchool.update → fishing.update → applyPhone → rod.update → line.update → splash.update → fishing.follow → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
             → 手指 createFinger(#shore-view)
             → 设置面板 mountTunePanel（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
@@ -35,7 +36,7 @@ index.html
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
 ```
 
-鱼群一帧（`shoreSchool.update`）：
+鱼群一帧（`shoreSchool.update`，在玩法之前：饵在鱼嘴里时取的是鱼这一帧的位置）：
 
 ```
 school.js update
@@ -46,7 +47,7 @@ school.js update
   → 尾巴动画 mixer.update → 脊柱波 poseSpine
 ```
 
-玩法一帧（`fishing.update` 在最前面，`fishing.follow` 在 `line.update` 之后。第一帧的 `line.update` 之后先调一次 `fishing.begin`）：
+玩法一帧（`fishing.update` 在鱼群之后、手机和竿之前，`fishing.follow` 在 `line.update` 之后。第一帧的 `line.update` 之后先调一次 `fishing.begin`）：
 
 ```
 fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
@@ -56,6 +57,15 @@ fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
   → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → splash.burst，落点换成真正的位置，lineOut.land，line.setTied(true)
   → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
            靠近竿尖 → lureMove.hang，watch 变空；线收完 → ready
+           落水几秒后 school.take 最近的一条鱼，它的 brain 是 visit.steerToLure；嘴碰到饵 → fight
+  → fight：fight.step 鱼的冲和歇、气力 → school.mouth 鱼嘴在哪 → haul.step 按 line.tension 得出收多少线 → rod.reel.wind → 饵放到鱼嘴上
+           haul.slip 张力过了出线点让出多少线；出线和收线按线长震（haptics.playTransient）
+           watch 慢慢跟着鱼；鱼的 brain 是 fight.steer，读线被拉长多少
+           鱼没力出线、又到了身边 → landed
+  → landed：haul.step 提线 → lureMove.hang → school.hang 把鱼挂在饵上 → 提到头吊一小会儿 → scoop.begin 叫抄网
+           出水一半：甩得更用力，splash.burst
+           scoop.step 圈在哪 → net.place；鱼脱钩落进网，school.hang 用 scoop 给的位置，饵留在线上 → 网出画面：school.keep，net.hide，回到 water（饵已出水，线自己收完）
+  → 每帧最后：竿尖上的重量一小步一小步交给 rod.setTipLoad
   → line.setEnd / setLength，lureMove.point，lure.place
 fishing.js follow()
   → ready：把饵摆到这一帧的 line.end 上，鼻尖朝上
@@ -156,6 +166,15 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 这一竿怎么走、手指是什么意思 | [PLAY.md](./PLAY.md)，`src/play/fishing.js` |
 | 抛多远、多用力才算抛 | `src/play/swing.js` |
 | 收线的快慢 | `src/play/retrieve.js` |
+| 鱼多久来、来哪条、多近算到身边 | `src/play/fishing.js` 的 `COME_AFTER`、`nearestFish`、`LAND_WITHIN` |
+| 鱼游向饵的快慢、多近算碰钩 | `src/play/visit.js` |
+| 钩住的鱼冲多大力、冲多久、怎么绕 | `src/play/fight.js` |
+| 挂着鱼时收多快、出线点、线怎么出 | `src/play/haul.js` |
+| 出线和收线时手里咔多密、提鱼提多高、吊多久叫网、网从哪边来、鱼压竿多重 | `src/play/fishing.js` 顶部的常量 |
+| 挂在线上的鱼怎么甩、鱼嘴在哪、被带走的鱼从哪回来 | `src/fish/flock.js` 的 `hang`、`mouth`、`keep` |
+| 抄网走的路、快慢 | [NET.md](./NET.md)，`src/play/scoop.js` |
+| 抄网的外形 | `src/shore/net.js` |
+| 被取走的鱼能写哪些目标、鱼嘴在哪 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 6 节，`src/fish/swim.js`、`src/fish/flock.js` |
 | 线上的弧多大、落水后直得多快、收好时留多长 | `src/play/lineOut.js` |
 | 设置面板里"这一竿"的读数 | 文字在 `src/shore/startShore.js`，显示在 `tunePanel.js` 的 `setCast`，样式 `.tune-cast` |
 | 饵怎么飞、怎么荡、在水里怎么跟线、鼻尖怎么转 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |

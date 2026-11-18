@@ -5,7 +5,7 @@
  * reporting how far a pressed pointer has dragged.
  * Does not own: what a press means, which of the two counts as the finger, or what a
  * drag does. startShore.js decides those: a drag turns the view only without a phone.
- * Design: docs/PLAY.md section 7.
+ * Design: docs/PLAY.md section 9.
  *
  * On a phone the finger is the touch. On a desktop a press on the view is how the view
  * is turned, so it cannot also be the finger: the space bar is.

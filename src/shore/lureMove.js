@@ -32,11 +32,21 @@ const BRAKE_RATE = 5;
 // Towed: the pull it takes to move the lure through water, newtons per m/s. This is the
 // tension a steady retrieve puts on the rod: speed times this.
 const WATER_DRAG = 0.35;
-// The depth it swims at and holds when the line stops, metres.
-export const SWIM_DEPTH = -0.4;
-// How fast it returns to that depth, 1/s.
-const DEPTH_RATE = 3;
-// It holds its depth while further out than DEPTH_FAR from under the tip, and lets the
+// It sinks under its own weight: this fast when nothing is pulling it, m/s. A 10 g
+// sinking minnow.
+export const SINK_SPEED = 0.35;
+// The deepest it goes, metres, and how far above that it starts to slow: it settles, it
+// does not hit a floor.
+export const SINK_FLOOR = -2.4;
+const SINK_EASE = 0.5;
+// Pulled along this fast, m/s, its lip holds it up and it stops sinking. Slower, it
+// sinks at a share of SINK_SPEED.
+const PLANE_SPEED = 0.9;
+// Pulled, it comes up along the line, but its lip keeps it from breaking the surface: it
+// runs no shallower than this, metres, and noses back down to it this fast, 1/s.
+export const RUN_DEPTH = -0.4;
+const RUN_RATE = 3;
+// It sinks freely while further out than DEPTH_FAR from under the tip, and lets the
 // line lift it freely inside DEPTH_NEAR, metres.
 const DEPTH_NEAR = 1.5;
 const DEPTH_FAR = 4;
@@ -168,7 +178,8 @@ export function createLureMove() {
 
     /**
      * In the water on a line. The lure only moves when the line is stretched: it is pulled
-     * toward the tip as fast as the tension can drag it, tension = WATER_DRAG * speed.
+     * toward the tip as fast as the tension can drag it, tension = WATER_DRAG * speed. Left
+     * alone it sinks.
      * length is the line out at the end of the frame, taken is how much of it was wound
      * in during the frame, stiffness is the line's, N/m. Exact for an even wind.
      */
@@ -201,10 +212,14 @@ export function createLureMove() {
       m.vx = (dx / (d || 1)) * (pulled / dt);
       m.vy = (dy / (d || 1)) * (pulled / dt);
       m.vz = (dz / (d || 1)) * (pulled / dt);
-      // Swim back down to its depth, less and less as it comes in under the tip.
+      // It sinks under its own weight: all the way while it lies still, less the faster
+      // it is pulled, and less and less as it comes in under the tip.
       const level = Math.hypot(tip.x - m.x, tip.z - m.z);
       const hold = smooth((level - DEPTH_NEAR) / (DEPTH_FAR - DEPTH_NEAR));
-      m.y += (SWIM_DEPTH - m.y) * (1 - Math.exp(-DEPTH_RATE * hold * dt));
+      const still = Math.max(0, 1 - pulled / dt / PLANE_SPEED);
+      const room = smooth((m.y - SINK_FLOOR) / SINK_EASE);
+      m.y -= SINK_SPEED * still * hold * room * dt;
+      if (m.y > RUN_DEPTH) m.y += (RUN_DEPTH - m.y) * (1 - Math.exp(-RUN_RATE * hold * dt));
       if (m.y > 0) m.y = 0;
     },
   };

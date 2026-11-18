@@ -20,7 +20,9 @@ export const TURN_ALONE = 4.2;
 // How fast speed rises toward the aim. Slowing down is always the slow coast.
 export const ACCEL_CRUISE = 0.7;
 export const ACCEL_DART = 2.6;
-const COAST = 0.22;
+export const COAST = 0.22;
+// How fast a fish closes on the depth it wants, 1/s.
+export const DEPTH_RATE = 0.45;
 
 export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -33,7 +35,10 @@ export function wrapPi(a) {
 }
 
 export function makeAim() {
-  return { yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE };
+  return {
+    yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE,
+    slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX,
+  };
 }
 
 export function makeCrowd(count) {
@@ -138,6 +143,9 @@ export function writePose(fish) {
 /**
  * aim: yaw, speed, y are where the fish wants to be heading. cruise is its unhurried
  * speed right now, the yardstick for effort. turn and accel are how sharply it may react.
+ * slow is how fast it loses speed, rise how fast it changes depth, top the shallowest it
+ * may go. Those three are the school's own unless whoever took the fish says otherwise:
+ * a fish on a line is stopped by it, and comes up to a lure near the surface.
  * crowdX/Y/Z is this fish's entry from measureCrowd.
  */
 export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
@@ -157,7 +165,7 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   const want = (aim.speed - fish.speed) / Math.max(aim.cruise, 0.05);
   const driveAim = clamp(0.55 + want * 1.5, 0.12, 1.3);
   fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-5 * dt));
-  const k = aim.speed > fish.speed ? aim.accel : COAST;
+  const k = aim.speed > fish.speed ? aim.accel : aim.slow;
   fish.speed += (aim.speed - fish.speed) * (1 - Math.exp(-k * dt));
 
   const yawErr = wrapPi(aim.yaw - fish.yaw);
@@ -189,7 +197,9 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   }
 
   const yBefore = fish.y;
-  fish.y = clamp(fish.y + (aim.y - fish.y) * (1 - Math.exp(-0.45 * dt)), DEPTH_MIN, DEPTH_MAX);
+  // A fish handed back above the school's water is not dropped into it: it swims down.
+  const top = Math.max(aim.top, yBefore);
+  fish.y = clamp(fish.y + (aim.y - fish.y) * (1 - Math.exp(-aim.rise * dt)), DEPTH_MIN, top);
   const vy = dt > 0 ? (fish.y - yBefore) / dt : 0;
   const pitchAim = -Math.atan2(vy, Math.max(fish.speed, 0.04));
   fish.pitch += (clamp(pitchAim, -0.4, 0.4) - fish.pitch) * (1 - Math.exp(-1.2 * dt));

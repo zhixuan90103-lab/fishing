@@ -29,12 +29,15 @@ export async function createShoreSchool(scene) {
     scene.add(fish.holder);
     fishes.push(fish);
   }
-  const flock = createFlock(fishes, { roamers: ROAM_COUNT });
+  const flock = createFlock(fishes, { roamers: ROAM_COUNT, bodyLength: BODY_LENGTH });
   return {
     fishes,
     place: flock.place,
     take: flock.take,
     giveBack: flock.giveBack,
+    mouth: flock.mouth,
+    hang: flock.hang,
+    keep: flock.keep,
     update(dt, rate, rocks, cam) {
       flock.step(dt, rate, rocks, cam);
       // The tail beats in step with the distance covered, then the spine wave goes on top.

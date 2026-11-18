@@ -6,7 +6,7 @@
 
 ## 1. 定位
 
-竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线、饵、水花和手机瞄准已经接上，都是物料。玩法以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，写在 `src/play/`：一竿的前半段（甩出、落水、长按收线）已经有了，咬口和拔河还没写，见 [PLAY.md](./PLAY.md)。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线、饵、水花和手机瞄准已经接上，都是物料。玩法以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，写在 `src/play/`：一竿能走到头（甩出、落水、长按收线，鱼游来咬上，遛到身边），鱼这一半是最窄的一版，咬口的种类、抬杆、出线和大鱼还没写，见 [PLAY.md](./PLAY.md)。
 
 ## 2. 目录
 
@@ -37,13 +37,18 @@ Fishing/
 │   │   ├── lureMove.js     # 饵怎么动：固定、挂、飞、拖，鼻尖朝哪。不依赖 Three
 │   │   ├── splash.js       # 水花：画水冠、水珠和圈
 │   │   ├── splashBurst.js  # 水花随时间的形状。不依赖 Three
+│   │   ├── net.js          # 抄网的模型
 │   │   ├── reel.js         # 渔轮，四个可动部件，wind 按收的线长转
 │   │   └── minamo/         # 水面与场景，MIT
 │   ├── play/               # 玩法。唯一写钓鱼规则的地方，都不依赖 Three
-│   │   ├── fishing.js      # 这一竿走到哪：空杆、飞行、水里
+│   │   ├── fishing.js      # 这一竿走到哪：空杆、飞行、水里、挂着鱼
 │   │   ├── swing.js        # 甩多用力，抛多远
 │   │   ├── retrieve.js     # 空竿按住时线收多快
-│   │   └── lineOut.js      # 竿尖外放出多长的线，线上的余线
+│   │   ├── lineOut.js      # 竿尖外放出多长的线，线上的余线
+│   │   ├── visit.js        # 鱼怎么游到饵跟前，多近算碰钩
+│   │   ├── fight.js        # 钩住的鱼用多大力，气力，往哪游
+│   │   ├── scoop.js        # 抄网的圈随时间走到哪
+│   │   └── haul.js         # 挂着鱼时线收多快，出线点，线出多少
 │   ├── fish/
 │   │   ├── school.js       # 岸边入口：40 条真鱼 + 动画
 │   │   ├── flock.js        # 一帧的流程，不依赖 Three
@@ -142,8 +147,8 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 落水的水花是放在海面上方的几何体，不算改水面，见 [SPLASH.md](./SPLASH.md)。它半透明，所以不在主场景里，在水面之后单独画的 `onWater` 场景里；半透明的东西放进主场景会在水面上留洞。还没做、也不算改水面：气泡、咬口涟漪。
-- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。玩法以后通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
-- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `fishing.update`，再 `applyPhone`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
+- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。玩法通过 `take` / `giveBack` 取鱼和放回，用 `mouth` 读鱼嘴的位置，规则不写进鱼群。
+- 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `shoreSchool.update`，再 `fishing.update`、`applyPhone`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
 
 ## 7. Haptics
 
@@ -224,4 +229,9 @@ npm run cap:sync
 | 2026-11-18 | 抛投距离重新分配：角速度范围从 90 到 420 拉宽到 120 到 750°/秒，曲线前缓后陡，最近 4 米，轻甩和重甩的落点分得开。镜头看完落点交还给手机时缓缓起步，约一秒转回去，不再一下甩过去 |
 | 2026-11-18 | 整理：`aim.js` 里镜头的三种追法各成一段，加 `directionTo`；指针和空格键从 `startShore.js` 挪进 `finger.js`，设置面板挪进 `tunePanel.js`。只整理结构，瞄准和玩法的录数逐数相同，页面里拖动、按键、面板各验过一遍 |
 | 2026-11-18 | 规范整理：代码分成物料、玩法、输入和界面、接线四种；会动的东西加四条通则（换状态只换目标、数量不在一帧归零、给定点不给动点、贴着别的东西要取当帧位置）；加画的顺序和大小、调手感的读数、先填的数、桌面替身的规矩；验证加页面里走一遍的办法。AGENTS 的硬性约定收短，加第 15 条 |
+| 2026-11-18 | 抄网改成鱼落进去：网停在鱼下面，鱼脱钩落进网兜，圈被砸得一沉再弹回，网兜坠长、晃动，网把鱼端起来再带出画面；饵留在线上。挂着的鱼多了整条身子的左右荡，`hang` 多收一个"甩多用力"：出水时和落网时猛甩，在网里一阵一阵地甩。出水时溅一次水花 |
+| 2026-11-18 | 钓上来的鱼不再掉回水里：增加抄网（`src/shore/net.js`，路径 `src/play/scoop.js`，文档 NET.md），从左边进来兜住鱼、带出画面，这一竿结束，剩下的线自己收完。鱼群的 `drop` 换成 `keep`：看不见的鱼在画面外交还给鱼群。鱼嘴的位置按模型重新量：在中线下面 0.073 个体长，之前放在中线上，线连到了额头 |
+| 2026-11-18 | 饵按自重下沉（0.35 米/秒，到约 2.4 米停住），被拉着时顺着线上来、不浅过 0.4 米；需求第 5、7 节同步改。挂在线上和掉落的鱼改用鼻尖和背两个向量记方向，不再在鱼头过竖直时翻面，入水时背朝上。遛鱼把冲和歇拉开：冲是猛地加速、带着线左右急窜、往下扎，起冲时翻水花；歇是几乎不动；歇有时被掐短 |
+| 2026-11-18 | 遛鱼加出线和气力：鱼有力时冲的力高于出线点（4.5 牛），线被带出去，按着也收不动；冲和被收都耗气力，耗尽以后才收得到身边。出线和收线按线长打震动。到身边以后鱼咬着饵挂在线上被提出水面，重量压在竿尖上，举一会儿掉回水里。鱼群加 `hang`、`drop` 和 `hung`、`dropped` 两个状态；`rod.setTipLoad` 改重量时不再让竿重新落位。没被取走的鱼和没有鱼的一竿，前后逐数相同 |
+| 2026-11-18 | 一竿走到头的最窄一版：饵落水几秒后，离它最近的一条鱼游过来，嘴碰到饵就钩住（每条都咬死，替身）；鱼冲一阵歇一阵，竿被线拉弯；按住是顶着鱼收线，越接近出线点越慢；收到身边算钓到，鱼放回鱼群（替身，不是离水）。新文件 `src/play/visit.js`、`fight.js`、`haul.js`。鱼群加 `mouth`，被取走的鱼多三个目标 `aim.slow`、`aim.rise`、`aim.top`；鱼群改到每帧最前面更新。没被取走的鱼和没有鱼的一竿，前后逐数相同 |
 | 2026-11-17 | 弹出转动权限框的 `MotionPromptProxy` 补进真源 `plugins/native-haptics/BridgeViewController.swift`，之前只在 `ios/` 的副本里 |
