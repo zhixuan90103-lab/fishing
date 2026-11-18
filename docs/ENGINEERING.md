@@ -1,12 +1,12 @@
 # Engineering — Fishing
 
-配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [LINE.md](./LINE.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
+配套：[AGENTS.md](../AGENTS.md) · [CONVENTIONS.md](./CONVENTIONS.md) · [ENTRYPOINTS.md](./ENTRYPOINTS.md) · [FISH-SCHOOL.md](./FISH-SCHOOL.md) · [ROD.md](./ROD.md) · [PHONE-LOOK.md](./PHONE-LOOK.md) · [LINE.md](./LINE.md) · [LURE.md](./LURE.md) · [SPLASH.md](./SPLASH.md) · [PLAY.md](./PLAY.md) · [AUDIO.md](./AUDIO.md) · [HAPTICS.md](./HAPTICS.md) · [MERGE.md](./MERGE.md)
 
 壳的底座叫 portrait-webgpu-base，`package.json` 的 `name` 还是这个名字。App 的包名以 `capacitor.config.ts` 为准。
 
 ## 1. 定位
 
-竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线已经接上，都是物料。钓鱼状态机以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，还没写。
+竖屏 WebGPU 钓鱼壳：能 dev、能 build、能真机、能震动，桌面预览接近手机/Pad。岸边水面、鱼群、鱼竿、鱼线、饵、水花和手机瞄准已经接上，都是物料。玩法以 [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) 为准，写在 `src/play/`：一竿的前半段（甩出、落水、长按收线）已经有了，咬口和拔河还没写，见 [PLAY.md](./PLAY.md)。
 
 ## 2. 目录
 
@@ -22,11 +22,13 @@ Fishing/
 ├── src/
 │   ├── main.ts             # 安全区、舞台、startShore、震动 HUD
 │   ├── shore/
-│   │   ├── startShore.js   # 岸边启动、设置面板、镜头。只创建和每帧调用
+│   │   ├── startShore.js   # 岸边启动、每帧的顺序、摆镜头。只创建、接线和每帧调用
+│   │   ├── finger.js       # 手指：画面上按没按着、拖了多远，桌面的空格键
+│   │   ├── tunePanel.js    # 设置面板的 DOM
 │   │   ├── rod.js          # 鱼竿：模型、骨骼，串起下面三层
 │   │   ├── rodHold.js      # 握：竿在镜头前的位置和滞后，加上手机的瞄准
 │   │   ├── phoneLook.js    # 手机瞄准：把姿态读成三个角。不依赖 Three
-│   │   ├── aim.js          # 手机瞄准：一个方向分给镜头和竿。不依赖 Three
+│   │   ├── aim.js          # 手机瞄准：镜头追什么，剩下的给竿。不依赖 Three
 │   │   ├── rodBeam.js      # 梁：沿竿的软硬和轻重，启动时解一次。不依赖 Three
 │   │   ├── rodFlex.js      # 弯：每帧的惯性和回弹。不依赖 Three
 │   │   ├── line.js         # 鱼线：画线，把竿尖系在远端上
@@ -140,7 +142,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
 - 落水的水花是放在海面上方的几何体，不算改水面，见 [SPLASH.md](./SPLASH.md)。它半透明，所以不在主场景里，在水面之后单独画的 `onWater` 场景里；半透明的东西放进主场景会在水面上留洞。还没做、也不算改水面：气泡、咬口涟漪。
-- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。钓鱼状态机通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
+- 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。玩法以后通过 `take` / `giveBack` 取鱼和放回，规则不写进鱼群。
 - 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `fishing.update`，再 `applyPhone`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
 
 ## 7. Haptics
@@ -220,4 +222,6 @@ npm run cap:sync
 | 2026-11-18 | 镜头改成只转向落点一次、停在那里，不再跟着饵先仰后俯，收线时也不动。增加落水的水花：水冠、水珠和圈，放在海面上方，不动海面；大小按 10 克的饵定，远处的画得稍大 |
 | 2026-11-18 | 水花缩到 10 克的饵该有的大小，并改成半透明。为此加了一个在水面之后画的场景 `onWater`，落在水面上的半透明物都放这里 |
 | 2026-11-18 | 抛投距离重新分配：角速度范围从 90 到 420 拉宽到 120 到 750°/秒，曲线前缓后陡，最近 4 米，轻甩和重甩的落点分得开。镜头看完落点交还给手机时缓缓起步，约一秒转回去，不再一下甩过去 |
+| 2026-11-18 | 整理：`aim.js` 里镜头的三种追法各成一段，加 `directionTo`；指针和空格键从 `startShore.js` 挪进 `finger.js`，设置面板挪进 `tunePanel.js`。只整理结构，瞄准和玩法的录数逐数相同，页面里拖动、按键、面板各验过一遍 |
+| 2026-11-18 | 规范整理：代码分成物料、玩法、输入和界面、接线四种；会动的东西加四条通则（换状态只换目标、数量不在一帧归零、给定点不给动点、贴着别的东西要取当帧位置）；加画的顺序和大小、调手感的读数、先填的数、桌面替身的规矩；验证加页面里走一遍的办法。AGENTS 的硬性约定收短，加第 15 条 |
 | 2026-11-17 | 弹出转动权限框的 `MotionPromptProxy` 补进真源 `plugins/native-haptics/BridgeViewController.swift`，之前只在 `ios/` 的副本里 |

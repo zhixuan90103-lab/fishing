@@ -17,10 +17,15 @@ import { createLure } from './lure.js';
 import { createSplash } from './splash.js';
 import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
-import { PITCH_LIMIT, createAim } from './aim.js';
+import { PITCH_LIMIT, createAim, directionTo } from './aim.js';
+import { createFinger } from './finger.js';
+import { mountTunePanel } from './tunePanel.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
+
+// Degrees the view turns per CSS pixel dragged, without a phone.
+const DRAG_DEG_PER_PIXEL = 0.17;
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -165,14 +170,6 @@ export async function startShore(container, hooks = {}) {
   const NOT_TURNED = { yaw: 0, pitch: 0, roll: 0 };
   // The direction from the eye to what the cast wants watched, for the aim. Reused.
   const watchDir = { yaw: 0, pitch: 0 };
-  const directionTo = (point) => {
-    const dx = point.x - tune.x;
-    const dy = point.y - tune.y;
-    const dz = point.z - tune.z;
-    watchDir.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-    watchDir.pitch = Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI;
-    return watchDir;
-  };
   // Positive yaw turns toward the camera's left. The eye stays at the panel's position
   // and the horizon never rolls.
   const placeLook = (yawDeg, pitchDeg) => {
@@ -208,9 +205,9 @@ export async function startShore(container, hooks = {}) {
     const watch = fishingBegun && fishing.watch;
     aim.step(
       phone.active ? phone.look() : NOT_TURNED,
-      phone.active && pressing,
+      phone.active && finger.touching,
       dt,
-      watch ? directionTo(watch) : null,
+      watch ? directionTo(tune, watch, watchDir) : null,
     );
     placeLook(aim.viewYaw, aim.viewPitch);
     rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll);
@@ -235,12 +232,12 @@ export async function startShore(container, hooks = {}) {
   scene.add(line.object);
   const lure = createLure();
   scene.add(lure.object);
-  // The cast: it alone says where the line ends, how much is out and what the view watches.
   // Things lying on the water that are see-through. Drawn after the water, or they would
   // be blended with the sea bed and left as holes in it.
   const onWater = new THREE.Scene();
   const splash = createSplash();
   onWater.add(splash.object);
+  // The cast: it alone says where the line ends, how much is out and where the view looks.
   const fishing = createFishing({ rod, line, lure, splash });
   let fishingBegun = false;
   // The panel's cast readout is refreshed every this many frames.
@@ -279,17 +276,7 @@ export async function startShore(container, hooks = {}) {
     rt._needsPostBind = true;
   }
 
-  let dragging = false;
-  let pressing = false;
-  // Desktop stand-in for the finger: there a drag turns the view, so the space bar presses.
-  let spaceDown = false;
-  const onKey = (e) => {
-    if (e.code !== 'Space') return;
-    spaceDown = e.type === 'keydown';
-    e.preventDefault();
-  };
-  window.addEventListener('keydown', onKey);
-  window.addEventListener('keyup', onKey);
+  const finger = createFinger(canvas);
   const yawInput = { el: null };
   const pitchInput = { el: null };
   const phoneHint = document.createElement('button');
@@ -306,21 +293,11 @@ export async function startShore(container, hooks = {}) {
       else phoneHint.textContent = '没有转动权限，仍用拖动看画面';
     });
   });
-  const endPress = () => {
-    pressing = false;
-    dragging = false;
-  };
-  canvas.addEventListener('pointerdown', (e) => {
-    pressing = true;
-    canvas.setPointerCapture(e.pointerId);
-    if (!phone.active) dragging = true;
-  });
-  canvas.addEventListener('pointerup', endPress);
-  canvas.addEventListener('pointercancel', endPress);
-  canvas.addEventListener('pointermove', (e) => {
-    if (!dragging || phone.active || fishing.watch) return;
-    tune.yaw -= e.movementX * 0.17;
-    tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - e.movementY * 0.17));
+  // Without a phone a drag turns the view, except while the view is watching the cast.
+  finger.onDrag((dx, dy) => {
+    if (phone.active || fishing.watch) return;
+    tune.yaw -= dx * DRAG_DEG_PER_PIXEL;
+    tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - dy * DRAG_DEG_PER_PIXEL));
     if (yawInput.el) yawInput.el.value = String(Math.round(tune.yaw));
     if (pitchInput.el) pitchInput.el.value = String(Math.round(tune.pitch));
     applyCamera();
@@ -368,7 +345,9 @@ export async function startShore(container, hooks = {}) {
     particles.update(camera, time);
     if (fishingBegun) {
       fishingInput.sensor = phone.active;
-      fishingInput.finger = phone.active ? pressing : spaceDown;
+      // With a phone the touch is the finger. Without one a touch turns the view, so the
+      // space bar stands in.
+      fishingInput.finger = phone.active ? finger.touching : finger.key;
       fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
       fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
       fishing.update(dt, fishingInput);
@@ -460,8 +439,7 @@ export async function startShore(container, hooks = {}) {
     dispose() {
       running = false;
       tuneUi.remove();
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('keyup', onKey);
+      finger.dispose();
       splash.dispose();
       lure.dispose();
       line.dispose();
@@ -471,111 +449,4 @@ export async function startShore(container, hooks = {}) {
       canvas.remove();
     },
   };
-}
-
-function mountTunePanel(container, tune, hooks) {
-  const root = container.querySelector('#ui-root') || container;
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'tune-toggle';
-  toggle.textContent = '设置';
-  const panel = document.createElement('section');
-  panel.className = 'tune-panel';
-  panel.hidden = true;
-  const fields = [
-    ['雾', [
-      ['起始', 'fogNear', 0, 80, 1],
-      ['结束', 'fogFar', 10, 200, 1],
-    ]],
-    ['水', [
-      ['风速', 'windSpeed', 0.4, 8, 0.1, true],
-      ['涌浪', 'swellHeight', 0, 0.4, 0.01, true],
-      ['翻卷', 'choppiness', 0, 1.2, 0.01, true],
-      ['白沫', 'foamStrength', 0, 1.5, 0.01],
-      ['粗糙', 'roughness', 0.02, 0.4, 0.01],
-      ['透光', 'sss', 0, 1, 0.01],
-      ['折射', 'refract', 0, 1.5, 0.01],
-      ['曝光', 'exposure', 0.2, 1.6, 0.01],
-      ['太阳', 'sunScale', 0.2, 1.6, 0.01],
-    ]],
-    ['鱼', [
-      ['游速', 'swimRate', 0.2, 2.5, 0.05],
-    ]],
-    ['鱼竿', [
-      ['位置 X', 'rodX', -1, 1, 0.01],
-      ['位置 Y', 'rodY', -2, 0.5, 0.01],
-      ['位置 Z', 'rodZ', -5, -0.15, 0.01],
-      ['抬起', 'rodAimUp', -30, 70, 0.5],
-      ['侧偏', 'rodAimSide', -45, 45, 0.5],
-      ['滚转', 'rodRoll', -180, 180, 1],
-      ['竿尖负重 g', 'rodLoad', 0, 30, 1],
-    ]],
-    ['摄像机', [
-      ['位置 X', 'x', -30, 30, 0.1],
-      ['位置 Y', 'y', 0.3, 8, 0.1],
-      ['位置 Z', 'z', -20, 40, 0.1],
-      ['朝向', 'yaw', -180, 180, 1],
-      ['俯仰', 'pitch', -70, 70, 1],
-    ]],
-  ];
-  panel.innerHTML = `<div class="tune-head"><span>场景参数</span><button type="button" class="tune-close tune-recenter">镜头回正</button><button type="button" class="tune-close tune-shut">关闭</button></div>`;
-  const colorRow = document.createElement('label');
-  colorRow.className = 'tune-row';
-  colorRow.innerHTML = `<span>雾色</span><input type="color" value="${tune.fogColor}">`;
-  for (const [title, rows] of fields) {
-    const block = document.createElement('div');
-    block.className = 'tune-block';
-    block.innerHTML = `<p class="tune-title">${title}</p>`;
-    if (title === '雾') block.appendChild(colorRow);
-    for (const [label, key, min, max, step, wave] of rows) {
-      const row = document.createElement('label');
-      row.className = 'tune-row';
-      const value = document.createElement('b');
-      value.textContent = formatTune(tune[key]);
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.min = String(min);
-      input.max = String(max);
-      input.step = String(step);
-      input.value = String(tune[key]);
-      if (key === 'yaw') hooks.yawInput.el = input;
-      if (key === 'pitch') hooks.pitchInput.el = input;
-      input.addEventListener('input', () => {
-        tune[key] = Number(input.value);
-        value.textContent = formatTune(tune[key]);
-        if (wave) hooks.onWave();
-        if (title === '摄像机') hooks.onCamera();
-        if (title === '鱼竿') hooks.onRod();
-      });
-      row.append(Object.assign(document.createElement('span'), { textContent: label }), input, value);
-      block.appendChild(row);
-    }
-    panel.appendChild(block);
-  }
-  colorRow.querySelector('input').addEventListener('input', (e) => {
-    tune.fogColor = e.target.value;
-  });
-  // What the cast is reading, for tuning it against a real hand. Not a player hint.
-  const cast = document.createElement('div');
-  cast.className = 'tune-block';
-  cast.innerHTML = '<p class="tune-title">这一竿</p><p class="tune-cast"></p>';
-  panel.appendChild(cast);
-  const castText = cast.querySelector('.tune-cast');
-  const haptic = root.querySelector('.panel');
-  if (haptic) panel.appendChild(haptic);
-  toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; });
-  panel.querySelector('.tune-shut').addEventListener('click', () => { panel.hidden = true; });
-  // Takes the phone as it is held now for the default view. Without a sensor it only
-  // re-applies the panel's camera.
-  panel.querySelector('.tune-recenter').addEventListener('click', () => { hooks.onRecenter(); });
-  root.append(toggle, panel);
-  return {
-    get open() { return !panel.hidden; },
-    setCast(text) { castText.textContent = text; },
-    remove() { toggle.remove(); panel.remove(); },
-  };
-}
-
-function formatTune(n) {
-  return Math.abs(n) >= 10 ? String(Math.round(n)) : String(Math.round(n * 100) / 100);
 }

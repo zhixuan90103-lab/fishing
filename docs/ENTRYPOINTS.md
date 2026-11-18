@@ -28,7 +28,8 @@ index.html
             → 水花 createSplash，加在水面之后画的场景 onWater 里（docs/SPLASH.md）
             → 玩法 createFishing({ rod, line, lure, splash })（docs/PLAY.md）
             → 每帧：fishing.update → applyPhone → rod.update → line.update → splash.update → fishing.follow → shoreSchool.update → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
-            → 设置面板（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
+            → 手指 createFinger(#shore-view)
+            → 设置面板 mountTunePanel（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
        → mountDevicePreview → computeStageLayout → applyStageTransform
        → watchStageLayout
        → haptics 按钮（DOM 在 index.html，场景启动后位于设置内）
@@ -67,7 +68,8 @@ startShore.js applyPhone
   → phone.advance：三个角平滑
   → fishing.watch 有点：算出从眼睛到它的方向
   → aim.step(phone.look() 或"没转过", 按住, dt, 要看的方向)
-       → 有要看的方向：镜头转向它
+       → 有要看的方向：turnTo，镜头转向它
+       → 否则没按住：followAim，镜头追瞄准
        → 瞄准 = 基准 + 转过的角度
        → 没按住：镜头追瞄准；否则镜头不动
        → 竿 = 瞄准 − 镜头
@@ -132,7 +134,10 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | base / 端口 | `vite.config.ts` |
 | appId / appName | `capacitor.config.ts`（现为 `com.wangzhixuan.fishing` / Fishing） |
 | 设计分辨率 | `design.ts` + `style.css` |
-| 岸边、每帧的顺序、设置面板 | `src/shore/startShore.js` |
+| 岸边、每帧的顺序 | `src/shore/startShore.js` |
+| 设置面板的滑条和布局 | `src/shore/tunePanel.js`，样式 `src/style.css` 的 `.tune-*` |
+| 什么算手指按着、拖动怎么读 | `src/shore/finger.js` |
+| 拖一个像素镜头转多少 | `src/shore/startShore.js` 的 `DRAG_DEG_PER_PIXEL` |
 | 岸边鱼群 | [FISH-SCHOOL.md](./FISH-SCHOOL.md)，入口 `src/fish/school.js`。`flock.js` 一帧流程，`shoal.js` 整群，`behaviors.js` 状态和习性，`swim.js` 游动，`dorade.js` 模型 |
 | 鱼竿：模型和骨骼 | [ROD.md](./ROD.md)，`src/shore/rod.js` |
 | 鱼竿：在画面里的位置、跟镜头的滞后 | `src/shore/rodHold.js` |
@@ -152,11 +157,11 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 抛多远、多用力才算抛 | `src/play/swing.js` |
 | 收线的快慢 | `src/play/retrieve.js` |
 | 线上的弧多大、落水后直得多快、收好时留多长 | `src/play/lineOut.js` |
-| 设置面板里"这一竿"的读数 | `src/shore/startShore.js` 的 `tuneUi.setCast`，样式 `.tune-cast` |
+| 设置面板里"这一竿"的读数 | 文字在 `src/shore/startShore.js`，显示在 `tunePanel.js` 的 `setCast`，样式 `.tune-cast` |
 | 饵怎么飞、怎么荡、在水里怎么跟线、鼻尖怎么转 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |
 | 饵的外形 | `src/shore/lure.js` |
 | 渔轮收线时怎么转 | `src/shore/reel.js` 的 `wind` 和顶部常量 |
-| 桌面用什么代替手指 | `src/shore/startShore.js` 的 `onKey` |
+| 桌面用什么代替手指 | `src/shore/finger.js` 的空格键，取哪一个在 `src/shore/startShore.js` |
 | 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
 | 鱼线：外观、软硬、接到竿上 | `src/shore/line.js` |
 | 线在竿上走哪些点 | `src/shore/rod.js` 的 `linePath` 和导环表 |

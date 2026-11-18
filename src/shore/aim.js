@@ -1,22 +1,24 @@
 /**
  * Where the phone aims, and how that is shared between the view and the rod.
  *
- * Owns: the one aim direction (a base plus how far the phone has turned), the view's chase
- * of it, and what is left over for the rod.
- * Does not own: reading the phone (phoneLook.js), placing the camera or deciding what
- * holds the view (startShore.js), turning the rod (rodHold.js), or any fishing rule.
+ * Owns: the one aim direction (a base plus how far the phone has turned), what the view
+ * is chasing and how fast, and what is left over for the rod.
+ * Does not own: reading the phone (phoneLook.js), placing the camera, deciding what holds
+ * the view or what it should watch (startShore.js and the gameplay), turning the rod
+ * (rodHold.js), or any fishing rule.
  * No Three, no scene: it runs in Node. Design: docs/PHONE-LOOK.md.
  *
- * aim = view + rod, always. The view chases the aim unless it is held, and the rod gets
- * the rest, so the rod points where the phone points whether or not the view follows.
- * Nothing is copied or re-based on press or release, so neither can jump.
+ * aim = view + rod, always. The rod gets whatever of the aim the view has not taken, so
+ * the rod points where the phone points whatever the view is doing.
  *
- * The view can also be given something to watch. Then it turns to that direction instead
- * of the aim, and the rod still gets aim minus view: the rod keeps pointing where the
- * phone points while the view looks elsewhere. When the watching ends the view goes back
- * to chasing the aim, slowly at first: the aim may be far from where it was looking, and
- * at the usual rate that is a lurch. Each change only swaps what the view is chasing, so
- * none can jump.
+ * The view is always chasing one of three things:
+ *   the aim       the usual case: the view follows the phone.
+ *   nothing       it is held: the finger is down and the phone moves only the rod.
+ *   a direction   it is watching something the gameplay pointed at.
+ * Changing between them only swaps what is chased. Nothing is copied or re-based, so no
+ * change can jump. Coming back to the aim after watching, the chase starts slow and picks
+ * up: the aim may be far from where the view was looking, and at the usual rate that is
+ * a lurch.
  *
  * Degrees throughout. Yaw is positive to the view's left, pitch positive upward.
  */
@@ -34,16 +36,18 @@ export const LOOK_RATE = 10;
 export const PITCH_LIMIT = 70;
 // How fast the view turns to what it is watching, 1/s. Lower is a slower, calmer turn.
 export const WATCH_RATE = 3;
+// While watching, the view looks no higher and no lower than this, degrees. The top keeps
+// the water in frame. The bottom stops it staring at its own feet at something close in.
+export const WATCH_PITCH_MAX = 6;
+export const WATCH_PITCH_MIN = -40;
 // After watching, the view does not snap back to the phone's aim. It starts back at this
 // rate, 1/s, which is nearly standing still, and picks up to LOOK_RATE again as fast as
 // RETURN_RECOVER, 1/s: it eases off, swings across and settles in about a second. A lower
 // RETURN_RECOVER makes the hand-back slower and softer.
 export const RETURN_RATE = 0.2;
 export const RETURN_RECOVER = 1;
-// While watching, the view looks no higher and no lower than this, degrees. The top keeps
-// the water in frame. The bottom stops it staring at its own feet at something close in.
-export const WATCH_PITCH_MAX = 6;
-export const WATCH_PITCH_MIN = -40;
+
+const DEG = 180 / Math.PI;
 
 function clampPitch(deg) {
   return Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, deg));
@@ -52,6 +56,19 @@ function clampPitch(deg) {
 // The same direction as `deg`, written as the angle nearest to `near`.
 function nearest(deg, near) {
   return near + ((((deg - near) % 360) + 540) % 360) - 180;
+}
+
+/**
+ * The direction from an eye to a point, both { x, y, z } in the world, written into
+ * out.yaw and out.pitch in degrees: what step() takes as `watch`.
+ */
+export function directionTo(eye, point, out) {
+  const dx = point.x - eye.x;
+  const dy = point.y - eye.y;
+  const dz = point.z - eye.z;
+  out.yaw = Math.atan2(dx, dz) * DEG;
+  out.pitch = Math.atan2(dy, Math.hypot(dx, dz)) * DEG;
+  return out;
 }
 
 /** yaw, pitch: where the view looks with the phone at its zero, degrees. */
@@ -91,31 +108,16 @@ export function createAim(yaw, pitch) {
       follow = LOOK_RATE;
     },
 
-    // Once a frame. turned is phoneLook's look(): degrees since the phone's zero.
-    // held keeps the view where it is. watch, if given, is a direction { yaw, pitch } in
-    // degrees for the view to turn to instead, and wins over held. In every case the rod
-    // still follows the phone.
+    /**
+     * Once a frame. turned is phoneLook's look(): degrees since the phone's zero.
+     * held keeps the view where it is. watch, if given, is a direction { yaw, pitch } in
+     * degrees for the view to turn to instead, and wins over held.
+     */
     step(turned, held, dt, watch = null) {
       const aimYaw = baseYaw + turned.yaw * AIM_YAW_GAIN;
       const aimPitch = basePitch + turned.pitch * AIM_PITCH_GAIN;
-      if (watch) {
-        const toYaw = nearest(watch.yaw, aim.viewYaw);
-        const toPitch = Math.max(WATCH_PITCH_MIN, Math.min(WATCH_PITCH_MAX, watch.pitch));
-        if (!watching) {
-          lastWatchYaw = toYaw;
-          lastWatchPitch = toPitch;
-        }
-        aim.viewYaw = chaseAngle(aim.viewYaw, toYaw, nearest(lastWatchYaw, aim.viewYaw), WATCH_RATE, dt);
-        aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, toPitch, lastWatchPitch, WATCH_RATE, dt));
-        lastWatchYaw = toYaw;
-        lastWatchPitch = toPitch;
-        // Whenever the view is given back, it starts back gently.
-        follow = RETURN_RATE;
-      } else if (!held) {
-        aim.viewYaw = chaseAngle(aim.viewYaw, aimYaw, lastYaw, follow, dt);
-        aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, aimPitch, lastPitch, follow, dt));
-        follow += (LOOK_RATE - follow) * (1 - Math.exp(-RETURN_RECOVER * dt));
-      }
+      if (watch) turnTo(watch, dt);
+      else if (!held) followAim(aimYaw, aimPitch, dt);
       watching = Boolean(watch);
       lastYaw = aimYaw;
       lastPitch = aimPitch;
@@ -125,5 +127,30 @@ export function createAim(yaw, pitch) {
       aim.rodRoll = -turned.roll;
     },
   };
+
+  // The view chases a direction it has been pointed at. Yaw goes the short way round.
+  // A direction that stays put is approached from one side and never passed.
+  function turnTo(watch, dt) {
+    const toYaw = nearest(watch.yaw, aim.viewYaw);
+    const toPitch = Math.max(WATCH_PITCH_MIN, Math.min(WATCH_PITCH_MAX, watch.pitch));
+    if (!watching) {
+      lastWatchYaw = toYaw;
+      lastWatchPitch = toPitch;
+    }
+    aim.viewYaw = chaseAngle(aim.viewYaw, toYaw, nearest(lastWatchYaw, aim.viewYaw), WATCH_RATE, dt);
+    aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, toPitch, lastWatchPitch, WATCH_RATE, dt));
+    lastWatchYaw = toYaw;
+    lastWatchPitch = toPitch;
+    // Whenever the view is given back, it starts back gently.
+    follow = RETURN_RATE;
+  }
+
+  // The view chases the aim, at the usual rate or on its way back up to it.
+  function followAim(aimYaw, aimPitch, dt) {
+    aim.viewYaw = chaseAngle(aim.viewYaw, aimYaw, lastYaw, follow, dt);
+    aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, aimPitch, lastPitch, follow, dt));
+    follow += (LOOK_RATE - follow) * (1 - Math.exp(-RETURN_RECOVER * dt));
+  }
+
   return aim;
 }
