@@ -2,7 +2,7 @@
  * How the hand carries the rod. Three is used for its maths only: no scene, no model.
  *
  * Owns: where the rod sits in front of the view, how it trails the view when it turns,
- * and adding the phone's aim to that.
+ * adding the phone's aim to that, and what a hand working against a pull looks like.
  * Does not own: how the blank bends (rodFlex.js), the model (rod.js), or any fishing rule.
  *
  * The rod's root is a child of the view (the camera). Each frame this places the root in
@@ -16,6 +16,12 @@
  *
  * The phone's aim comes in through setAim and is added on top of the trail, untouched:
  * startShore.js works out how much of the phone's turn the view has not taken.
+ *
+ * A hand holding against a fish is not a clamp. Told how hard it is working (setStrain)
+ * and where the pull comes from (setPull), it is drawn out a little toward the pull, the
+ * rod tips a little that way, and it shakes, the more the harder it works. All of it is
+ * a turn about the hand and a small shift of the hand, on top of everything else, so it
+ * reaches the blank as the grip moving and the blank shivers with it.
  */
 
 import * as THREE from 'three/webgpu';
@@ -39,6 +45,19 @@ export const ROD_POSE = {
   aimSide: -4,
   roll: 0,
 };
+
+// A hand working as hard as it can is drawn this far toward the pull, metres, and the
+// rod tips this far toward it about the hand, degrees.
+const GIVE_REACH = 0.045;
+const GIVE_TURN = 2.5;
+// And it shakes: the rod turns about the hand by up to this much, degrees, at full
+// effort. Small: at the tip it is a couple of centimetres. The shake is a few slow beats
+// laid over each other, Hz, so it never repeats on a count.
+const SHAKE = 0.42;
+const SHAKE_HZ = [6.3, 8.9, 11.4];
+const SHAKE_HZ_SIDE = [5.7, 9.6, 12.1];
+// How fast the direction the hand gives in follows where the pull comes from, 1/s.
+const PULL_RATE = 6;
 
 const IDENTITY = new THREE.Quaternion();
 
@@ -84,10 +103,11 @@ export function createRodHold(root, handAt) {
 
   function placeRoot() {
     // View lag first, then the phone aim at full size. The 5° cap belongs to the view
-    // lag only. The aim is where the phone points minus where the view points.
-    swing.multiplyQuaternions(trail, aimQ);
+    // lag only. The aim is where the phone points minus where the view points. The
+    // working hand's give and shake go on last, about the hand like the rest.
+    swing.multiplyQuaternions(trail, aimQ).premultiply(giveQ);
     root.quaternion.multiplyQuaternions(swing, mountQ);
-    root.position.copy(mountP).sub(hand).applyQuaternion(swing).add(hand);
+    root.position.copy(mountP).sub(hand).applyQuaternion(swing).add(hand).add(giveP);
   }
 
   // Move q toward target at the given rate. Exact for a target that turns evenly through
@@ -143,6 +163,66 @@ export function createRodHold(root, handAt) {
   const aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const swing = new THREE.Quaternion();
 
+  // The working hand. effort: 0 to 1. pullAt: where the pull comes from, world space, or
+  // unset. toward: the unit direction from the hand to there in the view's space, eased.
+  let effort = 0;
+  let pulled = false;
+  const pullAt = new THREE.Vector3();
+  const toward = new THREE.Vector3(0, -0.3, -1).normalize();
+  const want = new THREE.Vector3();
+  const blankNow = new THREE.Vector3();
+  const across = new THREE.Vector3();
+  const sideways = new THREE.Vector3();
+  const giveQ = new THREE.Quaternion();
+  const giveP = new THREE.Vector3();
+  const shakeQ = new THREE.Quaternion();
+  const viewNowQ = new THREE.Quaternion();
+  const viewNowP = new THREE.Vector3();
+  let clock = 0;
+  // A few beats laid over each other, -1 to 1.
+  function beats(hz, t) {
+    return (Math.sin(2 * Math.PI * hz[0] * t) + 0.7 * Math.sin(2 * Math.PI * hz[1] * t + 1.3) + 0.45 * Math.sin(2 * Math.PI * hz[2] * t + 2.1)) / 2.15;
+  }
+  function workHand(dt) {
+    clock += dt;
+    if (pulled && root.parent) {
+      // Where the pull comes from, seen from the hand, in the view's space.
+      root.parent.getWorldQuaternion(viewNowQ);
+      root.parent.getWorldPosition(viewNowP);
+      want.copy(pullAt).sub(viewNowP).applyQuaternion(viewNowQ.invert()).sub(hand);
+      if (want.lengthSq() > 1e-8) {
+        want.normalize();
+        toward.lerp(want, 1 - Math.exp(-PULL_RATE * dt));
+        if (toward.lengthSq() > 1e-8) toward.normalize();
+        else toward.copy(want);
+      }
+    }
+    if (!(effort > 0)) {
+      giveQ.identity();
+      giveP.set(0, 0, 0);
+      return;
+    }
+    // Where the blank points now, before the give, in the view's space.
+    blankNow.set(0, 1, 0).applyQuaternion(mountQ).applyQuaternion(aimQ).applyQuaternion(trail);
+    // Tip it toward the pull: a turn about the axis square to both. Nothing to turn
+    // about when the pull is straight down the blank.
+    across.crossVectors(blankNow, toward);
+    const square = across.length();
+    if (square > 1e-4) giveQ.setFromAxisAngle(across.divideScalar(square), GIVE_TURN * effort * square * Math.PI / 180);
+    else giveQ.identity();
+    // The shake, about two axes square to the blank.
+    sideways.crossVectors(blankNow, across.set(0, 1, 0));
+    if (sideways.lengthSq() < 1e-6) sideways.crossVectors(blankNow, across.set(1, 0, 0));
+    sideways.normalize();
+    const size = SHAKE * effort * Math.PI / 180;
+    shakeQ.setFromAxisAngle(sideways, size * beats(SHAKE_HZ, clock));
+    giveQ.premultiply(shakeQ);
+    across.crossVectors(blankNow, sideways).normalize();
+    shakeQ.setFromAxisAngle(across, size * beats(SHAKE_HZ_SIDE, clock));
+    giveQ.premultiply(shakeQ);
+    giveP.copy(toward).multiplyScalar(GIVE_REACH * effort);
+  }
+
   // The grip in the world, as the bend should see it: built on the smoothed view.
   const grip = {
     butt: new THREE.Vector3(),
@@ -176,6 +256,19 @@ export function createRodHold(root, handAt) {
       aimQ.setFromEuler(aimEuler);
     },
 
+    // How hard the hand is working against a pull, 0 to 1. The caller eases it: it is laid
+    // straight onto the pose, so a step in it is a step on screen.
+    setStrain(value) {
+      effort = Math.min(1, Math.max(0, value));
+    },
+
+    // Where that pull comes from, world space: the far end of a taut line. null when
+    // nothing pulls. The last direction is kept, for the effort to ease off along.
+    setPull(point) {
+      pulled = !!point;
+      if (point) pullAt.copy(point);
+    },
+
     // The bend is integrated in the smoothed view's frame. A world point (the line's far
     // end) has to be brought into that same frame or the pull is measured to a different
     // tip than the one on screen. Rotating about the view keeps the distance to the drawn
@@ -195,6 +288,7 @@ export function createRodHold(root, handAt) {
     carry(dt) {
       if (root.parent) {
         followView(dt);
+        workHand(dt);
         placeRoot();
       }
       root.updateMatrixWorld(true);

@@ -154,6 +154,12 @@ export function createSpinningRod() {
     setAim(pitch, yaw, roll) {
       hold.setAim(pitch, yaw, roll);
     },
+    // How hard the hand is working against a pull, 0 to 1. The hand is drawn toward the
+    // far end of the line, the rod tips that way and shakes: see rodHold.js. Gameplay
+    // says how hard and eases it, this only shows it.
+    setStrain(effort) {
+      hold.setStrain(effort);
+    },
     // Extra mass on the tip, kg: the lure while it hangs there.
     setTipLoad(kg) {
       flex.setTipLoad(kg);
@@ -193,6 +199,7 @@ export function createSpinningRod() {
       for (let i = 0; i < rings.length; i += 1) rings[i].getWorldPosition(out[i + 1]);
     },
     update(dt) {
+      hold.setPull(tetherOn ? tetherWorld : null);
       hold.carry(dt);
       if (tetherOn) {
         hold.intoBend(tetherWorld, tetherBend);

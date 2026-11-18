@@ -14,7 +14,8 @@
  *
  * Past that point the reel gives line, finger down or not: exactly as much as brings the
  * tension back to the point. That is a length, not a rate, so it is the same at any
- * frame rate.
+ * frame rate. A finger held down on a running fish does not stop the line. It leans on
+ * it: the reel holds that much more (snap.js says how much), so the tension rises with it.
  *
  * Units: metres, seconds, newtons.
  */
@@ -38,8 +39,9 @@ export function createHaul() {
 
     // How much line the reel gives up right now, m. stretch: how much further the hook is
     // from the tip than there is line. stiffness: the line's, N per metre stretched.
-    slip(stretch, stiffness) {
-      return Math.max(0, stretch - RUN_OUT_AT / stiffness);
+    // press: what a hand leaning on the run adds to what the reel holds, N (snap.js).
+    slip(stretch, stiffness, press = 0) {
+      return Math.max(0, stretch - (RUN_OUT_AT + press) / stiffness);
     },
 
     // Once a frame. held: the finger is down. tension: the line's pull now, N.

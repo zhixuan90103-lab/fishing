@@ -6,7 +6,7 @@
 
 ## 一句话
 
-**TypeScript + Three.js WebGPU + Vite + Capacitor iOS** 的竖屏钓鱼。设计空间 **390×844**。当前启动的是岸边：水面、鱼群、第一人称鱼竿、鱼线、饵、水花和抄网，这些是物料。手机就是鱼竿。玩法能把一竿走到头：甩出去、落水、长按收线，鱼从鱼群里游来咬上，冲的时候把线带出去，耗到没力以后收到身边，咬着饵甩着被提出水面，落进抄网，网带着它出画面，这一竿结束。每条鱼都直接咬死，这是替身。咬口的种类、抬杆、线断还没做。
+**TypeScript + Three.js WebGPU + Vite + Capacitor iOS** 的竖屏钓鱼。设计空间 **390×844**。当前启动的是岸边：水面、鱼群、第一人称鱼竿、鱼线、饵、水花和抄网，这些是物料。手机就是鱼竿。玩法能把一竿走到头：甩出去、落水、长按收线，鱼从鱼群里游来咬上，冲的时候把线带出去，耗到没力以后收到身边，咬着饵甩着被提出水面，落进抄网，网带着它出画面，这一竿结束。鱼分小、大两档，力气跟体型走；冲的时候竿深弯、点头、手发颤，一歇这些一起停，玩家靠这个知道能收了；冲的时候按住是硬顶，顶久了线可能断，断了要收回空线。每条鱼都直接咬死，这是替身。咬口的种类、抬杆、跑离还没做。
 
 ## 入口地图
 
@@ -17,12 +17,12 @@
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节。出了水的鱼怎么摆在 `src/fish/hung.js` |
 | 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。渔轮是 `src/shore/reel.js` |
 | 手机瞄准和镜头 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，镜头追什么、剩下的给竿 `src/shore/aim.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
-| 手指和设置面板 | `src/shore/finger.js`（按没按着、拖了多远，桌面用空格键），`src/shore/tunePanel.js`（滑条、镜头回正、这一竿的读数） |
+| 手指、设置面板和提示 | `src/shore/finger.js`（按没按着、拖了多远，桌面用空格键），`src/shore/tunePanel.js`（滑条、镜头回正、这一竿的读数），`src/shore/notice.js`（画面上一句会淡掉的话，只用来说线断了） |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
 | 水花 | `docs/SPLASH.md`，画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。放在海面上方，不动海面 |
-| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`visit`、`fight`、`haul`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节 |
+| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`fishKind`、`visit`、`fight`、`haul`、`snap`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -62,7 +62,7 @@
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
 11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线、饵、水花、抄网不含抛投、咬口和拔河。规则只写在 `src/play/`，只通过物料留的口子动物料；口子的表在 `docs/CONVENTIONS.md` 第 1 节。物料只报数，这个数意味着什么由玩法判断；什么时候、多用力归玩法，成什么样归物料。镜头不由玩法直接动，玩法只报出要看的点 `fishing.watch`。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。唯一的例外是出了水、挂在线上的鱼，走鱼群的 `hang` 和 `keep`，见 `docs/FISH-SCHOOL.md` 第 7 节。
-13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量走 `rod.setTipLoad`。见 `docs/ROD.md` 第 2 节。
+13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量走 `rod.setTipLoad`，握竿的手多吃力走 `rod.setStrain`。见 `docs/ROD.md` 第 2、3 节。
 14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个瞄准。不从加速度积分位移，不逐帧累加偏移。镜头在追什么可以换（手机、不动、玩法指的点），换的只是目标，不切换算法。见 `docs/PHONE-LOOK.md` 第 2 节。
 15. **`startShore.js` 只创建、接线、定每帧的顺序。** 规则进 `src/play/`，物料进各自的文件，输入进 `finger.js`，面板进 `tunePanel.js`。
 
@@ -83,12 +83,13 @@ npm run ios           # sync 并打开 Xcode
 
 ## 还没做
 
-- 咬口的种类和抬杆、跑离和惊吓、小鱼那一档、断开点和线断、线放尽。现在每条鱼都直接咬死，是替身，见 `docs/PLAY.md` 第 13、14 节。接着在 `src/play/` 往下写，规则在需求文档，不要在场景里另写一套。
-- 真机确认。手机瞄准的方向、甩竿的力度和落点、收线的快慢、镜头转向落点和交还的快慢、水花的大小、鱼冲的力度、出线和遛鱼的快慢、出线和收线时手里的咔咔、提鱼出水和抄网的样子，都只在 Node 和桌面页面里验过，没有在真机上确认。数字是起点，见 `docs/PHONE-LOOK.md` 和 `docs/PLAY.md` 第 13 节。设置面板的"这一竿"一行显示甩竿读到的角速度、线的张力和鱼的力。
+- 咬口的种类和抬杆、跑离和惊吓、饥饿和喜好。现在每条鱼都直接咬死，是替身，见 `docs/PLAY.md` 第 13、14 节。接着在 `src/play/` 往下写，规则在需求文档，不要在场景里另写一套。
+- 侧向带竿领鱼头、竿抬多高改变传到线上的力、鱼起跳和压竿防跳。参考材料在 `docs/LURE-FIGHT-RESEARCH.md`，都还不是规则。
+- 真机确认。手机瞄准的方向、甩竿的力度和落点、收线的快慢、镜头转向落点和交还的快慢、水花的大小、鱼冲的力度、出线和遛鱼的快慢、出线和收线时手里的咔咔、甩头的顿、握竿的手让多远颤多大、竿在冲和歇之间差多少、硬顶多久会断、提鱼出水和抄网的样子，都只在 Node 和桌面页面里验过，没有在真机上确认。数字是起点，见 `docs/PHONE-LOOK.md` 和 `docs/PLAY.md` 第 13 节。设置面板的"这一竿"一行显示甩竿读到的角速度、鱼的体型、线的张力、鱼的力、手指叠的力和手多吃力。
 - 抛投只取镜头的朝向，往左右甩不会抛偏。线挡不开合。
 - 饵的重量不压竿，落水以后水面上读不出饵在哪，远处的饵只有几个像素。见 `docs/LURE.md` 第 6 节。
-- 竿的软硬。现在从侧面拉约 7 牛就弯到头，见 `docs/ROD.md` 第 8 节。出线点定在 4.5 牛，张力到不了更高，现在的竿够用；出线点要往上调时一起改。
+- 竿的软硬已经按鱼的力定过一次（`docs/ROD.md` 第 4 节的转角表）。出线点、断开点或者鱼的力再改时，要回来对这张表。竿放得低、鱼又远时，再大的力也只多弯一点。
 - 气泡、咬口涟漪、水面上真正的涟漪。落水的水花已有，同时只能放一次，见 `docs/SPLASH.md` 第 6 节。
-- 音效。按 `docs/AUDIO.md`，禁止热路径 `new Audio()`。震动已经有几处（钩住、出线和收线的咔咔、到身边、出水、落网），表在 `docs/PLAY.md` 第 11 节，轻重都没在真机上试过。
+- 音效。按 `docs/AUDIO.md`，禁止热路径 `new Audio()`。震动已经有几处（钩住、甩头的顿、出线和收线的咔咔、线断、到身边、出水、落网），表在 `docs/PLAY.md` 第 11 节，轻重都没在真机上试过。
 - 鱼出水、入网时水面和网的细节：水花同时只能放一次，网兜是整体拉长的，没有拿网的手。见 `docs/SPLASH.md` 第 6 节和 `docs/NET.md` 第 6 节。
 - Android。

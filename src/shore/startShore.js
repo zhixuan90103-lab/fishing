@@ -22,12 +22,15 @@ import { PITCH_LIMIT, createAim, directionTo } from './aim.js';
 import { createFinger } from './finger.js';
 import { haptics } from '../utils/haptics';
 import { mountTunePanel } from './tunePanel.js';
+import { mountNotice } from './notice.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
 
 // Degrees the view turns per CSS pixel dragged, without a phone.
 const DRAG_DEG_PER_PIXEL = 0.17;
+// What is said when the line breaks. The only words the game says to the player.
+const LINE_BROKE = '线断了';
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -248,6 +251,8 @@ export async function startShore(container, hooks = {}) {
   // The panel's cast readout is refreshed every this many frames.
   const READOUT_EVERY = 6;
   let readoutIn = 0;
+  // How the cast last reported its fish lost, to say so once when the line breaks.
+  let lostSeen = '';
   const fishingInput = { finger: false, sensor: false, viewYaw: 0, aimPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
@@ -372,12 +377,16 @@ export async function startShore(container, hooks = {}) {
     splash.update(dt);
     if (fishingBegun) {
       fishing.follow();
+      if (fishing.lost !== lostSeen) {
+        lostSeen = fishing.lost;
+        if (lostSeen === 'broke') notice.say(LINE_BROKE);
+      }
       readoutIn -= 1;
       if (tuneUi.open && readoutIn <= 0) {
         readoutIn = READOUT_EVERY;
         tuneUi.setCast(
           `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 甩 ${Math.round(fishing.swing)}°/秒 · 上次松手 ${Math.round(fishing.lastRelease)}°/秒`
-            + ` · 鱼 ${fishing.fish} ${fishing.mood} · 张力 ${fishing.tension.toFixed(1)} 牛 · 鱼的力 ${fishing.pull.toFixed(1)} 牛 · 出线 ${fishing.running.toFixed(1)} 米/秒 · 气力 ${Math.round(fishing.stamina * 100)} · 钓到 ${fishing.landed}`,
+            + ` · 鱼 ${fishing.fish} ${fishing.mood}${fishing.size ? ` ${fishing.big ? '大' : '小'} ${fishing.size.toFixed(2)}` : ''} · 张力 ${fishing.tension.toFixed(1)} 牛 · 鱼的力 ${fishing.pull.toFixed(1)} 牛 · 硬顶 ${fishing.press.toFixed(1)} 牛 · 手上 ${Math.round(fishing.effort * 100)} · 出线 ${fishing.running.toFixed(1)} 米/秒 · 气力 ${Math.round(fishing.stamina * 100)} · 钓到 ${fishing.landed}${fishing.lost ? ` · ${fishing.lost}` : ''}`,
         );
       }
     } else {
@@ -429,6 +438,7 @@ export async function startShore(container, hooks = {}) {
   }
   requestAnimationFrame(loop);
 
+  const notice = mountNotice(container);
   const tuneUi = mountTunePanel(container, tune, {
     onWave() { waveDirty = true; },
     onCamera() { applyCamera(); },
@@ -446,6 +456,7 @@ export async function startShore(container, hooks = {}) {
     dispose() {
       running = false;
       tuneUi.remove();
+      notice.remove();
       finger.dispose();
       splash.dispose();
       net.dispose();

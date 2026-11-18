@@ -78,6 +78,7 @@
 | `impact` | 读。上一次碰到水面时的速度，米/秒。水花的大小用它 |
 | `x, y, z`、`vx, vy, vz`、`nose`、`swum` | 读。位置是世界坐标。`nose` 不保证是单位长度，`lure.place` 自己归一 |
 | `createLure()` 上的 `object`、`place`、`length` | 见第 4 节。`object` 加在场景根上 |
+| `createLure()` 上的 `show(yes)` | 线上有没有饵。鱼把线挣断、带着饵走了以后玩法调 `show(false)`，回到空杆再 `show(true)` |
 
 咬口时鱼把饵含住、钩住以后饵跟着鱼走，都是玩法不再调这几种动法、改成自己给位置。不要在 `lureMove.js` 里写"被咬了"。
 

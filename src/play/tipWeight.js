@@ -14,9 +14,8 @@
  * Units: metres, seconds, kilograms.
  */
 
-// What a landed fish weighs on the rod tip once it is out of the water, kg. Not its real
-// weight: the blank is light, and this much already bends it deep.
-const FISH_LOAD = 0.05;
+// What a fish weighs on the rod tip once it is out of the water is the fish's own: hang()
+// is handed it (the `load` of fishKind.js).
 // Still in the water it weighs this share of that. The weight comes on as the hook rises
 // from DRY_FROM to DRY_BY, metres: the fish has some length and leaves the water bit by bit.
 const SUNK_SHARE = 0.25;
@@ -38,9 +37,14 @@ export function createTipWeight() {
   let told = 0;
 
   return {
-    // A fish hangs on the hook, this far out of the water, 0 to 1.
-    hang(dry) {
-      aim = FISH_LOAD * (SUNK_SHARE + (1 - SUNK_SHARE) * dry * dry * (3 - 2 * dry));
+    // What should be on the tip now, kg. What is on it follows.
+    get wanted() {
+      return aim;
+    },
+    // A fish hangs on the hook, this far out of the water, 0 to 1. load: what it weighs
+    // on the tip once clear, kg.
+    hang(dry, load) {
+      aim = load * (SUNK_SHARE + (1 - SUNK_SHARE) * dry * dry * (3 - 2 * dry));
     },
     // Nothing hangs there.
     off() {

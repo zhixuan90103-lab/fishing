@@ -52,7 +52,7 @@ export function mountTunePanel(container, tune, hooks) {
       ['抬起', 'rodAimUp', -30, 70, 0.5],
       ['侧偏', 'rodAimSide', -45, 45, 0.5],
       ['滚转', 'rodRoll', -180, 180, 1],
-      ['竿尖负重 g', 'rodLoad', 0, 30, 1],
+      ['竿尖负重 g', 'rodLoad', 0, 400, 5],
     ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],

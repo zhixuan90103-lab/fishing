@@ -7,9 +7,11 @@
  * comes in or when it runs out (haul.js), how a fish swims (src/fish/swim.js), when the
  * fish is hooked or landed (fishing.js).
  *
- * A fresh fish pulls harder than the reel holds, so its runs take line. Running tires
- * it, and so does being wound in. Left alone it gets its strength back. Tired enough, its
- * runs no longer take line and it can be brought in.
+ * A big fish, fresh, pulls harder than the reel holds, so its runs take line. Running
+ * tires it, and so does being wound in. Left alone it gets its strength back. Tired
+ * enough, its runs no longer take line and it can be brought in. A small one never pulls
+ * that hard. Which it is, and every number that differs from fish to fish, is handed in:
+ * fishKind.js.
  *
  * The two halves must look different on the fish itself, before any haptics. A run is a
  * bolt for its life: it comes on at once, fast, darting from side to side and diving. A
@@ -31,25 +33,30 @@
  * Units: metres, seconds, newtons. Level directions are (x, z).
  */
 
-// How hard the fish pulls in a run, fresh and worn out, N. The first is above the point
-// where line runs out (haul.js), the second below it.
-export const RUN_FRESH = 9.5;
-export const RUN_SPENT = 2.4;
-// And between runs, N. This keeps the line tight after a run has stopped.
-export const REST_FORCE = 1;
+// How hard it pulls in a run and between runs, how fast it tires and how long it runs
+// are the fish's own: begin() is handed them (fishKind.js). The rest are the same for
+// every fish.
+
 // Stamina runs from 1, fresh, to 0. What a second of running costs, what a metre of
-// being wound in costs, and what a second left alone gives back.
+// being wound in costs, and what a second left alone gives back. The first two are
+// multiplied by the fish's `tire`.
 const TIRE_RUNNING = 0.12;
 const TIRE_PER_METRE = 0.03;
 const RECOVER = 0.03;
 // A run keeps most of its force until the fish is nearly spent, then it goes quickly:
 // the force follows stamina to this power. 1 would fade evenly.
 const RUN_FADE = 0.6;
-// How fast the pull comes on at the start of a run and dies at the end, 1/s. On is a
-// snatch: the rod goes into its deep bend at once.
+// How fast the pull comes on at the start of a run, 1/s. A snatch: the rod goes into its
+// deep bend at once.
 const FORCE_ON = 14;
-const FORCE_OFF = 3;
-// A fresh run lasts between these, s. A spent one this share of that.
+// At the end of a run the fish gives up: this share of the pull goes at once, at GIVE_UP,
+// 1/s, and the rod tip kicks up. The rest eases off at FORCE_OFF into the shallow bend.
+// That drop is what tells the hand it can wind now.
+const GIVE_SHARE = 0.7;
+const GIVE_UP = 16;
+const FORCE_OFF = 2.5;
+// A fresh run lasts between these, s, times the fish's `runFor`. A spent one this share
+// of that.
 const RUN_FOR = [1.6, 3.2];
 const RUN_SPENT_SHARE = 0.55;
 // A rest lasts between these, s. Now and then, this often, it is cut short to between the
@@ -98,12 +105,23 @@ const TURN_RUN = 7;
 const TURN_REST = 3.5;
 const ACCEL_RUN = 14;
 const ACCEL_REST = 5;
+// A line holding it harder than it is pulling stops it and swings its head round: for
+// each newton the line has over its pull, it slows and turns this much faster, 1/s. This
+// is what lets the rod ease the moment a run ends, and not half a second later.
+const HELD_SLOWS = 5;
+const HELD_TURNS = 2.5;
 // How fast the line stops it, and how fast it changes depth diving and coming back up, 1/s.
 const SLOW = 8;
 const RISE_RUN = 2.2;
 const RISE_REST = 0.9;
 
 export function createFight(random = Math.random) {
+  // The fish on the line: see fishKind.js for the fields.
+  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, runFor: 1 };
+  // What the pull has over the resting pull, in two parts: one goes at once when a run
+  // ends, the other eases off.
+  let quick = 0;
+  let slow = 0;
   let running = false;
   let left = 0;
   // Which way it swims across the line: 1 or -1. And seconds until it darts the other way.
@@ -116,7 +134,7 @@ export function createFight(random = Math.random) {
 
   function beginRun() {
     running = true;
-    left = between(RUN_FOR) * (RUN_SPENT_SHARE + (1 - RUN_SPENT_SHARE) * fight.stamina);
+    left = between(RUN_FOR) * kind.runFor * (RUN_SPENT_SHARE + (1 - RUN_SPENT_SHARE) * fight.stamina);
     side = random() < 0.5 ? -1 : 1;
     dartIn = between(DART_EVERY);
   }
@@ -131,9 +149,12 @@ export function createFight(random = Math.random) {
       return running;
     },
 
-    // Just hooked: it runs at once.
-    begin() {
-      fight.force = REST_FORCE;
+    // Just hooked: it runs at once. fish: its numbers, from fishOf() in fishKind.js.
+    begin(fish) {
+      kind = fish;
+      quick = 0;
+      slow = 0;
+      fight.force = kind.rest;
       fight.stamina = 1;
       beginRun();
     },
@@ -142,8 +163,8 @@ export function createFight(random = Math.random) {
     // wound: metres of line wound in this frame.
     step(dt, wound) {
       if (!(dt > 0)) return;
-      if (running) fight.stamina -= TIRE_RUNNING * dt;
-      else if (wound > 0) fight.stamina -= TIRE_PER_METRE * wound;
+      if (running) fight.stamina -= TIRE_RUNNING * kind.tire * dt;
+      else if (wound > 0) fight.stamina -= TIRE_PER_METRE * kind.tire * wound;
       else fight.stamina += RECOVER * dt;
       fight.stamina = Math.min(1, Math.max(0, fight.stamina));
       left -= dt;
@@ -164,9 +185,14 @@ export function createFight(random = Math.random) {
           dartIn = between(DART_EVERY);
         }
       }
-      const to = running ? RUN_SPENT + (RUN_FRESH - RUN_SPENT) * fight.stamina ** RUN_FADE : REST_FORCE;
-      const rate = to > fight.force ? FORCE_ON : FORCE_OFF;
-      fight.force += (to - fight.force) * (1 - Math.exp(-rate * dt));
+      // What a run has over the resting pull, split into the part that goes at once when
+      // the fish gives up and the part that eases off.
+      const over = running ? kind.runSpent + (kind.runFresh - kind.runSpent) * fight.stamina ** RUN_FADE - kind.rest : 0;
+      const quickTo = over * GIVE_SHARE;
+      const slowTo = over - quickTo;
+      quick += (quickTo - quick) * (1 - Math.exp(-(quickTo > quick ? FORCE_ON : GIVE_UP) * dt));
+      slow += (slowTo - slow) * (1 - Math.exp(-(slowTo > slow ? FORCE_ON : FORCE_OFF) * dt));
+      fight.force = kind.rest + quick + slow;
     },
 
     /**
@@ -218,9 +244,11 @@ export function createFight(random = Math.random) {
       const dive = Math.min(1, Math.max(0, (far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
       aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * dive * dive * (3 - 2 * dive) : REST_DEPTH;
       aim.top = SHALLOWEST;
-      aim.turn = running ? TURN_RUN : TURN_REST;
+      // What the line's pull has over its own.
+      const overheld = Math.max(0, stiffness * stretch - fight.force);
+      aim.turn = (running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld;
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
-      aim.slow = SLOW;
+      aim.slow = SLOW + HELD_SLOWS * overheld;
       aim.rise = running ? RISE_RUN : RISE_REST;
     },
   };

@@ -13,8 +13,11 @@
 
 // Bare blank, small swings: first mode of a 7 ft graphite spinning rod.
 const FREE_HZ = 2.8;
-// Sideways force on the tip for a metre of deflection, small bends, N/m.
-const TIP_STIFFNESS = 1.86;
+// Sideways force on the tip for a metre of deflection, small bends, N/m. A medium-light
+// blank. It sets how hard a pull bends the rod, not how the rod swings: the blank's mass
+// follows from this and FREE_HZ, so the modes keep their frequencies. Softer, and a
+// resting fish already bends it as far as a running one.
+const TIP_STIFFNESS = 9.3;
 // Relative bending stiffness along the blank: [fraction of length, stiffness]. Butt is 1.
 // Hand-matched to the blank's radius^4 in rod.js, then left as its own table. Steeper
 // falloff means a faster, tippier action. Change this table to retune the rod; do not

@@ -25,6 +25,12 @@ import {
 // out of the picture, to swim in again.
 const RETURN_SIDE = 11;
 
+// The school has small fish and big ones, and nothing in between, so the two read apart
+// at a glance. Body scale of each, and the share that are big.
+const SMALL_SIZE = [0.78, 0.95];
+const BIG_SIZE = [1.2, 1.4];
+const BIG_SHARE = 0.5;
+
 // roamers: how many fish, counted from the end of the list, leave the school now and then.
 // bodyLength: nose to tail of a fish at scale 1, metres.
 export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
@@ -55,7 +61,8 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
       seedStraying(fish);
       seedHabits(fish);
       restBody(fish);
-      fish.size = 0.82 + Math.random() * 0.36;
+      const range = Math.random() < BIG_SHARE ? BIG_SIZE : SMALL_SIZE;
+      fish.size = range[0] + Math.random() * (range[1] - range[0]);
       fish.holder.scale.setScalar(fish.size);
       const clip = fish.action.getClip();
       fish.action.time = (i / fishes.length) * (clip.duration || 1);

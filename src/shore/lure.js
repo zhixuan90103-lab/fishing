@@ -114,6 +114,11 @@ export function createLure() {
       body.rotation.y = Math.sin((swum / WIGGLE_EVERY) * Math.PI * 2) * WIGGLE_ANGLE;
     },
 
+    // Whether there is a lure on the line at all. A fish that breaks off takes it.
+    show(yes) {
+      object.visible = yes;
+    },
+
     dispose() {
       hull.dispose();
       tail.dispose();
