@@ -20,7 +20,8 @@
  *   flight  the lure is in the air and line follows it. Finger down stops the line and
  *           the lure drops where it is.
  *   water   the lure is in the water and the line comes straight. Finger down winds line
- *           in, once the finger has been up since landing. Finger up, the lure sinks.
+ *           in, once the finger has been up since landing. Finger up, the lure sinks
+ *           straight down and line follows it.
  *           With all the line back in, the cast is over and the stage is ready again.
  *           Meanwhile a fish may come: when it takes the hook the stage is fight.
  *   fight   a fish is on. All of it is catch.js. When the fish is landed the stage is
@@ -195,6 +196,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // Held at the tip, not hanging from it: a swing must not set it swinging. This is the
     // tip of last frame, good enough to launch from. follow() puts it on this frame's.
     move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
+    move.upright(dt);
   }
 
   function flight(dt, input, tip) {
@@ -206,11 +208,16 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
 
   function water(dt, input, tip) {
     if (!input.finger) armed = true;
-    const taken = Math.min(retrieve.step(dt, winding || (input.finger && armed)), out.room);
+    const reeling = winding || (input.finger && armed);
+    const taken = Math.min(retrieve.step(dt, reeling), out.room);
     rod.reel.wind(taken);
     const pulled = out.wind(dt, taken, move.gap(tip));
     if (!lifted) {
       move.tow(dt, tip, out.length, pulled, line.stiffness);
+      // Finger up, the bail is open: line follows the lure down and it sinks where it
+      // is. Finger down, the line is held, and a sinking lure swings in on it. Only the
+      // sinking is given line: lifting the rod still draws the lure in.
+      if (!reeling) out.pay(move.sank);
       const level = Math.hypot(tip.x - move.x, tip.z - move.z);
       if (level < LIFT_WITHIN || out.stowed) {
         // From here it is a weight on the line again. A fish still on its way has
@@ -242,7 +249,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // for the moment, and the rod tip nods to it.
     line.setLength(stage === 'landed' ? fish.liftLength() : out.length - (stage === 'fight' ? fish.snatch : 0));
     move.point(dt, tip, stage === 'water' && !lifted);
-    lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum);
+    lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
   }
 
   // With the line wound in, the lure goes exactly where this frame's tip is, so it never
@@ -251,7 +258,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     if (stage !== 'ready') return;
     const end = line.end;
     move.hold(end.x, end.y, end.z);
-    lure.place(end.x, end.y, end.z, move.nose.x, move.nose.y, move.nose.z, move.swum);
+    lure.place(end.x, end.y, end.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
   }
 
   return {
@@ -279,6 +286,13 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // phone's. An object with x, y, z, world space.
     get watch() {
       return stage === 'flight' || stage === 'fight' || (stage === 'water' && !lifted) ? spot : null;
+    },
+    // Whether the view should keep the rod in the picture while it watches. With a fish
+    // on, the rod is what the hand is working: lose sight of it and the phone and the
+    // picture no longer agree. After a cast the phone may be anywhere, and the view
+    // goes to the water wherever the rod is.
+    get watchRod() {
+      return stage === 'fight';
     },
     // The fish, as catch.js reports it. fish: 'none', 'coming', 'on' or 'landed'. mood:
     // 'run' or 'rest' while it is being fought. tension and pull: the line's pull and the
@@ -330,6 +344,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     begin() {
       const tip = line.tip;
       move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
+      move.upright(0);
       lastTip.x = tip.x; lastTip.y = tip.y; lastTip.z = tip.z;
       toReady();
       fresh = true;
@@ -344,6 +359,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
      * drew last frame.
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
+     * input.rodYaw: where the rod points, level, radians, the same way round.
      * input.aimPitch: how high the phone aims the rod, degrees, positive upward.
      */
     update(dt, input) {

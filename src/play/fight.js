@@ -64,13 +64,31 @@ const RUN_SPENT_SHARE = 0.55;
 const REST_FOR = [1.8, 4.5];
 const REST_SHORT = [0.35, 0.8];
 const SHORT_CHANCE = 0.25;
-// In a run that is taking line it darts: it changes side this often, s.
-const DART_EVERY = [0.4, 0.9];
+// A run heads out and away: straight out, or out and off to one side, never flat across
+// the angler. Each run draws how far to the side it leans, from all the way one side to
+// all the way the other, as a share of the fish's `dash`, and never less than LEAN_LEAST
+// of it: dead straight out every time is as dull as flat across. Further out there is
+// more water in front of the angler, so a run that goes out as well as across stays in
+// sight.
+const LEAN_MOST = 1;
+const LEAN_LEAST = 0.12;
+// Held by the line, with no room to go out, it does not slide off sideways at speed
+// either: it gets this share of its sideways speed, and all of it once line is leaving
+// at ACROSS_FULL, m/s.
+const HELD_ACROSS = 0.3;
+const ACROSS_FULL = 2;
+// In a run that is taking line it may cut back the other way: this often, s.
+const DART_EVERY = [0.9, 2.2];
+// It only cuts back while line is leaving faster than this, m/s. On a held line a change
+// of side is a full turn about, and that is a tired fish, not a bolting one.
+const DART_NEEDS = 1.2;
 
-// The pull it takes to move the fish through the water, N per m/s. Line runs out at what
-// its pull has over the reel's hold, divided by this. Winding it in, or swinging the rod
-// away from it, costs this much tension per m/s.
+// The pull it takes to move the fish through the water, N per m/s. Winding it in, or
+// swinging the rod away from it, costs this much tension per m/s.
 const BODY_DRAG = 1.5;
+// Bolting, it is swimming, not being dragged: line runs out at what its pull has over the
+// reel's hold, divided by this, N per m/s. Lower and a run takes line faster.
+const BOLT_DRAG = 1.1;
 // How soon it is where the line holds it, s. Lower follows the line more tightly and
 // overshoots more at low frame rates. Higher, it gives way later to a rod swung against it.
 const SETTLE_IN = 0.4;
@@ -78,10 +96,24 @@ const SETTLE_IN = 0.4;
 const SLACK_SPEED = 0.3;
 // The fastest the line can lead it in, m/s.
 const LED_MAX = 1.6;
-// How fast it swims across the line while running and while resting, m/s. Resting it
-// barely moves.
-const ACROSS_RUN = 1.2;
+// How fast it swims across the line: in a run that is the fish's own `dash`, down to this
+// share of it worn out, and less close in, where the same speed would whip it round the
+// rod: all of it beyond ACROSS_FAR from under the tip, level metres, this share at the tip.
+// Resting it barely moves, m/s.
+const DASH_SPENT = 0.45;
+const ACROSS_FAR = 9;
+const ACROSS_NEAR_SHARE = 0.3;
 const ACROSS_REST = 0.07;
+// A rod carried off to one side of the fish leads it round that way: the line draws its
+// head over and it swims across toward where the rod points. This fast with the rod
+// square to it, m/s. But only a fish that is not fighting can be led. Resting, it comes.
+// In a run it does not: fresh, not at all, and worn right out, at LED_SPENT of that.
+// Hauling the rod against a running fish is a trial of strength, and all it does is load
+// the line and the hand. A rod within LED_FROM of pointing at it, radians, leads it
+// nowhere: it takes a pull meant as one.
+const LED_REST = 2.6;
+const LED_SPENT = 0.3;
+const LED_FROM = 10 * Math.PI / 180;
 // Turning back the way it came, it slows to this share of its speed, and leans its turn
 // toward the rod by this much, m/s. A fish cannot stop and reverse: it swings round, and
 // swinging round on the far side would yank the line.
@@ -89,7 +121,7 @@ const TURNING = 0.2;
 const TURN_INSIDE = 0.3;
 // It stays within this angle of the cast's direction, radians, seen from the rod tip.
 // Past it, it swims back across. This keeps it in the water in front of the angler.
-const KEEP_WITHIN = 35 * Math.PI / 180;
+const KEEP_WITHIN = 40 * Math.PI / 180;
 
 // Depth it swims at in a run and at rest, and the shallowest it goes, m.
 const RUN_DEPTH = -1.7;
@@ -117,14 +149,16 @@ const RISE_REST = 0.9;
 
 export function createFight(random = Math.random) {
   // The fish on the line: see fishKind.js for the fields.
-  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, runFor: 1 };
+  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, runFor: 1, dash: 0 };
   // What the pull has over the resting pull, in two parts: one goes at once when a run
   // ends, the other eases off.
   let quick = 0;
   let slow = 0;
   let running = false;
   let left = 0;
-  // Which way it swims across the line: 1 or -1. And seconds until it darts the other way.
+  // How far to one side this run leans, -LEAN_MOST to LEAN_MOST, and which side that is,
+  // 1 or -1. And seconds until it cuts back the other way.
+  let lean = 0;
   let side = 1;
   let dartIn = 0;
   // Whether the run in hand was taking line when last steered.
@@ -136,6 +170,7 @@ export function createFight(random = Math.random) {
     running = true;
     left = between(RUN_FOR) * kind.runFor * (RUN_SPENT_SHARE + (1 - RUN_SPENT_SHARE) * fight.stamina);
     side = random() < 0.5 ? -1 : 1;
+    lean = side * (LEAN_LEAST + random() * (LEAN_MOST - LEAN_LEAST));
     dartIn = between(DART_EVERY);
   }
 
@@ -144,6 +179,9 @@ export function createFight(random = Math.random) {
     force: 0,
     // 1 fresh, 0 worn out.
     stamina: 1,
+    // How hard the rod is being hauled to one side against a fish that will not be led,
+    // 0 to 1: nothing with the rod pointing at it, or with a fish that comes.
+    against: 0,
     // Whether it is in a run.
     get running() {
       return running;
@@ -154,6 +192,7 @@ export function createFight(random = Math.random) {
       kind = fish;
       quick = 0;
       slow = 0;
+      fight.against = 0;
       fight.force = kind.rest;
       fight.stamina = 1;
       beginRun();
@@ -182,6 +221,7 @@ export function createFight(random = Math.random) {
         dartIn -= dt;
         if (dartIn <= 0) {
           side = -side;
+          lean = side * (LEAN_LEAST + random() * (LEAN_MOST - LEAN_LEAST));
           dartIn = between(DART_EVERY);
         }
       }
@@ -203,8 +243,10 @@ export function createFight(random = Math.random) {
      * winding: how fast line is coming in, m/s. holds: the most tension the reel holds
      * before it gives line, N.
      * (homeX, homeZ): the level direction the cast went, a unit vector.
+     * (rodX, rodZ): the level direction the rod points, a unit vector, or 0, 0 for
+     * unknown. A rod carried to one side of the fish leads it that way.
      */
-    steer(fish, aim, tip, stretch, stiffness, winding, holds, homeX, homeZ) {
+    steer(fish, aim, tip, stretch, stiffness, winding, holds, homeX, homeZ, rodX = 0, rodZ = 0) {
       let ox = fish.x - tip.x;
       let oz = fish.z - tip.z;
       const far = Math.hypot(ox, oz);
@@ -226,11 +268,23 @@ export function createFight(random = Math.random) {
       const spare = Math.max(0, fight.force - stiffness * Math.max(0, stretch));
       // Pulling harder than the reel holds, there is no such place: it takes line, as
       // fast as what its pull has over the reel's hold can drive it through the water.
-      const bolt = Math.max(0, fight.force - holds) / BODY_DRAG;
-      taking = bolt > ACROSS_RUN;
+      const bolt = Math.max(0, fight.force - holds) / BOLT_DRAG;
+      taking = bolt > DART_NEEDS;
       const settling = (held - stretch) / SETTLE_IN - winding;
       let away = Math.max(-LED_MAX, Math.min(spare / BODY_DRAG + SLACK_SPEED, bolt > 0 ? Math.max(bolt, settling) : settling));
-      const across = (running ? ACROSS_RUN : ACROSS_REST) * side;
+      const room = Math.min(1, far / ACROSS_FAR);
+      const dash = kind.dash * (DASH_SPENT + (1 - DASH_SPENT) * fight.stamina) * (ACROSS_NEAR_SHARE + (1 - ACROSS_NEAR_SHARE) * room);
+      // How much of that it uses: the lean of this run, and less of it held than running out.
+      const going = HELD_ACROSS + (1 - HELD_ACROSS) * Math.min(1, bolt / ACROSS_FULL);
+      // The rod's side of it: how far the rod points to the left of the fish's bearing,
+      // as the part of its direction that lies across the line.
+      const rodOff = Math.atan2(rodZ * ox - rodX * oz, rodX * ox + rodZ * oz);
+      const pull = rodX || rodZ ? Math.min(Math.PI / 2, Math.max(0, Math.abs(rodOff) - LED_FROM)) : 0;
+      const yields = running ? LED_SPENT * (1 - fight.stamina) : 1;
+      const led = Math.sin(pull) * Math.sign(rodOff) * LED_REST * yields;
+      // And how hard the angler is hauling against it while it will not come.
+      fight.against = Math.sin(pull) * (1 - yields);
+      const across = (running ? dash * Math.abs(lean) * going : ACROSS_REST) * side + led;
       const nx = Math.sin(fish.yaw);
       const nz = Math.cos(fish.yaw);
       // More than a quarter turn to make: it goes round on the rod's side.

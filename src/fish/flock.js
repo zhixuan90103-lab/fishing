@@ -142,14 +142,16 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
      * the body swings round to hang below it, and it thrashes, less as time goes on.
      * vigor: how hard it is kicking right now, 1 for the usual. The caller raises it for
      * a moment when something sets the fish off: breaking the surface, landing in a net.
+     * free: it hangs clear on a line, and turns about it as it kicks. Pass false for a
+     * fish lying in a net, which has nothing to turn on.
      */
-    hang(fish, mx, my, mz, upX, upY, upZ, dt, vigor = 1) {
+    hang(fish, mx, my, mz, upX, upY, upZ, dt, vigor = 1, free = true) {
       if (fish.state !== HUNG) {
         fish.state = HUNG;
         fish.brain = null;
         startHang(fish, vigor);
       }
-      poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength);
+      poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength, free);
       writePose(fish);
     },
     // A hung fish has been taken away for good: netted and carried out of sight. The school

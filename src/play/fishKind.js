@@ -21,6 +21,7 @@
  *   rest      and between runs, N. Never zero: the line stays tight
  *   tire      how fast it tires, against the rates in fight.js. Higher is spent sooner
  *   runFor    how long its runs last, against the times in fight.js
+ *   dash      how fast it tears off across the line in a run, fresh, m/s
  *   thump     how hard a shake of its head snatches the line at its peak, fresh, N
  *   beat      seconds between head shakes within a burst, fresh: [shortest, longest]
  *   load      what it weighs on the rod tip once out of the water, kg
@@ -31,10 +32,10 @@
  */
 const KINDS = {
   dorade: [
-    { size: 0.78, runFresh: 2.8, runSpent: 1.3, rest: 0.5, tire: 1.9, runFor: 0.55, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
-    { size: 0.95, runFresh: 3.8, runSpent: 1.6, rest: 0.7, tire: 1.6, runFor: 0.65, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
-    { size: 1.2, runFresh: 8, runSpent: 2.4, rest: 1.2, tire: 1.1, runFor: 0.95, thump: 2, beat: [0.15, 0.24], load: 0.28 },
-    { size: 1.4, runFresh: 9.8, runSpent: 2.8, rest: 1.6, tire: 0.9, runFor: 1.1, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
+    { size: 0.78, runFresh: 2.8, runSpent: 1.3, rest: 0.5, tire: 1.9, runFor: 0.55, dash: 2, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
+    { size: 0.95, runFresh: 3.8, runSpent: 1.6, rest: 0.7, tire: 1.6, runFor: 0.65, dash: 2.3, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
+    { size: 1.2, runFresh: 8, runSpent: 2.4, rest: 1.2, tire: 1.1, runFor: 0.95, dash: 3.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
+    { size: 1.4, runFresh: 9.8, runSpent: 2.8, rest: 1.6, tire: 0.9, runFor: 1.1, dash: 3.6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
   ],
 };
 
@@ -60,6 +61,7 @@ export function fishOf(kind, size) {
     rest: mix(a.rest, b.rest, t),
     tire: mix(a.tire, b.tire, t),
     runFor: mix(a.runFor, b.runFor, t),
+    dash: mix(a.dash, b.dash, t),
     thump: mix(a.thump, b.thump, t),
     beat: [mix(a.beat[0], b.beat[0], t), mix(a.beat[1], b.beat[1], t)],
     load: mix(a.load, b.load, t),

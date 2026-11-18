@@ -96,17 +96,21 @@ export function createLure() {
     length: LENGTH,
 
     /**
-     * Put the line tie at (x, y, z) with the nose along (nx, ny, nz), any length.
+     * Put the line tie at (x, y, z) with the nose along (nx, ny, nz), any length, and the
+     * back facing (bx, by, bz). The back is the caller's to carry from frame to frame
+     * (lureMove.js): worked out here from the nose alone it flips whenever the nose
+     * passes through vertical.
      * swum is the distance it has swum so far, metres: the body beats with it, so it
      * swims while it moves and holds still when it stops.
      */
-    place(x, y, z, nx, ny, nz, swum) {
+    place(x, y, z, nx, ny, nz, swum, bx = 0, by = 1, bz = 0) {
       object.position.set(x, y, z);
       nose.set(nx, ny, nz);
       if (nose.lengthSq() < 1e-10) nose.set(0, 1, 0);
       nose.normalize();
-      // Back stays as near to world up as the nose allows.
-      back.set(0, 1, 0).addScaledVector(nose, -nose.y);
+      // Square the back to the nose.
+      back.set(bx, by, bz);
+      back.addScaledVector(nose, -back.dot(nose));
       if (back.lengthSq() < 1e-6) back.set(0, 0, -1).addScaledVector(nose, nose.z);
       back.normalize();
       side.crossVectors(back, nose);

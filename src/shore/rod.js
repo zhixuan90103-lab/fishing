@@ -188,6 +188,12 @@ export function createSpinningRod() {
     get tipTension() {
       return flex.tension;
     },
+    // Where the tip of the rod would be with the blank straight, world space, into `out`:
+    // the tip without the bend, the nod and the whip. For whoever needs to know where the
+    // rod is and must not be shaken by it (the view). Valid after update().
+    steadyTip(out) {
+      return out.copy(hold.grip.axis).multiplyScalar(LENGTH).add(hold.grip.butt);
+    },
     // How many points linePath() gives.
     lineStops: rings.length + 1,
     // Where the line runs along the rod, world space: the reel's line roller, then every

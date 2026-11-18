@@ -40,6 +40,18 @@ const SWING_MOST = 0.6;
 const TWIST_MOST = 0.55;
 // How fast a harder kick comes on, 1/s.
 const VIGOR_RATE = 9;
+// Hanging free on a line it turns about the line, so every side of it comes round. Its
+// kicking drives it one way, this hard for the usual thrash, rad/s². The twist it puts
+// in the line pulls it back, this hard per radian it has turned, 1/s², and the air slows
+// it, 1/s. So it winds round a turn or two, faster with each hard kick, and unwinds part
+// of the way as it tires: never a steady spin.
+const SPIN_DRIVE = 3.4;
+const SPIN_UNWIND = 0.18;
+const SPIN_LOSS = 1.6;
+// Lying in a net it has nothing to turn on: what turn it has left dies this fast, 1/s.
+const SPIN_STOPS = 9;
+// Fixed step for the turning, s.
+const SPIN_DT = 1 / 240;
 // Tail speed while it thrashes, as a swimming speed, m/s.
 const HANG_TAIL = 0.9;
 
@@ -133,16 +145,38 @@ export function mouthOf(fish, bodyLength, out) {
 export function startHang(fish, vigor) {
   fish.hungFor = 0;
   fish.vigor = vigor;
+  // How far it has turned about the line, radians, how fast, and which way its kicking
+  // drives it.
+  fish.spin = 0;
+  fish.spinRate = 0;
+  fish.spinWay = Math.random() < 0.5 ? -1 : 1;
   takeFrame(fish);
+}
+
+// One frame of its turning about the line. free: it hangs clear on a line.
+function turnOnLine(fish, thrash, free, dt) {
+  let done = 0;
+  while (done < dt - 1e-9) {
+    const h = Math.min(SPIN_DT, dt - done);
+    done += h;
+    if (free) {
+      fish.spinRate += (SPIN_DRIVE * thrash * fish.spinWay - SPIN_UNWIND * fish.spin) * h;
+      fish.spinRate *= Math.exp(-SPIN_LOSS * h);
+    } else {
+      fish.spinRate *= Math.exp(-SPIN_STOPS * h);
+    }
+    fish.spin += fish.spinRate * h;
+  }
 }
 
 /**
  * One frame of a hung fish. Its mouth is at (mx, my, mz) and the line runs up toward
  * (upX, upY, upZ). The body swings round to hang below the mouth, and it thrashes, less
  * as time goes on. vigor: how hard it is kicking right now, 1 for the usual.
+ * free: it hangs clear on a line and turns about it. False for one lying in a net.
  * Writes x, y, z, yaw, pitch, roll and the body state. The caller writes the pose out.
  */
-export function poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength) {
+export function poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength, free = true) {
   fish.hungFor += dt;
   // A kick comes on fast but not in one frame: the bend and the twist are laid straight
   // onto the pose, and a jump in how hard it kicks would be a jump in the fish.
@@ -166,7 +200,10 @@ export function poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength)
   // It twists about the line as it thrashes. The twist is laid on top of the frame,
   // never stored in it, so it cannot build up into a turn.
   const twist = Math.sin(fish.hungFor * HANG_BEAT * 0.37 + 1) * Math.min(TWIST_MOST, HANG_TWIST * thrash);
-  poseFrame(fish, twist);
+  // And it turns about the line. Kept apart from the frame, like the twist, and laid on
+  // with it.
+  turnOnLine(fish, thrash, free, dt);
+  poseFrame(fish, twist + fish.spin);
   // The body is placed from the mouth: back along the nose, and up toward its back by
   // as much as the mouth lies below the middle line. The same twist as the pose.
   const reach = bodyLength * MOUTH_AHEAD * fish.size;

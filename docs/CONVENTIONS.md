@@ -21,14 +21,14 @@
 
 | 物料 | 玩法往里送什么 | 玩法从里读什么 | 出处 |
 |---|---|---|---|
-| 鱼群 | `take(fish, brain)`、`giveBack(fish)`；`brain` 里只写目标。出了水的鱼用 `hang`、`keep` | `fishes`（含体型 `size`）、`mouth(fish, out)` | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 4、6、7 节 |
-| 鱼竿 | `setPose(pose)`；`setTipLoad(kg)`：出了水、挂在线上的重量；`setStrain(0 到 1)`：握竿的手多吃力 | — | [ROD.md](./ROD.md) 第 3、6 节 |
+| 鱼群 | `take(fish, brain)`、`giveBack(fish)`；`brain` 里只写目标。出了水的鱼用 `hang`（悬空还是在网里由玩法说）、`keep` | `fishes`（含体型 `size`）、`mouth(fish, out)` | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 4、6、7 节 |
+| 鱼竿 | `setPose(pose)`；`setTipLoad(kg)`：出了水、挂在线上的重量；`setStrain(0 到 1)`：握竿的手多吃力 | —（`steadyTip` 是给镜头读的，不是给玩法） | [ROD.md](./ROD.md) 第 3、6 节 |
 | 渔轮 | `rod.reel.wind(米)`，或单独转 `rotor` / `handle`、移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
 | 鱼线 | `setEnd`、`setLength` / `tighten`、`stow`、`setTied` | `slack`、`tension`、`stiffness`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
 | 饵 | `lureMove` 的 `hold` / `hang` / `launch` / `fly` / `tow` / `point`，在鱼嘴里时 `place`；`lure.place`；线上没有饵了 `lure.show(false)` | 位置、速度、鼻尖朝向、`swum`、`impact` | [LURE.md](./LURE.md) 第 5 节 |
 | 水花 | `burst(x, z, 力度)` | — | [SPLASH.md](./SPLASH.md) 第 5 节 |
 | 抄网 | `place(x, y, z, 柄的方向, 网兜拉多长, 晃多少)`、`hide()`；路径是玩法这边的 `scoop.js` | — | [NET.md](./NET.md) 第 5 节 |
-| 手机瞄准 | 玩法报出 `fishing.watch`（要镜头看着的点） | 瞄准的俯仰 | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
+| 手机瞄准 | 玩法报出 `fishing.watch`（要镜头看着的点）和 `fishing.watchRod`（看的时候要不要把竿留在画面里） | 瞄准的俯仰 | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
 | 震动 | `haptics.impact`、`notification`、`playTransient`。哪一下在哪震见 [PLAY.md](./PLAY.md) 第 11 节 | — | [HAPTICS.md](./HAPTICS.md) |
 
 - **物料之间也只走口子。** 线要拉竿，走 `rod.setTipTether`；线要知道导环在哪，走 `rod.linePath`。手机的瞄准要动竿，走 `rod.setAim`。这三个是给物料用的，玩法不要直接调。
@@ -93,6 +93,8 @@
 - **长度不变的东西按转角摆，不按位移推。** 竿的每一节转一个角度，长度就不会变。把点横着推出去，弯得越大就越长。
 - **换状态只换目标，不换算法、不拷贝。** 镜头从"追手机"变成"不动"再变成"看着落点"，变的只是它在追什么；饵从飞变成拖，位置原样交过去。在切换的那一帧拷贝一份、改一下基准，下一帧就可能跳。
 - **数量不在某一帧归零。** 落水后线上的余线、松手后的线速、看完落点后镜头和手机之间的夹角，都是很快地退掉，不是一帧清零。能写成时间的函数就写成时间的函数（收线的线长、水花的形状），不积分。
+- **镜头的锚是玩家手里的东西。** 画面里必须始终有玩家正在操作的那样东西（竿），别的（鱼）可以出去。镜头替玩家去追别的东西、把手里的东西甩出画面，手和画面就对不上了。
+- **用一样东西决定镜头动不动，不等于让镜头跟着它动。** 给它一个窗口：在窗口里随便动，镜头不理；到了边才推镜头。交进来的位置先去掉抖动，不然它贴着边抖，镜头就被一下一下地顶。
 - **能给定点就不给动点。** 让镜头去看一个地方时，给它落点这样不动的点，它转过去一次就停。给它一个一直在动的东西，画面就跟着起伏。
 - **硬的东西按位置去追，不按力差加速。** 鱼被线拉着时，让它游到"线的拉力正好等于它的力"的那个位置，不是按力差多少给它速度。线越短越硬，按力算的会冲过头再被拽回来，越硬抖得越厉害；按位置追，多硬收敛都一样。
 - **会改变读数的东西，不拿这个读数来驱动。** 手让出去会带着竿尖走，张力就变了；再用张力定手让多少，就是隔着一帧互相追。用上游的数：鱼的力和手指叠的力。

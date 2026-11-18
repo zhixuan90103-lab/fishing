@@ -175,6 +175,9 @@ export async function startShore(container, hooks = {}) {
   const NOT_TURNED = { yaw: 0, pitch: 0, roll: 0 };
   // The direction from the eye to what the cast wants watched, for the aim. Reused.
   const watchDir = { yaw: 0, pitch: 0 };
+  // The same for the rod tip, steadied, which the view keeps in the picture.
+  const tipPoint = new THREE.Vector3();
+  const tipDir = { yaw: 0, pitch: 0 };
   // Positive yaw turns toward the camera's left. The eye stays at the panel's position
   // and the horizon never rolls.
   const placeLook = (yawDeg, pitchDeg) => {
@@ -213,6 +216,10 @@ export async function startShore(container, hooks = {}) {
       phone.active && finger.touching,
       dt,
       watch ? directionTo(tune, watch, watchDir) : null,
+      // The view keeps the rod tip in the picture when the cast says so. Without a phone
+      // the rod cannot be turned after a fish, so the view is left free to follow it:
+      // desktop stand-in.
+      watch && phone.active && fishing.watchRod ? directionTo(tune, rod.steadyTip(tipPoint), tipDir) : null,
     );
     placeLook(aim.viewYaw, aim.viewPitch);
     rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll);
@@ -253,7 +260,7 @@ export async function startShore(container, hooks = {}) {
   let readoutIn = 0;
   // How the cast last reported its fish lost, to say so once when the line breaks.
   let lostSeen = '';
-  const fishingInput = { finger: false, sensor: false, viewYaw: 0, aimPitch: 0 };
+  const fishingInput = { finger: false, sensor: false, viewYaw: 0, rodYaw: 0, aimPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -367,6 +374,7 @@ export async function startShore(container, hooks = {}) {
       // space bar stands in.
       fishingInput.finger = phone.active ? finger.touching : finger.key;
       fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
+      fishingInput.rodYaw = (aim.viewYaw + aim.rodYaw) * Math.PI / 180;
       fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
       fishing.update(dt, fishingInput);
     }

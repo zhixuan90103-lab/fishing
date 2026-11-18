@@ -19,9 +19,12 @@
  *
  * A hand holding against a fish is not a clamp. Told how hard it is working (setStrain)
  * and where the pull comes from (setPull), it is drawn out a little toward the pull, the
- * rod tips a little that way, and it shakes, the more the harder it works. All of it is
- * a turn about the hand and a small shift of the hand, on top of everything else, so it
- * reaches the blank as the grip moving and the blank shivers with it.
+ * rod tips a little that way, and it shakes, the more the harder it works. And a rod
+ * carried to one side of the pull is not swept there square: the wrist lays it over, so
+ * it rolls about its own length, toward the side it is carried to, with the reel swinging
+ * out the other way. All of it is a turn about the hand and a small shift of the hand, on
+ * top of everything else, so it reaches the blank as the grip moving and the blank
+ * shivers with it.
  */
 
 import * as THREE from 'three/webgpu';
@@ -58,6 +61,13 @@ const SHAKE_HZ = [6.3, 8.9, 11.4];
 const SHAKE_HZ_SIDE = [5.7, 9.6, 12.1];
 // How fast the direction the hand gives in follows where the pull comes from, 1/s.
 const PULL_RATE = 6;
+// The lean: with the pull off to one side of the rod, the rod rolls about its own length
+// toward the other side, the side it is being carried to. Up to LEAN_MOST degrees, most
+// of it by the time the pull is LEAN_BY degrees to the side, and all of it once the hand
+// is working at LEAN_EFFORT. A pull dead ahead, or an idle hand, and it sits square.
+const LEAN_MOST = 28;
+const LEAN_BY = 25;
+const LEAN_EFFORT = 0.5;
 
 const IDENTITY = new THREE.Quaternion();
 
@@ -176,6 +186,7 @@ export function createRodHold(root, handAt) {
   const giveQ = new THREE.Quaternion();
   const giveP = new THREE.Vector3();
   const shakeQ = new THREE.Quaternion();
+  const leanQ = new THREE.Quaternion();
   const viewNowQ = new THREE.Quaternion();
   const viewNowP = new THREE.Vector3();
   let clock = 0;
@@ -221,6 +232,15 @@ export function createRodHold(root, handAt) {
     shakeQ.setFromAxisAngle(across, size * beats(SHAKE_HZ_SIDE, clock));
     giveQ.premultiply(shakeQ);
     giveP.copy(toward).multiplyScalar(GIVE_REACH * effort);
+    // The lean. How far to the right of the rod the pull is, as a level angle in the
+    // view's space, where right is +X and ahead is -Z. Pull to the right, rod carried to
+    // the left: it rolls to the left, which about an axis pointing away is a negative turn.
+    let off = Math.atan2(toward.x, -toward.z) - Math.atan2(blankNow.x, -blankNow.z);
+    if (off > Math.PI) off -= 2 * Math.PI;
+    else if (off < -Math.PI) off += 2 * Math.PI;
+    const lean = LEAN_MOST * Math.tanh(off / (LEAN_BY * Math.PI / 180)) * Math.min(1, effort / LEAN_EFFORT);
+    leanQ.setFromAxisAngle(blankNow, -lean * Math.PI / 180);
+    giveQ.multiply(leanQ);
   }
 
   // The grip in the world, as the bend should see it: built on the smoothed view.

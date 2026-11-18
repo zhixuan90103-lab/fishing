@@ -74,7 +74,8 @@ export function createLineOut() {
       return taken;
     },
 
-    // Line pulled off the reel by a fish.
+    // Line going off the reel: pulled off by a fish, or following a lure that sinks with
+    // the finger up.
     pay(metres) {
       out.length += metres;
     },

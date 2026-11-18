@@ -38,6 +38,9 @@ import { createThump } from './thump.js';
 import { createTipWeight, dryness } from './tipWeight.js';
 import { steerToLure, touching } from './visit.js';
 
+// Hauling the rod to one side against a fish that will not be led, the hand works this
+// much harder, as a share of what it was holding, with the rod square to the fish.
+const AGAINST_MORE = 0.6;
 // The one species in the water. Its numbers by size are in fishKind.js.
 const SPECIES = 'dorade';
 const GRAVITY = 9.81;
@@ -101,6 +104,10 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   // The level direction the cast went, for keeping a hooked fish in front.
   let homeX = 0;
   let homeZ = 1;
+  // The level direction the rod points, as of the last frame of the fight: a rod carried
+  // to one side of the fish leads it that way. 0, 0 until it is known.
+  let rodX = 0;
+  let rodZ = 0;
   // Seconds until a fish sets off, the fish on its way, and the fish on the line. Never
   // both of the last two.
   let comeIn = 0;
@@ -133,7 +140,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     steerToLure(fish, aim, brainMouth, move, Math.hypot(move.vx, move.vz));
   };
   const fightBrain = (fish, aim) => {
-    fight.steer(fish, aim, line.tip, stretch, line.stiffness, haul.speed, RUN_OUT_AT, homeX, homeZ);
+    fight.steer(fish, aim, line.tip, stretch, line.stiffness, haul.speed, RUN_OUT_AT, homeX, homeZ, rodX, rodZ);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.
@@ -157,6 +164,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     hooked = visitor;
     visitor = null;
     hung = false;
+    rodX = 0;
+    rodZ = 0;
     tension = 0;
     stretch = 0;
     running = 0;
@@ -260,7 +269,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       haptics?.playTransient(0.4, 0.2);
     }
     // Head up in the bag, as it fell.
-    school.hang(hooked, scoop.fishX, scoop.fishY, scoop.fishZ, scoop.fishX, scoop.fishY + 1, scoop.fishZ, dt, kick.vigor);
+    school.hang(hooked, scoop.fishX, scoop.fishY, scoop.fishZ, scoop.fishX, scoop.fishY + 1, scoop.fishZ, dt, kick.vigor, false);
     net?.place(scoop.x, scoop.y, scoop.z, scoop.handleX, scoop.handleZ, scoop.stretch, scoop.rock);
     return gone;
   }
@@ -356,6 +365,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
      * '' while it goes on.
      */
     fight(dt, input, tip, spot) {
+      rodX = Math.sin(input.rodYaw);
+      rodZ = Math.cos(input.rodYaw);
       fight.step(dt, wound);
       // A finger held down on a fish that is taking line leans on it, and may break it.
       if (snap.step(dt, input.finger, fight.force > RUN_OUT_AT, fight.force)) {
@@ -374,7 +385,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       tension = line.tension;
       // What the hand holds: the fish's pull as far as the reel passes it on, and what
       // the finger adds.
-      holding = Math.min(fight.force, RUN_OUT_AT) + snap.press;
+      holding = Math.min(fight.force, RUN_OUT_AT) * (1 + AGAINST_MORE * fight.against) + snap.press;
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       wound = taken;
