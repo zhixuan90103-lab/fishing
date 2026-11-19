@@ -115,9 +115,13 @@ export function createLineCurve(count) {
     }
   }
 
-  // One pass along the string, from one end or the other: each pair of neighbours is put
-  // `rest` apart, each giving by how easily it moves. The ends do not move, and a point in
-  // the water gives less than one in the air.
+  // One pass along the string, from one end or the other: each pair of neighbours further
+  // than `rest` apart is drawn back to it, each giving by how easily it moves. The ends do
+  // not move, and a point in the water gives less than one in the air.
+  // Neighbours nearer than that are left alone: a line can be pulled, not pushed. Pushed
+  // apart, a line with slack suddenly in it took the slack up as a saw's edge, every other
+  // point thrown the opposite way, twenty bends along it, where a real one hangs in one
+  // belly as it falls.
   function fit(rest, forward) {
     for (let n = 0; n < last; n += 1) {
       const i = forward ? n : last - 1 - n;
@@ -127,7 +131,7 @@ export function createLineCurve(count) {
       const far = Math.hypot(dx, dy, dz);
       const a = ease[i];
       const b = ease[i + 1];
-      if (far < 1e-9 || a + b === 0) continue;
+      if (far <= rest || a + b === 0) continue;
       const by = (far - rest) / (far * (a + b));
       x[i] += dx * by * a;
       y[i] += dy * by * a;

@@ -253,7 +253,7 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
   const N = 49;
   for (const [size, press, fps] of [[0.85, 'always', 60], [1.3, 'rests', 60], [1.3, 'never', 60], [1.3, 'rests', 20]]) {
     const rig = createRig({ seed: 5, fps, press, hold: 0.6, sizes: () => size }); const f = rig.fishing;
-    const curve = createLineCurve(N), out = new Float64Array(N * 3); let hooked = -1, loose = 0, soon = 9, worst = 0;
+    const curve = createLineCurve(N), out = new Float64Array(N * 3); let hooked = -1, loose = 0, soon = 9, worst = 0, saw = 0;
     while (rig.time < 45) {
       rig.step(); const l = rig.line; if (l.stowed !== null) { curve.reset(); continue; }
       curve.step(rig.dt, l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.tied ? l.tension : 0, out, 0);
@@ -262,12 +262,19 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
       if (f.stage !== 'fight') { if (hooked >= 0) break; loose = far; continue; }
       if (hooked < 0) hooked = rig.time;
       if (rig.time - hooked > 0.4 && rig.time - hooked < 0.8) soon = Math.min(soon, far);
+      // How many times the line's bend changes side along its length, up and down.
+      let turns = 0, side = 0;
+      for (let i = 1; i < N - 1; i += 1) { const ay = out[i * 3 + 1] - out[i * 3 - 2], by = out[i * 3 + 4] - out[i * 3 + 1]; const k = by / Math.hypot(out[i * 3 + 3] - out[i * 3], by, out[i * 3 + 5] - out[i * 3 + 2]) - ay / Math.hypot(out[i * 3] - out[i * 3 - 3], ay, out[i * 3 + 2] - out[i * 3 - 1]); const sgn = Math.abs(k) > 0.004 ? Math.sign(k) : 0; if (sgn && side && sgn !== side) turns += 1; if (sgn) side = sgn; }
+      saw = Math.max(saw, turns);
       if (rig.time - hooked > 2) worst = Math.max(worst, far);
     }
     const who = `size ${size}, finger ${press}, ${fps} fps`;
     expect(hooked >= 0, `${who}: a fish took it`);
     expect(loose > 0.1, `${who}: it lay loose before the bite`, `${loose.toFixed(2)} m off straight`);
     expect(soon < 0.08, `${who}: within half a second or so of the bite it is all but straight`, `${(soon * 100).toFixed(1)} cm`);
+    // The rod kicks back at the strike and the line is really slack for a moment. That
+    // slack used to go in as a saw's edge: over twenty bends along the line.
+    expect(saw <= 8, `${who}: slack coming into it hangs in a belly or two, not a saw's edge`, `${saw} changes of bend along it`);
     expect(worst < 0.05, `${who}: and stays within a couple of fingers of straight for the rest of the fight`, `${(worst * 100).toFixed(1)} cm`);
   }
 });
