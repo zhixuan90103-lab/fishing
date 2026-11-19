@@ -142,6 +142,21 @@ check('cast: the lure flies off as fast as the rod tip was carrying it, so a har
     expect(Math.abs(early.reach - reach[2]) < 1.5, `let go ${part * 100}% of the way through the swing, it is the same cast`, `${early.reach.toFixed(1)} m against ${reach[2].toFixed(1)} m`);
   }
   expect(cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach > 8, 'a quick flick let go almost at once is still a cast', `${cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach.toFixed(1)} m`);
+  // How high it leaves goes by how high the rod is as it lets go. The same swing, stopped high or followed through low.
+  const thrown = (from, to) => {
+    const rig = createRig({ seed: 1, fps: 60, noSchool: true, sensor: true }); const f = rig.fishing; let top = 0, began = 0;
+    rig.finger = () => rig.time > 1 && rig.time < 1.2 + ((from - to) / 400) * 0.5;
+    while (rig.time < 12) {
+      rig.setLift(rig.time < 1.2 ? from : Math.max(to, from - 400 * (rig.time - 1.2))); rig.step();
+      if (f.stage === 'flight') { if (!began) began = rig.time; top = Math.max(top, f.lure.y); }
+      if (f.stage === 'water') return { angle: f.lastAngle, top, aloft: rig.time - began };
+    }
+    return { angle: 0, top: 0, aloft: 0 };
+  };
+  const lob = thrown(100, 60), usual = thrown(80, 25), drive = thrown(60, -10);
+  expect(lob.angle > usual.angle + 10 && usual.angle > drive.angle + 8, 'a rod stopped high lobs it, one followed through low drives it', `${lob.angle.toFixed(0)}°, ${usual.angle.toFixed(0)}°, ${drive.angle.toFixed(0)}°`);
+  expect(lob.top > drive.top + 3 && lob.aloft > drive.aloft * 1.5, 'the lob goes high and hangs, the drive goes flat and quick', `${lob.top.toFixed(1)} m and ${lob.aloft.toFixed(1)} s, ${drive.top.toFixed(1)} m and ${drive.aloft.toFixed(1)} s`);
+  expect(drive.angle > 10 && lob.angle < 52, 'and neither is ever straight up or into the water at the feet', `${drive.angle.toFixed(0)}° to ${lob.angle.toFixed(0)}°`);
   expect(cast(60, 400, 0.1).reach > 9, 'let go a tenth of a second late, it is still a fair cast', `${cast(60, 400, 0.1).reach.toFixed(1)} m`);
   expect(cast(60, 400, 0.02, 30).reach < reach[2] * 0.6, 'a short stab of the wrist does not get the tip up to speed', `${cast(60, 400, 0.02, 30).reach.toFixed(1)} m`);
 });
