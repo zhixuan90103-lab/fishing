@@ -39,7 +39,8 @@ const LINE_DAMPS = 0.5;
 export const LURE_KG = 0.01;
 const LURE_SUNK = 0.3;
 
-// Flying: the angle it leaves at, above level, radians. Higher lobs it, lower drives it.
+// Flying: the angle it leaves at, above level, radians, unless launch() is told another.
+// Higher lobs it, lower drives it.
 export const LAUNCH_ANGLE = 28 * Math.PI / 180;
 // With the line stopped, how fast its forward speed dies, 1/s. It eases to a stop and
 // drops, it does not hit a wall.
@@ -194,13 +195,13 @@ export function createLureMove() {
     },
 
     // Throw it from where it is so it comes down `reach` metres away along the level
-    // direction (dirX, dirZ), a unit vector.
-    launch(reach, dirX, dirZ) {
-      const c = Math.cos(LAUNCH_ANGLE);
+    // direction (dirX, dirZ), a unit vector, leaving at `angle` above level, radians.
+    launch(reach, dirX, dirZ, angle = LAUNCH_ANGLE) {
+      const c = Math.cos(angle);
       const drop = Math.max(0, m.y);
-      const speed = Math.sqrt((GRAVITY * reach * reach) / (2 * c * c * (reach * Math.tan(LAUNCH_ANGLE) + drop)));
+      const speed = Math.sqrt((GRAVITY * reach * reach) / (2 * c * c * (reach * Math.tan(angle) + drop)));
       m.vx = speed * c * dirX;
-      m.vy = speed * Math.sin(LAUNCH_ANGLE);
+      m.vy = speed * Math.sin(angle);
       m.vz = speed * c * dirZ;
     },
 
