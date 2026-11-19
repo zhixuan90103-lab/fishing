@@ -200,7 +200,7 @@ rodHold 把它加在安装姿态上，FOLLOW_MAX 不管它
 
 要看别的东西也是改 `watch` 报出的点，不在这一层加模式。报的点尽量是定点，或者只在事情变了的时候换一次；非跟着动的东西不可时（挂着的鱼），让这个点慢慢地追，不要直接给鱼的位置。
 
-玩法要读"手机抬得多快"时（抬杆，还没做），读瞄准的俯仰（`aim.viewPitch + aim.rodPitch`），由 `startShore` 每帧传给它，快慢由玩法自己量，不要在这一层写规则。抛投的力度不读手机：读竿尖的速度，饵是从竿尖离手的，见 [PLAY.md](./PLAY.md) 第 4 节。
+玩法要读"手机抬得多快"时（抬杆，还没做），读瞄准的俯仰（`aim.viewPitch + aim.rodPitch`），由 `startShore` 每帧传给它，快慢由玩法自己量，不要在这一层写规则。抛投的力度不读手机：读竿尖的速度，饵是从竿尖离手的，见 [PLAY.md](./PLAY.md) 第 4 节。抛投的方向是手指按下那一刻镜头的朝向和俯仰（`viewYaw`、`viewPitch`，同样每帧传给玩法）。
 
 权限只由「允许手机转动」的点击去要：`enable()` 在那一次点击里同步调用，一次只请求一个接口。iOS 上 Capacitor 的 WebView 会静默放行而不弹框，所以 `BridgeViewController.swift` 里的 `MotionPromptProxy` 必须 `decisionHandler(.prompt)`。它的真源在 `plugins/native-haptics/`。
 

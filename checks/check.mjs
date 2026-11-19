@@ -115,6 +115,8 @@ check('cast: the lure flies off as fast as the rod tip was carrying it, so a har
   // the finger down, and the finger comes up `late` seconds after it stops. Where the lure lands.
   const cast = (fps, rate, late = 0.02, arc = 60) => {
     const rig = createRig({ seed: 1, fps, noSchool: true, sensor: true }); const f = rig.fishing; const end = 1.2 + arc / rate; let from = null;
+    // The view looking 30° up when the finger goes down: that is the way it is thrown.
+    rig.viewPitch = 30;
     rig.finger = () => rig.time > 1 && rig.time < end + late;
     while (rig.time < 12) {
       rig.setLift(rig.time < 1.2 ? 70 : Math.max(70 - arc, 70 - rate * (rig.time - 1.2))); rig.step();
@@ -142,21 +144,24 @@ check('cast: the lure flies off as fast as the rod tip was carrying it, so a har
     expect(Math.abs(early.reach - reach[2]) < 1.5, `let go ${part * 100}% of the way through the swing, it is the same cast`, `${early.reach.toFixed(1)} m against ${reach[2].toFixed(1)} m`);
   }
   expect(cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach > 8, 'a quick flick let go almost at once is still a cast', `${cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach.toFixed(1)} m`);
-  // How high it leaves goes by how high the rod is as it lets go. The same swing, stopped high or followed through low.
-  const thrown = (from, to) => {
-    const rig = createRig({ seed: 1, fps: 60, noSchool: true, sensor: true }); const f = rig.fishing; let top = 0, began = 0;
-    rig.finger = () => rig.time > 1 && rig.time < 1.2 + ((from - to) / 400) * 0.5;
-    while (rig.time < 12) {
-      rig.setLift(rig.time < 1.2 ? from : Math.max(to, from - 400 * (rig.time - 1.2))); rig.step();
-      if (f.stage === 'flight') { if (!began) began = rig.time; top = Math.max(top, f.lure.y); }
-      if (f.stage === 'water') return { angle: f.lastAngle, top, aloft: rig.time - began };
+  // It is thrown along the line of sight as it was when the finger went down. The same swing, looking higher or lower.
+  const thrown = (pitch, turned = 0) => {
+    const rig = createRig({ seed: 1, fps: 60, noSchool: true, sensor: true }); const f = rig.fishing; let top = 0, began = 0, from = null; rig.viewPitch = pitch;
+    rig.finger = () => rig.time > 1 && rig.time < 1.2 + (55 / 400) * 0.5;
+    while (rig.time < 14) {
+      // After the finger is down the view is said to look somewhere else: it must not matter.
+      if (rig.time > 1.1) rig.viewPitch = pitch + turned;
+      rig.setLift(rig.time < 1.2 ? 80 : Math.max(25, 80 - 400 * (rig.time - 1.2))); rig.step();
+      if (f.stage === 'flight') { if (!began) { began = rig.time; from = { x: rig.line.tip.x, z: rig.line.tip.z }; } top = Math.max(top, f.lure.y); }
+      if (f.stage === 'water') return { angle: f.lastAngle, top, aloft: rig.time - began, reach: Math.hypot(f.lure.x - from.x, f.lure.z - from.z) };
     }
-    return { angle: 0, top: 0, aloft: 0 };
+    return { angle: 0, top: 0, aloft: 0, reach: 0 };
   };
-  const lob = thrown(100, 60), usual = thrown(80, 25), drive = thrown(60, -10);
-  expect(lob.angle > usual.angle + 10 && usual.angle > drive.angle + 8, 'a rod stopped high lobs it, one followed through low drives it', `${lob.angle.toFixed(0)}°, ${usual.angle.toFixed(0)}°, ${drive.angle.toFixed(0)}°`);
-  expect(lob.top > drive.top + 3 && lob.aloft > drive.aloft * 1.5, 'the lob goes high and hangs, the drive goes flat and quick', `${lob.top.toFixed(1)} m and ${lob.aloft.toFixed(1)} s, ${drive.top.toFixed(1)} m and ${drive.aloft.toFixed(1)} s`);
-  expect(drive.angle > 10 && lob.angle < 52, 'and neither is ever straight up or into the water at the feet', `${drive.angle.toFixed(0)}° to ${lob.angle.toFixed(0)}°`);
+  const level = thrown(0), up = thrown(30), high = thrown(60);
+  expect(Math.abs(level.angle) < 0.5 && Math.abs(up.angle - 30) < 0.5 && Math.abs(high.angle - 60) < 0.5, 'it leaves at the angle the view was looking', `${level.angle.toFixed(0)}°, ${up.angle.toFixed(0)}°, ${high.angle.toFixed(0)}°`);
+  expect(up.reach > level.reach + 5 && high.top > up.top + 3 && high.aloft > level.aloft * 2, 'looking level drives it flat and short, looking up carries it far, looking high lobs it', `${level.reach.toFixed(1)} m, ${up.reach.toFixed(1)} m, ${high.reach.toFixed(1)} m; tops ${level.top.toFixed(1)}, ${up.top.toFixed(1)}, ${high.top.toFixed(1)} m`);
+  expect(thrown(-60).angle > -26 && thrown(89).angle < 71 && thrown(-60).reach > 1, 'never straight up, nor into the water at the feet', `${thrown(-60).angle.toFixed(0)}° to ${thrown(89).angle.toFixed(0)}°`);
+  expect(Math.abs(thrown(30, -40).reach - up.reach) < 0.01, 'where the view looks after the finger is down changes nothing', thrown(30, -40).reach.toFixed(2));
   expect(cast(60, 400, 0.1).reach > 9, 'let go a tenth of a second late, it is still a fair cast', `${cast(60, 400, 0.1).reach.toFixed(1)} m`);
 });
 

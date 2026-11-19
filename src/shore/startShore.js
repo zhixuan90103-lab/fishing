@@ -268,7 +268,7 @@ export async function startShore(container, hooks = {}) {
   let readoutIn = 0;
   // How the cast last reported its fish lost, to say so once when the line breaks.
   let lostSeen = '';
-  const fishingInput = { finger: false, sensor: false, viewYaw: 0, aimPitch: 0 };
+  const fishingInput = { finger: false, sensor: false, viewYaw: 0, viewPitch: 0, aimPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -382,6 +382,7 @@ export async function startShore(container, hooks = {}) {
       // space bar stands in.
       fishingInput.finger = phone.active ? finger.touching : finger.key;
       fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
+      fishingInput.viewPitch = aim.viewPitch;
       fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
       fishing.update(dt, fishingInput);
     }

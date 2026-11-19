@@ -172,7 +172,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
   };
   const fishing = createFishing({ rod, line, lure, splash, school: noSchool ? null : school, net, haptics, random });
-  const input = { finger: false, sensor, viewYaw, aimPitch: lift - 30 };
+  const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, aimPitch: lift - 30 };
   let time = 0;
   let frame = 0;
   let begun = false;
@@ -221,6 +221,9 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
       flock.step(dt, 1, ROCKS, cam);
       input.finger = rig.finger();
       input.viewYaw = viewYaw;
+      // How high the view is said to look, for where a cast is thrown. The rig's own
+      // camera stays as it is.
+      if (rig.viewPitch !== undefined) input.viewPitch = rig.viewPitch;
       if (begun) fishing.update(dt, input);
       // The view turns to what the cast wants watched, as aim.js would, simply.
       const watch = begun && fishing.watch;

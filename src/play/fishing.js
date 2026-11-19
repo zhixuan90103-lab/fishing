@@ -82,8 +82,11 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // ready: how fast the rod tip is carrying the lure now, and at the last release, m/s.
   let swung = 0;
   let released = 0;
-  // The angle the last cast left at, degrees above level.
+  // The angle the last cast left at, degrees above level. And where the view was
+  // looking when the finger went down, radians and degrees: a cast goes that way.
   let lobbed = 0;
+  let aimedYaw = 0;
+  let aimedPitch = 0;
   // ready: seconds since the finger came up with the lure not yet gone, or -1. And the
   // tip's speed a frame ago, to tell whether it is still rising.
   let leaving = -1;
@@ -194,6 +197,10 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     if (!fresh) {
       if (!input.finger) fresh = true;
     } else if (input.finger) {
+      if (!down) {
+        aimedYaw = input.viewYaw;
+        aimedPitch = input.viewPitch;
+      }
       down = true;
       leaving = -1;
       heldFor += dt;
@@ -212,15 +219,15 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
         released = input.sensor
           ? peak
           : SPEED_MIN + (SPEED_FULL - SPEED_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
-        // How high it leaves goes by how high the rod is as it lets go. Without a
-        // sensor the rod cannot be raised: the usual angle.
-        const angle = input.sensor ? launchAngle(input.aimPitch) : undefined;
-        const reach = castReach(released, angle);
+        // It is thrown the way the view was looking when the finger went down, up or
+        // down as well as round. Without a sensor: the usual angle, from the water's height.
+        const angle = input.sensor ? launchAngle(aimedPitch) : undefined;
+        const reach = input.sensor ? castReach(released, angle, move.y) : castReach(released);
         leaving = -1;
         heldFor = 0;
         if (reach > 0) {
           lobbed = angle === undefined ? 28 : angle * 180 / Math.PI;
-          toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw), angle);
+          toFlight(reach, Math.sin(aimedYaw), Math.cos(aimedYaw), angle);
           return;
         }
       }
@@ -377,6 +384,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
      * drew last frame.
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
+     * input.viewPitch: how high it looks, degrees, positive upward.
      * input.aimPitch: how high the phone aims the rod, degrees, positive upward.
      */
     update(dt, input) {
