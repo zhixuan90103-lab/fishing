@@ -184,6 +184,13 @@ export function createFight(random = Math.random) {
       return Math.max(0, fight.force - holds) / BOLT_DRAG;
     },
 
+    // The pull on the line that holds it while line comes in at `winding`, m/s: its own,
+    // and what it takes to draw it through the water that fast, N. This is where the
+    // line's tension settles, short of what the reel gives line at.
+    draws(winding) {
+      return fight.force + BODY_DRAG * winding;
+    },
+
     /**
      * Where the hooked fish is, seen from the rod tip: the level direction out to it,
      * into out.x, out.z, and how far, into out.far. fish and tip have x, z. With the fish
@@ -218,7 +225,7 @@ export function createFight(random = Math.random) {
       const oz = to.z;
       // The stretch that holds it: its own pull, plus what it takes to drag it in as fast
       // as the line is coming. It swims to there, and comes in with the line meanwhile.
-      const held = (fight.force + BODY_DRAG * winding) / stiffness;
+      const held = fight.draws(winding) / stiffness;
       // It cannot outrun what its pull has over the line's.
       const spare = Math.max(0, fight.force - stiffness * Math.max(0, stretch));
       const bolt = fight.bolt(holds);
@@ -243,6 +250,9 @@ export function createFight(random = Math.random) {
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
       aim.slow = SLOW + HELD_SLOWS * overheld;
       aim.rise = running ? RISE_RUN : RISE_REST;
+      // How hard it is working is its pull against the most it has: a fresh run is flat
+      // out whatever speed the line lets it make, a rest is next to nothing.
+      aim.effort = kind.runFresh > 0 ? Math.min(1, fight.force / kind.runFresh) : 0;
     },
   };
   return fight;

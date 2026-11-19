@@ -17,8 +17,10 @@
 // Line past the tip with the lure wound in: the lure's nose sits just under the tip ring.
 // The cast ends when the line is back to this.
 export const STOW_LENGTH = 0.025;
-// Extra line in the air during the flight, as a share of the gap, so it bellies a little.
-const FLIGHT_SPARE = 0.04;
+// Extra line in the air during the flight, as a share of the gap. Next to nothing: the
+// lure is carrying the line out and holds it all but straight. A line sags by the square
+// root of its slack, so even one part in a hundred bellies it by over a metre at 24 m.
+const FLIGHT_SPARE = 0.001;
 // After the lure lands, how fast that belly is drawn out of the line, 1/s. The line
 // straightens over about half a second instead of snapping straight. Lower is slower.
 const SETTLE_RATE = 5;

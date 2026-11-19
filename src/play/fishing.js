@@ -254,7 +254,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // Only a lure in the water with nothing on it has a loose line. A fish, or the lure
     // leaving the water, takes it up.
     if (stage !== 'water' || lifted) loose.takenUp(dt);
-    line.setLay(loose.lay);
     line.setEnd(move.x, move.y, move.z);
     // In a fight a shake of the fish's head snatches the line: it is that much shorter
     // for the moment, and the rod tip nods to it.

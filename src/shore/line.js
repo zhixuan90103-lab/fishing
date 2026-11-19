@@ -9,10 +9,13 @@
  * line is out, or any fishing rule.
  *
  * The outside gives two things: where the far end is, and how much line is out past the
- * tip. Everything else follows. Slack is the length minus the gap. With slack the line
- * hangs in a catenary and pulls nothing. Without it the line is straight, and stretched
- * by however much the gap exceeds it. The tension is that stretch times the line's
- * stiffness, and the rod works it out, not this file: see setTipTether in rodFlex.js.
+ * tip. The pull follows from those alone. Slack is the length minus the gap. With slack
+ * the line pulls nothing. Without it the line is stretched by however much the gap
+ * exceeds it, and the tension is that stretch times the line's stiffness: the rod works
+ * it out, not this file, see setTipTether in rodFlex.js.
+ * What the line looks like is another matter and is simulated: lineCurve.js. It is told
+ * the two ends, the length and the pull, and nothing about loose or tight: how slack it
+ * lies comes of what has happened to it. That is only drawn. It never changes the pull.
  *
  * Each frame, after rod.update(): read the guides, draw, hand the rod the end and length
  * for its next step.
@@ -28,9 +31,10 @@
  */
 
 import * as THREE from 'three/webgpu';
-import { shapeLine } from './lineCurve.js';
+import { createLineCurve } from './lineCurve.js';
 
-// Points drawn between the tip and the far end. More makes a deep sag smoother.
+// Points drawn between the tip and the far end. More makes a deep sag smoother, and the
+// string they are simulated as slower to settle.
 const HANG_POINTS = 48;
 // One pixel wide whatever the distance: a real line is far thinner than a pixel.
 const COLOR = 0xe6efe9;
@@ -62,6 +66,9 @@ export function createFishingLine(rod) {
   object.name = 'fishing-line';
   object.frustumCulled = false;
 
+  // The hanging part's shape, simulated.
+  const curve = createLineCurve(HANG_POINTS + 1);
+  const hang = new Float64Array((HANG_POINTS + 1) * 3);
   const path = Array.from({ length: stops }, () => new THREE.Vector3());
   const tip = new THREE.Vector3();
   const end = new THREE.Vector3();
@@ -75,8 +82,6 @@ export function createFishingLine(rod) {
   // Wound right in: the far end rides this far straight below the tip. null: it is a
   // place in the world, given by setEnd.
   let stowed = null;
-  // How slack the line lies on the water, 0 to 1.
-  let lay = 0;
   const stiffnessAt = (metres) => Math.min(STIFFEST, STRETCH_FORCE / Math.max(metres, 1e-3));
 
   return {
@@ -119,13 +124,6 @@ export function createFishingLine(rod) {
     stow(drop) {
       stowed = drop;
     },
-    // How slack the line lies on the water, 0 to 1. Taut, at 0, it runs straight from the
-    // tip to its far end. Slack, at 1, with its far end under water, it runs over the
-    // water to above the far end and goes down there: line let out after a sinking lure.
-    // The caller eases this. It changes only how the line is drawn, not what it pulls.
-    setLay(amount) {
-      lay = Math.min(1, Math.max(0, amount));
-    },
     // How much line is out past the tip, metres.
     setLength(metres) {
       length = Math.max(0, metres);
@@ -137,7 +135,8 @@ export function createFishingLine(rod) {
       fitSpare = spare;
     },
 
-    update() {
+    // dt: seconds since the last update, for the hanging part's own motion.
+    update(dt) {
       rod.linePath(path);
       for (let i = 0; i < stops; i += 1) path[i].toArray(positions, i * 3);
       tip.copy(path[stops - 1]);
@@ -150,7 +149,10 @@ export function createFishingLine(rod) {
         length = tip.distanceTo(end) + fitSpare;
         fitSpare = null;
       }
-      slack = shapeLine(tip.x, tip.y, tip.z, end.x, end.y, end.z, length, stowed === null ? lay : 0, positions, hangAt, HANG_POINTS + 1);
+      // Wound right in there is nothing to hang: the string starts afresh at the next cast.
+      if (stowed !== null) curve.reset();
+      slack = curve.step(dt, tip.x, tip.y, tip.z, end.x, end.y, end.z, length, tied ? rod.tipTension : 0, hang, 0);
+      positions.set(hang, hangAt);
       for (let i = 0; i < stops + HANG_POINTS; i += 1) {
         const depth = -positions[i * 3 + 1];
         shade[i * 4 + 3] = depth > 0 ? Math.exp(-depth / FADE_DEPTH) : 1;

@@ -139,8 +139,8 @@ export async function startShore(container, hooks = {}) {
   camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
   const tune = {
     fogNear: 0,
-    fogFar: 180,
-    fogColor: '#bdd7ea',
+    fogFar: 110,
+    fogColor: '#bdc7d1',
     windSpeed: params.windSpeed,
     swellHeight: params.swellHeight,
     choppiness: params.choppiness,
@@ -380,7 +380,7 @@ export async function startShore(container, hooks = {}) {
     }
     applyPhone(dt);
     rod.update(dt);
-    line.update();
+    line.update(dt);
     splash.seenFrom(camera.position);
     splash.update(dt);
     if (fishingBegun) {

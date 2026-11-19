@@ -40,10 +40,11 @@ export async function createShoreSchool(scene) {
     keep: flock.keep,
     update(dt, rate, rocks, cam) {
       flock.step(dt, rate, rocks, cam);
-      // The tail beats in step with the distance covered, then the spine wave goes on top.
+      // The tail beats in step with the distance covered, or with the fish's effort when
+      // that is more (swim.js), then the spine wave goes on top.
       const tail = (rate * TAIL_RATE) / CRUISE_SPEED;
       for (const fish of fishes) {
-        fish.action.setEffectiveTimeScale(tail * fish.speed);
+        fish.action.setEffectiveTimeScale(tail * fish.stroke);
         fish.mixer.update(dt);
         poseSpine(fish, fish.drive, fish.bend);
       }

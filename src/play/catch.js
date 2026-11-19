@@ -409,9 +409,9 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       }
       bolting = fight.running;
       tension = line.tension;
-      // What the hand holds: the fish's pull as far as the reel passes it on, and what
-      // the finger adds.
-      holding = handHolds(fight.force, RUN_OUT_AT, led.against, snap.press);
+      // What the hand holds is what the line carries: the fish's pull and the drawing of
+      // it in, as far as the reel and the finger on it pass that on.
+      holding = handHolds(fight.draws(haul.speed), RUN_OUT_AT, led.against, snap.press);
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       wound = taken;

@@ -19,7 +19,7 @@ import { createThump } from '../src/play/thump.js';
 import { createStrain } from '../src/play/strain.js';
 import { castReach, createSwing } from '../src/play/swing.js';
 import { createLureMove } from '../src/shore/lureMove.js';
-import { shapeLine } from '../src/shore/lineCurve.js';
+import { createLineCurve } from '../src/shore/lineCurve.js';
 import { createSnap } from '../src/play/snap.js';
 import { fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
 import { RUN_OUT_AT } from '../src/play/haul.js';
@@ -122,22 +122,62 @@ check('lure at the tip: it sways with the rod, hangs true when the rod is still,
   }
 });
 
-check('line: slack on the water it goes in above the lure, and comes straight without a jump as it is taken up', () => {
+check('line: it is as slack as what happened to it left it, and a pull draws it straight by degrees, harder the faster', () => {
   const n = 49; const out = new Float64Array(n * 3);
-  const tip = [0, 2, 0], end = [0, -2, -6]; const length = Math.hypot(4, 6);
-  // Where the drawn line meets the surface, as metres out from the tip.
-  const goesIn = (lay) => { shapeLine(...tip, ...end, length, lay, out, 0, n); for (let i = 1; i < n; i += 1) { const y0 = out[i * 3 - 2], y1 = out[i * 3 + 1]; if (y0 > 0 && y1 <= 0) { const t = y0 / (y0 - y1); return out[i * 3 - 1] + (out[i * 3 + 2] - out[i * 3 - 1]) * t; } } return null; };
-  expect(Math.abs(goesIn(1) - end[2]) < 0.05, 'lying slack it goes in above the lure', goesIn(1));
-  expect(Math.abs(goesIn(0) - -3) < 1e-9, 'taken right up it is one straight line from tip to lure', goesIn(0));
-  for (let i = 0; i < n; i += 1) expect(Math.abs(out[i * 3 + 2] - (tip[2] + (end[2] - tip[2]) * (2 - out[i * 3 + 1]) / 4)) < 1e-9, 'every point of the taut line is on that straight line');
-  let last = goesIn(0), step = 0;
-  for (let k = 1; k <= 100; k += 1) { const at = goesIn(k / 100); step = Math.max(step, Math.abs(at - last)); last = at; }
-  expect(step < 0.08, 'the place it goes in slides, it does not jump', step);
-  expect(out[0] === tip[0] && out[1] === tip[1] && out[(n - 1) * 3 + 2] === end[2] && out[(n - 1) * 3 + 1] === end[1], 'both ends stay where they are');
-  // A lure only just under the surface has next to nothing lain yet.
-  shapeLine(0, 2, 0, 0, -0.02, -6, Math.hypot(2.02, 6), 1, out, 0, n);
-  let off = 0; for (let i = 0; i < n; i += 1) off = Math.max(off, Math.abs(out[i * 3 + 1] - (2 - 2.02 * i / (n - 1))));
-  expect(off < 0.1, 'a lure just wet has a line still nearly straight', off.toFixed(3));
+  const y = (i) => out[i * 3 + 1], z = (i) => out[i * 3 + 2];
+  const tip = [0, 2.7, 0];
+  const drawn = () => { let len = 0; for (let i = 1; i < n; i += 1) len += Math.hypot(out[i * 3] - out[i * 3 - 3], y(i) - y(i - 1), z(i) - z(i - 1)); return len; };
+  // How far the line is from the straight way to (0, by, bz), at its furthest, and whether that point is in the water.
+  const off = (by, bz) => { let far = 0, wet = false; const g = Math.hypot(by - 2.7, bz); for (let i = 1; i < n - 1; i += 1) { const d = Math.abs((y(i) - 2.7) * bz - z(i) * (by - 2.7)) / g; if (d > far) { far = d; wet = y(i) < 0; } } return { far, wet }; };
+  // Nothing has happened to it: it is a straight line, whatever its ends do.
+  const taut = createLineCurve(n);
+  for (let i = 0; i < 120; i += 1) {
+    const end = [Math.sin(i / 20) * 3, -1, -12 - i / 30]; const top = [0, 2.7 + Math.sin(i / 7) * 0.3, 0];
+    taut.step(1 / 60, ...top, ...end, Math.hypot(end[0] - top[0], end[1] - top[1], end[2] - top[2]), 0, out, 0);
+    for (let k = 0; k < n; k += 1) expect(Math.abs(y(k) - (top[1] + (end[1] - top[1]) * k / (n - 1))) < 1e-3, 'a line nothing has slackened stays straight', (y(k) - (top[1] + (end[1] - top[1]) * k / (n - 1))).toExponential(1));
+  }
+  // A cast: out to `reach` on an arc in `flight` seconds, into the water, then sinking for `sink` seconds.
+  const cast = (fps, reach, flight, sink) => {
+    const c = createLineCurve(n); const dt = 1 / fps; let end = [0, 2.6, -0.3], belly = 0;
+    c.step(dt, ...tip, ...end, 0.32, 0, out, 0);
+    for (let i = 1; i <= Math.round(flight * fps); i += 1) { const u = i / Math.round(flight * fps); end = [0, 2.6 * (1 - u) + 5 * u * (1 - u) - 0.05 * u, -0.3 - (reach - 0.3) * u]; c.step(dt, ...tip, ...end, Math.hypot(end[1] - 2.7, end[2]) * 1.001, 0, out, 0); if (u > 0.3 && u < 0.95) belly = Math.max(belly, off(end[1], end[2]).far); }
+    for (let i = 0; i < Math.round(sink * fps); i += 1) { end = [0, Math.max(-2, end[1] - 0.4 * dt), -reach]; c.step(dt, ...tip, ...end, Math.hypot(end[1] - 2.7, end[2]), 0, out, 0); }
+    return { c, end, belly, slack: drawn() - Math.hypot(end[1] - 2.7, end[2]) };
+  };
+  const hard = cast(60, 24, 1.7, 1), soft = cast(60, 24, 3.4, 1);
+  expect(hard.belly < 0.6, 'flying, the lure carries it all but straight', `${hard.belly.toFixed(2)} m of belly`);
+  expect(hard.slack > 0.01 && hard.slack < 0.05, 'the lure stopping on the water leaves a little slack', `${(hard.slack * 100).toFixed(1)} cm`);
+  expect(soft.slack < hard.slack * 0.85, 'less of it from a gentler landing', `${(soft.slack * 100).toFixed(1)} cm against ${(hard.slack * 100).toFixed(1)}`);
+  const sunk = cast(60, 24, 1.7, 8);
+  expect(Math.abs(sunk.slack - hard.slack) < 0.01, 'with nothing pulling, the slack stays as it is: no clock takes it up', `${(sunk.slack * 100).toFixed(1)} cm after 8 s, ${(hard.slack * 100).toFixed(1)} after 1`);
+  const mid = off(-2, -24);
+  expect(mid.far > 0.15 && mid.far < 0.8, 'loose, not heaped: a hand or two off the straight way', mid.far.toFixed(2));
+  expect(y(n - 3) < -1 && y(Math.round(n / 2)) > y(n - 3) + 0.5, 'the sinking lure has drawn the line by it down, the rest lies higher', `${y(Math.round(n / 2)).toFixed(2)} m half way, ${y(n - 3).toFixed(2)} by the lure`);
+  // A pull on it. How long until it is within 2 cm of straight, how much of the way any one frame took, and where the last of the belly was.
+  const pulled = (pull, fps = 60) => {
+    const { c, end } = cast(fps, 24, 1.7, 8); const from = off(end[1], end[2]).far; let was = from, most = 0, took = -1, lastWet = false;
+    for (let i = 1; i <= 8 * fps && took < 0; i += 1) {
+      c.step(1 / fps, ...tip, ...end, Math.hypot(end[1] - 2.7, end[2]), pull, out, 0);
+      const now = off(end[1], end[2]); most = Math.max(most, (was - now.far) / from); was = now.far;
+      if (now.far < from * 0.3 && now.far > 0.03) lastWet = now.wet;
+      if (now.far < 0.02) took = i / fps;
+    }
+    return { took, most, lastWet, from };
+  };
+  const run = pulled(4.5), rest = pulled(0.5);
+  expect(run.took > 0.05 && run.took < 0.8, 'a fish running draws it straight in a few tenths of a second', `${run.took.toFixed(2)} s`);
+  // It used to be squeezed onto the straight line all at once, every point together.
+  expect(run.most < 0.5, 'by degrees: no one frame takes half the way', `${(run.most * 100).toFixed(0)}% of it in a frame`);
+  expect(rest.took > run.took * 2, 'a light pull takes more than twice as long: it goes by the pull, not by a clock', `${rest.took.toFixed(2)} s at 0.5 N, ${run.took.toFixed(2)} s at 4.5 N`);
+  const slow = pulled(4.5, 20);
+  expect(Math.abs(slow.took - run.took) < 0.12, 'the same at 20 frames a second as at 60', `${slow.took.toFixed(2)} s and ${run.took.toFixed(2)} s`);
+  // And once straight under a pull it stays so, the far end running off sideways or not.
+  const held = cast(60, 24, 1.7, 4); let bent = 0;
+  for (let i = 0; i < 240; i += 1) { held.end[2] -= 0.01; held.c.step(1 / 60, ...tip, ...held.end, Math.hypot(held.end[1] - 2.7, held.end[2]), 2, out, 0); if (i > 90) bent = Math.max(bent, off(held.end[1], held.end[2]).far); }
+  expect(bent < 0.02, 'held by a pull it stays straight', `${(bent * 100).toFixed(1)} cm`);
+  // The same line at any frame rate.
+  const deep = [20, 60, 120].map((fps) => { cast(fps, 24, 1.7, 6); return y(Math.round(n * 0.75)); });
+  expect(Math.max(...deep) - Math.min(...deep) < 0.08, 'it lies the same at 20, 60 and 120 frames a second', deep.map((d) => d.toFixed(3)).join(' / '));
   // And a sinking lure rocks about its length, keeps its back square, and beats no tail.
   const m = createLureMove(); m.place(0, 0, -8); const tipP = { x: 0, y: 2, z: 0 }; let rocked = 0, swum0 = m.swum, down = 0;
   for (let i = 0; i < 60 * 5; i += 1) {
@@ -166,11 +206,11 @@ check('line: its drawn shape never jumps, landing, sinking, wound a moment, or t
   for (const [name, opts, taps] of [['no fish, wound for a moment twice', { noSchool: true }, true], ['a fish takes it as it sinks', { press: 'rests', sizes: () => 1.3 }, false]]) {
     const rig = createRig({ seed: 2, fps: 60, hold: 0.25, ...opts }); const f = rig.fishing; let t0 = -1;
     if (taps) { rig.finger0 = rig.finger; rig.finger = () => { if (f.stage !== 'water') { t0 = -1; return rig.finger0(); } if (t0 < 0) t0 = rig.time; const t = rig.time - t0; return (t > 4 && t < 4.6) || (t > 8 && t < 8.3) || t > 12; }; }
-    const now = new Float64Array(N * 3), last = new Float64Array(N * 3); let have = false, worst = 0, at = '';
+    const curve = createLineCurve(N); const now = new Float64Array(N * 3), last = new Float64Array(N * 3); let have = false, worst = 0, at = '';
     while (rig.time < 40) {
       rig.step();
-      const l = rig.line; if (l.stowed !== null) { have = false; continue; }
-      shapeLine(l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.lay || 0, now, 0, N);
+      const l = rig.line; if (l.stowed !== null) { have = false; curve.reset(); continue; }
+      curve.step(rig.dt, l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.tied ? l.tension : 0, now, 0);
       if (have) {
         const ends = Math.max(Math.hypot(now[0] - last[0], now[1] - last[1], now[2] - last[2]), Math.hypot(now[144] - last[144], now[145] - last[145], now[146] - last[146]));
         for (let i = 1; i < N - 1; i += 1) { const d = toLine(now[i * 3], now[i * 3 + 1], now[i * 3 + 2], last) - ends; if (d > worst) { worst = d; at = `${rig.time.toFixed(1)} s, ${f.stage}`; } }
@@ -180,6 +220,30 @@ check('line: its drawn shape never jumps, landing, sinking, wound a moment, or t
     }
     // It was 94 cm in the frame after landing, when the slack line was drawn two ways.
     expect(worst < 0.2, `${name}: no point of the line moves much more in a frame than its ends do`, `${(worst * 100).toFixed(0)} cm at ${at}`);
+  }
+});
+
+check('line: a fish draws it straight in a moment, and with a fish on it stays straight, wound or not', () => {
+  // It used to take over two seconds to draw straight, with the rod already bent by the fish.
+  const N = 49;
+  for (const [size, press, fps] of [[0.85, 'always', 60], [1.3, 'rests', 60], [1.3, 'never', 60], [1.3, 'rests', 20]]) {
+    const rig = createRig({ seed: 5, fps, press, hold: 0.6, sizes: () => size }); const f = rig.fishing;
+    const curve = createLineCurve(N), out = new Float64Array(N * 3); let hooked = -1, loose = 0, soon = 9, worst = 0;
+    while (rig.time < 45) {
+      rig.step(); const l = rig.line; if (l.stowed !== null) { curve.reset(); continue; }
+      curve.step(rig.dt, l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.tied ? l.tension : 0, out, 0);
+      let far = 0; const ux = l.end.x - l.tip.x, uy = l.end.y - l.tip.y, uz = l.end.z - l.tip.z, g2 = ux * ux + uy * uy + uz * uz;
+      for (let i = 1; i < N - 1; i += 1) { const px = out[i * 3] - l.tip.x, py = out[i * 3 + 1] - l.tip.y, pz = out[i * 3 + 2] - l.tip.z; const t = (px * ux + py * uy + pz * uz) / g2; far = Math.max(far, Math.hypot(px - ux * t, py - uy * t, pz - uz * t)); }
+      if (f.stage !== 'fight') { if (hooked >= 0) break; loose = far; continue; }
+      if (hooked < 0) hooked = rig.time;
+      if (rig.time - hooked > 0.4 && rig.time - hooked < 0.8) soon = Math.min(soon, far);
+      if (rig.time - hooked > 2) worst = Math.max(worst, far);
+    }
+    const who = `size ${size}, finger ${press}, ${fps} fps`;
+    expect(hooked >= 0, `${who}: a fish took it`);
+    expect(loose > 0.1, `${who}: it lay loose before the bite`, `${loose.toFixed(2)} m off straight`);
+    expect(soon < 0.08, `${who}: within half a second or so of the bite it is all but straight`, `${(soon * 100).toFixed(1)} cm`);
+    expect(worst < 0.05, `${who}: and stays within a couple of fingers of straight for the rest of the fight`, `${(worst * 100).toFixed(1)} cm`);
   }
 });
 
@@ -294,20 +358,25 @@ check('camera: a raised phone pushes the view up after the tip', () => {
 
 // ---------------------------------------------------------------- the rod's grip
 
-check('rod hand: square and still with no effort, laid over toward the side it is carried to', () => {
-  const pose = (side, effort) => {
+check('rod hand: square and still with no effort, laid over toward the side it is carried to, and drawn round to a fish by how hard it pulls', () => {
+  // The rod's heading, degrees to the right of straight ahead, and where its tip is.
+  const heading = (root) => { const a = new THREE.Vector3(0, 1, 0).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion())); return Math.atan2(a.x, -a.z) / deg; };
+  const pose = (side, effort, fps = 60, twitch = 0) => {
     const view = new THREE.PerspectiveCamera(); view.position.set(0, 1.7, 0); view.lookAt(0, 1.7 - Math.sin(10 * deg), -Math.cos(10 * deg)); view.updateMatrixWorld(true);
     const root = new THREE.Object3D(); view.add(root); const hold = createRodHold(root, 0.1);
     hold.setPull(new THREE.Vector3(Math.sin(side * deg) * 14, -0.5, -Math.cos(side * deg) * 14));
-    let fastest = 0, last = 0;
-    for (let i = 0; i < 240; i += 1) {
-      hold.setStrain(effort * (1 - Math.exp(-9 * i / 60))); hold.carry(1 / 60);
+    let fastest = 0, last = 0, before = 0;
+    for (let i = 0; i < 4 * fps; i += 1) {
+      hold.setStrain(effort * (1 - Math.exp(-9 * i / fps)));
+      // A twitch of the phone in the last frame.
+      if (i === 4 * fps - 1) { before = heading(root); hold.setAim(0, twitch, 0); }
+      hold.carry(1 / fps);
       const under = new THREE.Vector3(0, 0, 1).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()));
       const roll = Math.atan2(under.x, -under.y) / deg;
-      if (i > 0) fastest = Math.max(fastest, Math.abs(roll - last) * 60);
+      if (i > 0) fastest = Math.max(fastest, Math.abs(roll - last) * fps);
       last = roll;
     }
-    return { roll: last, fastest, tip: new THREE.Vector3(0, 2.13, 0).applyMatrix4(root.matrixWorld) };
+    return { roll: last, fastest, heading: heading(root), twitched: heading(root) - before, tip: new THREE.Vector3(0, 2.13, 0).applyMatrix4(root.matrixWorld) };
   };
   const idle = pose(25, 0), right = pose(25, 0.5), left = pose(-25, 0.5), ahead = pose(-4, 0.5);
   expect(idle.fastest === 0, 'no effort, no movement at all', idle.fastest);
@@ -315,7 +384,20 @@ check('rod hand: square and still with no effort, laid over toward the side it i
   expect(left.roll - idle.roll < -15, 'fish to the left: the reel swings out to the left', (left.roll - idle.roll).toFixed(1));
   expect(Math.abs(ahead.roll - idle.roll) < 4, 'fish dead ahead of the rod: it sits square', (ahead.roll - idle.roll).toFixed(1));
   expect(right.fastest < 400, 'it rolls over, it does not snap', `${right.fastest.toFixed(0)}°/s`);
-  expect(right.tip.distanceTo(idle.tip) < 0.12, 'the hand moves the tip by centimetres, not more', right.tip.distanceTo(idle.tip).toFixed(3));
+  // The give. The fish is 25° to the right, the rod is held 4° to the left: 29° apart.
+  const apart = 25 - idle.heading;
+  const share = (p) => (p.heading - idle.heading) / apart;
+  const light = pose(25, 0.06), hard = pose(25, 0.95);
+  expect(share(light) < 0.2, 'a fish barely pulling leaves the rod where the phone points', `${(100 * share(light)).toFixed(0)}% of the way to it`);
+  expect(share(right) > 0.4 && share(right) < 0.7, 'one pulling as hard as the reel holds draws it about half way round', `${(100 * share(right)).toFixed(0)}%`);
+  expect(share(hard) > share(right) + 0.08 && share(hard) < 0.9, 'leant on, further, and never right round to the fish', `${(100 * share(hard)).toFixed(0)}%`);
+  const leftShare = (left.heading - idle.heading) / (-25 - idle.heading);
+  expect(left.heading < idle.heading - 5 && Math.abs(leftShare - share(right)) < 0.1, 'to the left as to the right', `${(100 * leftShare).toFixed(0)}%`);
+  expect(Math.abs(right.tip.y - idle.tip.y) < 0.06 && Math.abs(hard.tip.y - idle.tip.y) < 0.09, 'round, not down: the tip stays as high as the phone holds it', `${(right.tip.y - idle.tip.y).toFixed(3)} m, ${(hard.tip.y - idle.tip.y).toFixed(3)} m`);
+  for (const fps of [20, 120]) expect(Math.abs(pose(25, 0.5, fps).heading - right.heading) < 0.3, `${fps} fps: it settles in the same place`, pose(25, 0.5, fps).heading.toFixed(2));
+  // A quick twitch of the phone still reaches the rod, nearly whole, before the fish draws it back.
+  const flick = pose(25, 0.5, 60, 10);
+  expect(flick.twitched < -8, 'a 10° twitch away from the fish moves the rod nearly 10° at once', `${flick.twitched.toFixed(1)}°`);
 });
 
 // ---------------------------------------------------------------- whole casts
@@ -460,6 +542,47 @@ check('fight: fish run out and away, and stay in front of the angler', () => {
   expect(ahead / total > 0.7, 'most of a run heads out, straight or slanting', `${(100 * ahead / total).toFixed(0)}%`);
   expect(across / total < 0.15, 'little of it is flat across', `${(100 * across / total).toFixed(0)}%`);
   expect(worst < 50, 'it stays within reach in front', `${worst.toFixed(0)}° off the cast line`);
+});
+
+check('hand: what it holds is what the line carries, winding or not', () => {
+  // The hand used to hold the fish's own pull and nothing else: a resting fish being
+  // wound in bent the rod as deep as a run did, and the hand said it was holding nothing.
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  for (const [size, press] of [[0.85, 'always'], [1.3, 'rests'], [1.3, 'never']]) {
+    const hand = { run: [], rest: [] }, line = { run: [], rest: [] }; let since = 0, was = '';
+    fightOne({ seed: 3, fps: 60, press, size, seconds: 60, each: (rig) => {
+      const f = rig.fishing; if (f.stage !== 'fight') return;
+      since = f.mood === was ? since + rig.dt : 0; was = f.mood;
+      // The hand's effort is its hold over 9 N (strain.js).
+      if (since > 0.8) { hand[f.mood].push(f.effort * 9); line[f.mood].push(f.tension); }
+    } });
+    for (const mood of ['run', 'rest']) {
+      if (hand[mood].length < 30) continue;
+      const h = mean(hand[mood]), t = mean(line[mood]);
+      expect(Math.abs(h - t) < 0.3 * t + 0.3, `size ${size}, finger ${press}, ${mood}: the hand holds about what the line pulls`, `${h.toFixed(2)} N against ${t.toFixed(2)} N`);
+    }
+  }
+});
+
+check('fight: a run beats the tail wide and fast all the way through, a rest goes quiet', () => {
+  // A fish up to speed used to let its tail go slack: the beat followed only how much
+  // faster it still wanted to go.
+  for (const size of [0.85, 1.3]) {
+    const run = [], rest = [], stroke = []; let since = 0, was = null;
+    fightOne({ seed: 4, fps: 60, press: 'never', size, seconds: 40, each: (rig) => {
+      const f = rig.fishing; if (f.stage !== 'fight') return;
+      const fish = rig.fishes.find((x) => x.state === 'held'); if (!fish) return;
+      since = f.mood === was ? since + rig.dt : 0; was = f.mood;
+      // Well past the start of each: the start of a run is a burst either way.
+      if (since > 0.6 && f.mood === 'run' && f.stamina > 0.5) { run.push(fish.drive); stroke.push(fish.stroke); }
+      if (since > 1 && f.mood === 'rest') rest.push(fish.drive);
+    } });
+    const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    expect(run.length > 20 && rest.length > 20, `size ${size}: it both ran and rested`, `${run.length} / ${rest.length}`);
+    expect(mean(run) > 0.9, `size ${size}: well into a run its tail still beats wider than cruising (0.55)`, mean(run).toFixed(2));
+    expect(Math.min(...stroke) > 0.7, `size ${size}: and at least twice as fast as cruising (0.35 m/s)`, Math.min(...stroke).toFixed(2));
+    expect(mean(rest) < 0.4, `size ${size}: resting, it barely beats`, mean(rest).toFixed(2));
+  }
 });
 
 // ---------------------------------------------------------------- run them

@@ -215,5 +215,6 @@ export function poseHung(fish, mx, my, mz, upX, upY, upZ, dt, vigor, bodyLength,
   fish.bend = clamp(Math.sin(fish.hungFor * HANG_BEAT) * HANG_BEND * thrash, -BEND_MOST, BEND_MOST);
   fish.drive = Math.min(1.3, 1.2 * thrash);
   fish.speed = HANG_TAIL * Math.min(2, thrash);
+  fish.stroke = fish.speed;
   fish.yawRate = 0;
 }

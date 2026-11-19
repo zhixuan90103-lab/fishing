@@ -35,6 +35,7 @@
 | 震动 Swift 真源 | `plugins/native-haptics/*` |
 | 包名 | `capacitor.config.ts`：`com.wangzhixuan.fishing` |
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
+| 记下、还没改的手感 | `docs/NOTED.md`。2026-11-19 对过、还没改的那几条 |
 | 规范 | `docs/CONVENTIONS.md` |
 
 岸边不用 `createRenderer()`。`startShore` 自己建 `WebGPURenderer`，Three 的 canvas 隐藏，最终画面画到 `#shore-view`。

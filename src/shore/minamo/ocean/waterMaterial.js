@@ -12,6 +12,8 @@ import {
 } from "three/tsl";
 
 const SEGMENTS = 512;
+// Deep-water colour already used to pull the reflection off a white sky. The horizon fades here too.
+const DEEP = vec3(0.02, 0.10, 0.18);
 
 export function makeRadialGrid(rMin = 0.008, rMax = 30000) {
   const g = 1 + (2 * Math.PI) / SEGMENTS;
@@ -78,8 +80,8 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
     sss: uniform(params.sss),
     refractStrength: uniform(params.refractStrength),
     fogNear: uniform(0),
-    fogFar: uniform(180),
-    fogColor: uniform(new THREE.Color('#bdd7ea')),
+    fogFar: uniform(110),
+    fogColor: uniform(new THREE.Color('#bdc7d1')),
     sunAngularRadius: uniform(0.0047 * 2.5),
     debug: uniform(params.waterDebug || 0),
   };
@@ -134,9 +136,9 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
       const R = reflect(V.negate(), N).toVar();
       R.y.assign(abs(R.y));
       const skyRaw = pmremTexture(env, R, rough.mul(1.2)).rgb;
-      // The shore camera looks across the water, so Fresnel is mostly sky. Pull that
-      // reflection toward deep water so a bright cloudy HDRI does not turn the sea white.
-      const sky = mix(vec3(0.02, 0.10, 0.18), skyRaw, float(0.8));
+      // The shore camera looks across the water, so Fresnel is mostly sky. Half of that
+      // reflection is deep water, so a bright cloudy HDRI does not turn the sea white.
+      const sky = mix(DEEP, skyRaw, float(0.5));
       const H = normalize(U.sunDir.add(V));
       const a = rough.mul(rough).max(W.sunAngularRadius);
       const sunSpec = U.sunColor.mul(ggx(saturate(dot(N, H)), a)).mul(fresnel(saturate(dot(H, V)), float(1.333))).mul(0.25).div(max(cosi, 0.08));
@@ -188,14 +190,14 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
       out.assign(mix(trans.add(deep.mul(Fr)), foamCol, foamAmt.mul(0.8)));
     });
     // Haze follows the horizon angle, not a hard distance shelf. Far, nearly level
-    // rays fade into the sky in that direction, tinted by the fog colour.
+    // rays take the fog colour from the panel. Looking down stays clear: the angle term is zero.
     const elev = saturate(V.y);
     const distT = smoothstep(W.fogNear, W.fogFar, dist);
     const angleT = smoothstep(float(0.32), float(0.0), elev);
     const fog = distT.mul(angleT);
     const hazeDir = normalize(vec3(V.x.negate(), float(0.045), V.z.negate()));
     const skyHaze = pmremTexture(env, hazeDir, float(0.45)).rgb.mul(0.82);
-    const haze = mix(skyHaze, W.fogColor, float(0.55));
+    const haze = mix(skyHaze, W.fogColor, float(0.75));
     out.assign(mix(out, haze, fog));
     If(W.debug.greaterThan(0.5), () => {
       out.assign(vec3(dist.div(10), select(camAbove, float(1), float(0)), abs(dot(Nw, V))));

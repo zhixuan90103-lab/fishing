@@ -125,7 +125,6 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     tip: { x: 0, y: 0, z: 0 },
     end: { x: 0, y: 0, z: 0 },
     length: 0,
-    lay: 0,
     tied: true,
     stowed: null,
     get tension() { return rod.tipTension; },
@@ -134,7 +133,6 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     setEnd(x, y, z) { line.end.x = x; line.end.y = y; line.end.z = z; line.stowed = null; },
     stow(drop) { line.stowed = drop; },
     setLength(m) { line.length = Math.max(0, m); },
-    setLay(v) { line.lay = v; },
     update() {
       line.tip.x = tipNow.x; line.tip.y = tipNow.y; line.tip.z = tipNow.z;
       if (line.stowed !== null) {

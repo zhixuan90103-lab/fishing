@@ -9,9 +9,12 @@
  * haul against a fish that will not come (lead.js).
  * No Three, no scene: it runs in Node. Design: docs/PLAY.md section 9.
  *
- * The pull is taken from what the fish and the hand are doing, not from the line's
- * tension. The hand giving way moves the rod tip, which changes the tension: read from
- * the tension, the two would chase each other a frame apart.
+ * The hand feels what the rod is carrying: the pull on the line. But that is worked out
+ * here from what makes it, the fish's pull, the drawing of the fish in, what the reel
+ * holds and what the finger adds, and not read off the line's tension. The hand giving
+ * way moves the rod tip, which changes the tension: read from the tension, the two would
+ * chase each other a frame apart. The tension settles on this number, so the hand and
+ * the bend of the rod say the same thing.
  *
  * Units: seconds, newtons.
  */
@@ -28,12 +31,13 @@ const LET_GO = 4.5;
 const AGAINST_MORE = 0.6;
 
 /**
- * What the hand holds with a fish being fought, N. pull: the fish's own. holds: the most
- * the reel passes on before it gives line. against: how hard the rod is hauled against a
- * fish that will not come, 0 to 1. press: what the finger adds leaning on a run, N.
+ * What the hand holds with a fish being fought, N. draws: the pull on the line that holds
+ * the fish, its own and the drawing of it in (fight.draws). holds: the most the reel
+ * passes on before it gives line. against: how hard the rod is hauled against a fish that
+ * will not come, 0 to 1. press: what the finger adds to the reel's hold leaning on a run, N.
  */
-export function handHolds(pull, holds, against, press) {
-  return Math.min(pull, holds) * (1 + AGAINST_MORE * against) + press;
+export function handHolds(draws, holds, against, press) {
+  return Math.min(draws, holds + press) * (1 + AGAINST_MORE * against);
 }
 
 export function createStrain() {

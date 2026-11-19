@@ -23,6 +23,13 @@ export const ACCEL_DART = 2.6;
 export const COAST = 0.22;
 // How fast a fish closes on the depth it wants, 1/s.
 export const DEPTH_RATE = 0.45;
+// The tail effort of a fish said to be doing nothing (aim.effort 0) and working flat out
+// (1). Cruising is 0.55, so a fish hanging on a line beats less than one in the school.
+const DRIVE_IDLE = 0.12;
+const DRIVE_FLAT_OUT = 1.3;
+// Working flat out its tail beats at least as fast as it would swimming this fast, m/s,
+// however slowly it is really going: a fish straining against a line that holds it.
+const STROKE_FLAT_OUT = 1.4;
 
 export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -37,7 +44,7 @@ export function wrapPi(a) {
 export function makeAim() {
   return {
     yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE,
-    slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX,
+    slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX, effort: null,
   };
 }
 
@@ -123,13 +130,14 @@ function pushOutOfRocks(fish, rocks) {
   return moved;
 }
 
-// Body state every fish carries. poseSpine reads drive and bend.
+// Body state every fish carries. poseSpine reads drive and bend, the tail clip stroke.
 export function restBody(fish) {
   fish.pitch = 0;
   fish.drive = 0.55;
   fish.bend = 0;
   fish.roll = 0;
   fish.yawRate = 0;
+  fish.stroke = 0;
 }
 
 export function writePose(fish) {
@@ -146,6 +154,9 @@ export function writePose(fish) {
  * slow is how fast it loses speed, rise how fast it changes depth, top the shallowest it
  * may go. Those three are the school's own unless whoever took the fish says otherwise:
  * a fish on a line is stopped by it, and comes up to a lure near the surface.
+ * effort is how hard it is working whatever its speed, 0 to 1: its tail beats that wide,
+ * and at least that fast, at top speed or held still alike. null, the school's, leaves
+ * the tail to follow how hard it is trying to speed up.
  * crowdX/Y/Z is this fish's entry from measureCrowd.
  */
 export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
@@ -162,11 +173,17 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   aim.yaw = steerAroundRocks(fish.x, fish.z, wrapPi(aim.yaw), rocks);
 
   // Tail effort follows how hard the fish is trying to speed up. Coasting is nearly stiff.
+  // A fish whose effort is given beats by that alone: a run does not go slack in the tail
+  // once it is up to speed, and a fish hanging spent on a line does not work to keep up.
   const want = (aim.speed - fish.speed) / Math.max(aim.cruise, 0.05);
-  const driveAim = clamp(0.55 + want * 1.5, 0.12, 1.3);
+  const driveAim = aim.effort === null
+    ? clamp(0.55 + want * 1.5, DRIVE_IDLE, DRIVE_FLAT_OUT)
+    : DRIVE_IDLE + (DRIVE_FLAT_OUT - DRIVE_IDLE) * clamp(aim.effort, 0, 1);
   fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-5 * dt));
   const k = aim.speed > fish.speed ? aim.accel : aim.slow;
   fish.speed += (aim.speed - fish.speed) * (1 - Math.exp(-k * dt));
+  // What its tail beats in step with: the water it covers, or its effort if that is more.
+  fish.stroke = Math.max(fish.speed, (aim.effort || 0) * STROKE_FLAT_OUT);
 
   const yawErr = wrapPi(aim.yaw - fish.yaw);
   const yawK = aim.turn + crowd * 4;

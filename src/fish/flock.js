@@ -87,6 +87,7 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
       aim.slow = COAST;
       aim.rise = DEPTH_RATE;
       aim.top = DEPTH_MAX;
+      aim.effort = null;
       // On a line out of the water it is posed by hang(), not swum.
       if (fish.state === HUNG) continue;
       if (fish.state === HELD) {
@@ -180,10 +181,10 @@ function freeSpot(spots) {
   let along = 0.55;
   let side = 0;
   let y = 0;
-  for (let n = 0; n < 24; n++) {
-    along = 0.4 + Math.random() * 2.2;
-    side = (Math.random() - 0.5) * 1.35;
-    y = (Math.random() - 0.5) * 0.7;
+  for (let n = 0; n < 48; n++) {
+    along = Math.random() * 8;
+    side = (Math.random() - 0.5) * 8;
+    y = (Math.random() - 0.5) * 1.6;
     const clear = spots.every((p) => {
       const d = Math.hypot(along - p.along, side - p.side, (y - p.y) * 1.4);
       return d > 0.7;

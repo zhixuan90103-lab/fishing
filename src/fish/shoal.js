@@ -11,7 +11,7 @@ export const CRUISE_SPEED = 0.351;
 // Clip time scale at that speed.
 export const TAIL_RATE = 2.2;
 // Where the shoal likes to be: this far in front of the camera.
-const HOME_AHEAD = 13;
+const HOME_AHEAD = 24;
 const START_DEPTH = -2.7;
 
 export function createShoal() {
@@ -210,8 +210,8 @@ function advanceHeading(shoal, dt) {
   const halfH = Math.atan(Math.tan((shoal.camFov * Math.PI) / 360) * shoal.camAspect);
   const halfW = Math.max(0.6, forward) * Math.tan(halfH);
   const edge = Math.abs(side) / Math.max(halfW, 0.4);
-  const outside = forward < 9 || forward > 18 || edge > 1;
-  const nearEdge = edge > 0.6 || forward < 11 || forward > 16;
+  const outside = forward < HOME_AHEAD - 4 || forward > HOME_AHEAD + 5 || edge > 1;
+  const nearEdge = edge > 0.6 || forward < HOME_AHEAD - 2 || forward > HOME_AHEAD + 3;
   const centerX = shoal.camX + fx * HOME_AHEAD;
   const centerZ = shoal.camZ + fz * HOME_AHEAD;
   const err = wrapPi(Math.atan2(centerX - shoal.x, centerZ - shoal.z) - shoal.yaw);

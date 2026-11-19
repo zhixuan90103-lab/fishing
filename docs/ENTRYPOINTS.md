@@ -104,7 +104,7 @@ rod.js update
   → 把骨骼摆到 rodFlex 给的曲线上
 line.js update
   → rod.linePath：导线轮和各导环现在在哪
-  → lineCurve.hangLine：竿尖到远端的形状，得出余线
+  → lineCurve 的 step：竿尖到远端的那串点走这一帧（下落、入水、下沉），得出余线
   → rod.setTipTether：把远端和线长交给竿，下一帧用
 ```
 
@@ -187,7 +187,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 冲的时候按住能叠多少力、线多容易断 | `src/play/snap.js` |
 | 鱼甩头的疏密和轻重 | `src/play/thump.js` |
 | 握竿的手多早显出吃力 | `src/play/strain.js` |
-| 吃力的手让多远、颤多大、侧倾多少 | `src/shore/rodHand.js` 的 `GIVE_REACH`、`GIVE_TURN`、`SHAKE`、`LEAN_MOST` |
+| 吃力的手让多远、被鱼拉过去多少、颤多大、侧倾多少 | `src/shore/rodHand.js` 的 `GIVE_REACH`、`GIVE_MOST`、`SHAKE`、`LEAN_MOST` |
 | 线断时说的那句话、什么时候说 | `src/shore/startShore.js` 的 `LINE_BROKE`；怎么显示在 `src/shore/notice.js` |
 | 挂着鱼时收多快、出线点、线怎么出 | `src/play/haul.js` |
 | 出线和收线时手里咔多密、多重 | `src/play/reelClick.js` |

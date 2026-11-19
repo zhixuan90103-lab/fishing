@@ -1,12 +1,13 @@
 /**
  * A line with nothing winding it: the bail is open and a lure lies in the water.
  *
- * Owns: the three things such a line does. It gives to a jerk of the rod, so the lure
- * darts and shivers and is not hauled in. It follows a sinking lure down, so the lure
- * sinks where it is. And it lies slack on the water, which is how it is drawn.
+ * Owns: the two things such a line does. It gives to a jerk of the rod, so the lure
+ * darts and shivers and is not hauled in. And it follows a sinking lure down, so the lure
+ * sinks where it is.
  * Does not own: the line out (fishing.js adds this file's give to it for the moment, and
- * lets out what this says), the lure's motion or its flutter (lureMove.js), how the line
- * is drawn (line.js is handed `lay`), winding (retrieve.js), or the rod.
+ * lets out what this says), the lure's motion or its flutter (lureMove.js), how slack the
+ * line looks (the line's own business, from what has pulled on it: lineCurve.js), winding
+ * (retrieve.js), or the rod.
  * No Three, no scene: it runs in Node. Rule: docs/FISHING-REQUIREMENTS.md section 7.
  * Design: docs/PLAY.md section 6.
  *
@@ -21,13 +22,10 @@
  * counted, or a lure would creep in under a rod that is only being held.
  *
  * The moment the line is taken up, by winding, by a fish, or by the lure leaving the
- * water, all of this is over: nothing gives, and it comes straight, quickly but not in
- * one frame.
+ * water, all of this is over: nothing gives.
  *
  * Units: metres, seconds.
  */
-
-import { toward } from './maths.js';
 
 // The share of the rod's draw that reaches the lure as movement.
 const REACHES = 0.15;
@@ -38,10 +36,6 @@ const TREMOR = 0.03;
 // How much the lure flutters for each metre of draw: metres of swimming its body beats
 // through (lureMove's `swum`).
 const FLUTTER = 0.3;
-// How fast the line comes to lie slack on the water once it is let be, and how fast it
-// comes straight once it is taken up, 1/s.
-const LAY_SETTLES = 2.5;
-const LAY_TAKEN_UP = 3.5;
 
 export function createLooseLine() {
   // What the lure has yet to come, m, and the stretch the draws are counted from, m.
@@ -51,25 +45,21 @@ export function createLooseLine() {
   const loose = {
     // How much longer than what is out the line lies for the moment, m.
     give: 0,
-    // How slack it lies on the water, 0 taut to 1.
-    lay: 0,
 
     // Once a frame while the line is not loose: it is being wound, a fish has it, or the
-    // lure is not in the water. Nothing gives, nothing is owed, and it comes straight.
-    takenUp(dt) {
+    // lure is not in the water. Nothing gives and nothing is owed.
+    takenUp() {
       owed = 0;
       from = 0;
       loose.give = 0;
-      loose.lay = toward(loose.lay, 0, LAY_TAKEN_UP, dt);
     },
 
     /**
      * Once a frame while it is loose, before the lure is moved. stretch: how much
      * further the lure is from the tip than there is line out, m. Below zero the line is
-     * slack. Sets `give` and `lay`. Returns how many metres to flutter the lure by.
+     * slack. Sets `give`. Returns how many metres to flutter the lure by.
      */
     drawn(dt, stretch) {
-      loose.lay = toward(loose.lay, 1, LAY_SETTLES, dt);
       if (stretch < from) from = stretch;
       let fresh = 0;
       if (stretch > from + TREMOR) {
