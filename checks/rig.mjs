@@ -16,6 +16,8 @@ const { createFlock } = await import(`${SRC}/fish/flock.js`);
 const { createRodFlex } = await import(`${SRC}/shore/rodFlex.js`);
 const { createRodHold } = await import(`${SRC}/shore/rodHold.js`);
 const THREE = await import('three/webgpu');
+// The line's stiffness, as line.js has it. An older copy of src/ does not say: its numbers.
+const { STRETCH_FORCE = 120, STIFFEST = 60 } = await import(`${SRC}/shore/line.js`);
 
 const ROCKS = [[2.6, 22.5, 2.3], [-4.6, 25, 1.7], [4.5, 15.5, 1.3], [-5.5, 12, 1.5], [8, 6, 1.8], [-9, 19, 1.4], [-1.8, 17.5, 1.1], [2.2, 13, 1.3], [6, 19.5, 1.5], [-3.5, 8, 1.4], [0.4, 15.2, 1.6]].map(([x, z, s]) => ({ x, z, r: s * 0.72 }));
 const deg = Math.PI / 180;
@@ -144,7 +146,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     tied: true,
     stowed: null,
     get tension() { return rod.tipTension; },
-    get stiffness() { return Math.min(60, 120 / Math.max(line.length, 1e-3)); },
+    get stiffness() { return Math.min(STIFFEST, STRETCH_FORCE / Math.max(line.length, 1e-3)); },
     setTied(yes) { line.tied = yes; },
     carried: null,
     setEnd(x, y, z) { line.end.x = x; line.end.y = y; line.end.z = z; line.stowed = null; line.carried = null; },
@@ -158,7 +160,10 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
         line.end.x = tipNow.x; line.end.y = tipNow.y - line.stowed; line.end.z = tipNow.z;
         line.length = line.stowed;
       }
-      if (line.tied) rod.setTipTether(line.end, line.length, line.stiffness, line.carried);
+    },
+    // Before the rod moves, as line.js does it.
+    brace() {
+      if (line.tied && line.stowed === null) rod.setTipTether(line.carried || line.end, line.length, line.stiffness, line.carried);
       else rod.setTipTether(null);
     },
   };
@@ -234,6 +239,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
         while (d < -Math.PI) d += 2 * Math.PI;
         viewYaw += d * (1 - Math.exp(-3 * dt));
       }
+      line.brace();
       rod.update(dt);
       line.update();
       if (begun) fishing.follow();

@@ -17,8 +17,13 @@
  * the two ends, the length and the pull, and nothing about loose or tight: how slack it
  * lies comes of what has happened to it. That is only drawn. It never changes the pull.
  *
- * Each frame, after rod.update(): read the guides, draw, hand the rod the end and length
- * for its next step.
+ * Each frame: brace() before rod.update(), which hands the rod the far end and the
+ * length as they are now, for the step it is about to take. Then update() after it:
+ * read the guides and draw.
+ * The rod used to be handed them after its step, for the next one. It then bent to where
+ * the far end had been a frame ago, while what was on the far end moved to where the tip
+ * had been a frame ago: on a stiff line, at a low frame rate, the two threw the tip back
+ * and forth by a hand's breadth a frame.
  *
  * The far end is one of two things. A place something holds: a lure in the water, a
  * fish's mouth (setEnd). Or a weight hanging on the line, out of the water (carry): then
@@ -51,10 +56,10 @@ const OPACITY = 0.6;
 const FADE_DEPTH = 0.45;
 // How hard the line resists stretching: newtons to stretch it by its own length. About
 // right for 0.25 mm nylon. A longer line is softer end to end, as a real one is.
-const STRETCH_FORCE = 120;
+export const STRETCH_FORCE = 540;
 // The line is not allowed stiffer than this end to end, N/m. Short lines would otherwise
 // be far stiffer than the rod, which is the soft part anyway.
-const STIFFEST = 60;
+export const STIFFEST = 60;
 
 export function createFishingLine(rod) {
   // The strand: `stops` points along the rod, then HANG_POINTS more out to the far end.
@@ -153,6 +158,12 @@ export function createFishingLine(rod) {
       fitSpare = spare;
     },
 
+    // Before the rod moves: it is handed the far end and the length as they are now.
+    brace() {
+      if (tied && stowed === null) rod.setTipTether(carried || end, length, stiffnessAt(length), carried);
+      else rod.setTipTether(null);
+    },
+
     // dt: seconds since the last update, for the hanging part's own motion.
     update(dt) {
       rod.linePath(path);
@@ -178,8 +189,6 @@ export function createFishingLine(rod) {
       }
       geometry.attributes.position.needsUpdate = true;
       geometry.attributes.color.needsUpdate = true;
-      if (tied) rod.setTipTether(end, length, stiffnessAt(length), carried);
-      else rod.setTipTether(null);
     },
 
     dispose() {

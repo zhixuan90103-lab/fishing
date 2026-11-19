@@ -84,7 +84,8 @@ check('fight: the line draws it toward the rod tip and nowhere else, and brought
         rig.rodStays = true; const f = rig.fishing; rig.rodTurn = f.stage === 'fight' ? turn * deg : 0;
         const fish = rig.fishes.find((x) => x.state === 'held'); if (f.stage !== 'fight' || !fish) { lx = null; return; }
         last = wrap(Math.atan2(fish.x - 0, fish.z - 2) - 100 * deg) / deg;
-        if (lx !== null) { const sp = Math.hypot(fish.x - lx, fish.z - lz) * 60, w = Math.abs(wrap(fish.yaw - lyaw)) * 60; if (w > 1 && sp > 0.3) radii.push(sp / w); }
+        // Brought round by the line, not bolting: a fish starting a run flips where it is.
+        if (lx !== null && f.mood === 'rest') { const sp = Math.hypot(fish.x - lx, fish.z - lz) * 60, w = Math.abs(wrap(fish.yaw - lyaw)) * 60; if (w > 1 && sp > 0.3) radii.push(sp / w); }
         lx = fish.x; lz = fish.z; lyaw = fish.yaw;
       } });
       at += last / 3;
@@ -96,7 +97,7 @@ check('fight: the line draws it toward the rod tip and nowhere else, and brought
   // Yaw is positive to the left: with the rod carried left its tip is to the left, and that is where the fish comes in.
   expect(left.at > right.at + 8, 'it comes to hand on the side the rod tip is', `${left.at.toFixed(0)}° with the rod to the left, ${right.at.toFixed(0)}° with it to the right`);
   // It used to all but stop and turn on the spot: a tenth of its sharp turns were inside 4 cm.
-  expect(left.tight > 0.12 && right.tight > 0.12, 'turning hard while it has way on, it swings round on a radius, not on the spot', `${left.tight.toFixed(2)} m, ${right.tight.toFixed(2)} m`);
+  expect(left.tight > 0.12 && right.tight > 0.12, 'brought round by the line while it has way on, it swings round on a radius, not on the spot', `${left.tight.toFixed(2)} m, ${right.tight.toFixed(2)} m`);
 });
 
 check('course: runs head out and to a side, not flat across', () => {
@@ -340,7 +341,7 @@ check('loose line: with the finger up a jerked rod shivers the lure and hardly b
     expect(Math.abs(still.came) < 0.02, `${fps} fps: a still rod brings it in not at all`, `${still.came.toFixed(3)} m`);
     // Twenty-four jerks, each drawing the tip some half a metre.
     expect(jerked.came > 0.1 && jerked.came < 1.2, `${fps} fps: two dozen jerks bring it in a little, not by the metre each`, `${jerked.came.toFixed(2)} m`);
-    expect(still.beat === 0 && jerked.beat > 1, `${fps} fps: it flutters to the jerks and not otherwise`, `${jerked.beat.toFixed(1)} m against ${still.beat.toFixed(1)} m`);
+    expect(still.beat < 0.05 && jerked.beat > 1, `${fps} fps: it flutters to the jerks and not otherwise`, `${jerked.beat.toFixed(1)} m against ${still.beat.toFixed(3)} m`);
     expect(Math.abs(jerked.line - still.line) < 0.6, `${fps} fps: the jerks do not pile up line`, `${jerked.line.toFixed(2)} m against ${still.line.toFixed(2)} m`);
     seen.push(jerked.came);
   }

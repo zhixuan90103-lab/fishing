@@ -30,7 +30,7 @@ index.html
             → 水花 createSplash，加在水面之后画的场景 onWater 里（docs/SPLASH.md）
             → 抄网 createNet，加在场景根上，平时藏着（docs/NET.md）
             → 玩法 createFishing({ rod, line, lure, splash, school, net, haptics })（docs/PLAY.md），它再创建 createCatch
-            → 每帧：shoreSchool.update → fishing.update → applyPhone → rod.update → line.update → splash.update → fishing.follow → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
+            → 每帧：shoreSchool.update → fishing.update → applyPhone → line.brace → rod.update → line.update → splash.update → fishing.follow → 海面 → 场景 → 水 → 水面上的半透明物（onWater）→ 后期
             → 手指 createFinger(#shore-view)
             → 设置面板 mountTunePanel（镜头回正；雾 / 水 / 鱼 / 鱼竿 / 镜头；震动测试移入面板）
             → 提示 mountNotice（线断时说一句"线断了"）

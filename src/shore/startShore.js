@@ -387,6 +387,7 @@ export async function startShore(container, hooks = {}) {
       fishing.update(dt, fishingInput);
     }
     applyPhone(dt);
+    line.brace();
     rod.update(dt);
     line.update(dt);
     splash.seenFrom(camera.position);

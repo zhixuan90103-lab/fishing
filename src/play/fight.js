@@ -86,6 +86,10 @@ const BOLT_DRAG = 1.1;
 // How soon it is where the line holds it, s. Lower follows the line more tightly and
 // overshoots more at low frame rates. Higher, it gives way later to a rod swung against it.
 const SETTLE_IN = 0.4;
+// On a line gone slack it is back where the line holds it this soon, s. A stiff line is
+// slack for want of a few centimetres, and a fish that crept back to it at its settling
+// pace left the line hanging loose for a third of a second in the middle of a run.
+const SLACK_TAKEN_IN = 0.08;
 // It may go this much faster than the line's hold lets its pull carry it, m/s.
 const SLACK_SPEED = 0.3;
 // The fastest the line can lead it in, m/s.
@@ -96,6 +100,10 @@ const LED_MAX = 1.6;
 // by the head. And it leans its turn toward the rod by this much, m/s: swinging round on
 // the far side would yank the line.
 const ARC_KEEPS = 0.6;
+// A fish that bolts while it faces the rod does not swing round: it flips where it is,
+// keeping only this share of its speed while it does. Swinging round, it ran in toward
+// the rod for a third of a second at the start of a run, and the line hung slack.
+const FLIP_KEEPS = 0.2;
 const TURN_INSIDE = 0.3;
 // The tightest it can swing round at speed, m: about a body's length. Its turning is
 // held to what that allows at the speed it is going, plus this much, rad/s, that a fish
@@ -247,12 +255,16 @@ export function createFight(random = Math.random) {
       // It cannot outrun what its pull has over the line's.
       const spare = Math.max(0, fight.force - stiffness * Math.max(0, stretch));
       const bolt = fight.bolt(holds);
-      const settling = (held - stretch) / SETTLE_IN - winding;
+      // On a slack line there is nothing to overshoot against: it takes the slack up as
+      // fast as it can swim, and settles only once the line has it.
+      const settling = (held - stretch) / (stretch < 0 ? SLACK_TAKEN_IN : SETTLE_IN) - winding;
       let away = Math.max(-LED_MAX, Math.min(spare / BODY_DRAG + SLACK_SPEED, bolt > 0 ? Math.max(bolt, settling) : settling));
       const nx = Math.sin(fish.yaw);
       const nz = Math.cos(fish.yaw);
       // More than a quarter turn to make: it goes round on the rod's side.
-      if ((ox * away - oz * across) * nx + (oz * away + ox * across) * nz < 0) away -= TURN_INSIDE;
+      // Only as far as the line is tight: on a line already slack, leaning in further
+      // gives the angler nothing to feel but more slack.
+      if ((ox * away - oz * across) * nx + (oz * away + ox * across) * nz < 0) away -= TURN_INSIDE * Math.min(1, Math.max(0, stretch) / Math.max(held, 1e-6));
       const vx = ox * away - oz * across;
       const vz = oz * away + ox * across;
       const speed = Math.hypot(vx, vz);
@@ -260,14 +272,17 @@ export function createFight(random = Math.random) {
       aim.yaw = Math.atan2(vx, vz);
       // What the line's pull has over its own.
       const overheld = Math.max(0, stiffness * stretch - fight.force);
-      const keeps = ARC_KEEPS * fight.force / (fight.force + overheld + 1e-9);
+      // Bolting from a standstill or from being led in, with its nose toward the rod, is
+      // not a swing round: a fish starting a run flips end for end where it is.
+      const flips = running && facing <= 0;
+      const keeps = flips ? FLIP_KEEPS : ARC_KEEPS * fight.force / (fight.force + overheld + 1e-9);
       aim.speed = speed * (keeps + (1 - keeps) * facing);
       const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
       aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * dive * dive * (3 - 2 * dive) : REST_DEPTH;
       aim.top = SHALLOWEST;
       // However hard it is being turned, it cannot come round tighter than its speed lets it.
       const tightest = ((fish.speed || 0) / ARC_RADIUS + PIVOT) / TURN_SWINGS;
-      aim.turn = Math.min((running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld, tightest);
+      aim.turn = flips ? TURN_RUN + HELD_TURNS * overheld : Math.min((running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld, tightest);
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
       aim.slow = SLOW + HELD_SLOWS * overheld;
       aim.rise = running ? RISE_RUN : RISE_REST;

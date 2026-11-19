@@ -256,7 +256,8 @@ export function createLineCurve(count) {
         // How fast it was going is taken from the frame before as well: in the frame it
         // lands it has already been slowed.
         const speed = Math.hypot(bx - to[0], by - to[1], bz - to[2]) / dt;
-        if (to[1] > 0 && by <= 0) over = Math.max(over, OVERRUN * Math.max(speed, flew));
+        // Only a line with nothing pulling on it: one under pull cannot run on.
+        if (to[1] > 0 && by <= 0 && !(pull > 0)) over = Math.max(over, OVERRUN * Math.max(speed, flew));
         flew = speed;
         felt += (Math.max(0, pull) - felt) * (1 - Math.exp(-dt * PULL_TRAVELS / Math.max(gap, 0.5)));
       } else {
