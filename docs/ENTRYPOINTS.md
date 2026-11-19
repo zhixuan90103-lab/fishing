@@ -172,7 +172,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼竿：甩动、回弹 | `src/shore/rodFlex.js` |
 | 渔轮 | [ROD.md](./ROD.md) 第 7 节，`src/shore/reel.js` |
 | 这一竿怎么走、没有鱼时手指是什么意思 | [PLAY.md](./PLAY.md)，`src/play/fishing.js` |
-| 抛多远、多用力才算抛 | `src/play/swing.js` |
+| 竿尖多快才算抛、同样的快慢飞多远 | `src/play/swing.js` |
 | 收线的快慢 | `src/play/retrieve.js` |
 | 松着手抖竿饵回来多少、晃多少，线搭得多松、收直多快 | `src/play/looseLine.js` |
 | 饵收在竿尖时怎么跟着摆、下沉时怎么晃、鼻尖转多快 | `src/shore/lurePose.js` 的 `SWAY_*`、`SINK_DIP`、`SINK_ROCK`、`NOSE_RATE` |

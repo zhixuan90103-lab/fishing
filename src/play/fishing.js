@@ -38,7 +38,7 @@ import { FISH_READOUT, createCatch } from './catch.js';
 import { STOW_LENGTH, createLineOut } from './lineOut.js';
 import { createLooseLine } from './looseLine.js';
 import { createRetrieve } from './retrieve.js';
-import { SWING_FULL, SWING_MIN, castReach, createSwing } from './swing.js';
+import { SPEED_FULL, SPEED_MIN, castReach, createSwing } from './swing.js';
 
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
@@ -73,7 +73,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   let fresh = true;
   let down = false;
   let heldFor = 0;
-  // ready: how fast the aim is tipping forward now, and at the last release, °/s.
+  // ready: how fast the rod tip is carrying the lure now, and at the last release, m/s.
   let swung = 0;
   let released = 0;
   // flight: the line has been stopped.
@@ -107,7 +107,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     heldFor = 0;
     swing.reset();
     retrieve.reset();
-    line.setTied(false);
   }
 
   function toFlight(reach, forwardX, forwardZ) {
@@ -137,7 +136,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     winding = false;
     fish.arm(homeX, homeZ);
     retrieve.reset();
-    line.setTied(true);
   }
 
   // A fish has the hook. The empty retrieve stops: from here winding is against the fish.
@@ -176,7 +174,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   function ready(dt, input, tip) {
     // Only what is swung with the finger down counts toward the cast.
     if (fresh && input.finger && !down) swing.reset();
-    swung = swing.step(dt, input.aimPitch);
+    swung = swing.step(dt, tip, Math.sin(input.viewYaw), Math.cos(input.viewYaw));
     if (!fresh) {
       if (!input.finger) fresh = true;
     } else if (input.finger) {
@@ -186,7 +184,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
       // Released. With a sensor the swing decides. Without one the hold time stands in.
       released = input.sensor
         ? swung
-        : SWING_MIN + (SWING_FULL - SWING_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
+        : SPEED_MIN + (SPEED_FULL - SPEED_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
       const reach = castReach(released);
       down = false;
       heldFor = 0;
@@ -244,6 +242,9 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
 
   // Tell the line and the lure where things are now.
   function show(dt, tip) {
+    // The reel lets the line run free while the lure is at the tip and while it flies:
+    // a free line pulls nothing. From the moment it lands the reel holds it.
+    line.setTied(stage !== 'ready' && stage !== 'flight');
     if (stage === 'ready') {
       // The line carries its end with the tip. follow() puts the lure there.
       line.stow(STOW_LENGTH);
@@ -291,8 +292,8 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     get lineOut() {
       return out.length;
     },
-    // How fast the aim is tipping forward right now, and what the last release was read
-    // at, degrees per second. For tuning the cast against a real hand.
+    // How fast the rod tip is carrying the lure right now, and what the last release was
+    // read at, metres per second. For tuning the cast against a real hand.
     get swing() {
       return swung;
     },

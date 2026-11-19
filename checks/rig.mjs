@@ -39,9 +39,10 @@ export function seeded(seed) {
  * hold: seconds the cast is held (the desk stand-in for a swing: 1 is a full one).
  * lift: degrees the rod is raised. sizes(i, size): the body scale of fish i, to make
  * every fish one size. noSchool: no fish at all. random: the play layer's draws, to
- * force one.
+ * force one. sensor: the cast reads the rod's swing, as on a phone, and not how long the
+ * finger was held.
  */
-export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null }) {
+export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null, sensor = false }) {
   const random = forced || seeded(seed);
   Math.random = seeded(seed * 7919 + 13);
   const tune = { x: 0, y: 1.7, z: 2, yaw: 100, pitch: -10 };
@@ -171,7 +172,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
   };
   const fishing = createFishing({ rod, line, lure, splash, school: noSchool ? null : school, net, haptics, random });
-  const input = { finger: false, sensor: false, viewYaw, aimPitch: 0 };
+  const input = { finger: false, sensor, viewYaw, aimPitch: 0 };
   let time = 0;
   let frame = 0;
   let begun = false;

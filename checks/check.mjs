@@ -16,7 +16,7 @@ import { createFight } from '../src/play/fight.js';
 import { createCourse } from '../src/play/course.js';
 import { createThump } from '../src/play/thump.js';
 import { createStrain } from '../src/play/strain.js';
-import { castReach, createSwing } from '../src/play/swing.js';
+import { SPEED_FULL, SPEED_MIN, castReach } from '../src/play/swing.js';
 import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
@@ -110,17 +110,33 @@ check('course: runs head out and to a side, not flat across', () => {
   expect(Math.abs(course.across(false, 1, 3, 0, 20)) < 0.1, 'resting it barely moves across');
 });
 
-check('cast: an ordinary swing goes far, a harder one further, a late release still counts', () => {
-  const reach = [150, 200, 300, 400, 500, 550].map(castReach);
-  for (let i = 1; i < reach.length; i += 1) expect(reach[i] > reach[i - 1] + 1, 'a harder swing lands further', reach.map((r) => r.toFixed(1)).join(' '));
-  expect(castReach(100) === 0, 'a nudge is not a cast');
-  expect(castReach(400) > 15 && castReach(550) === castReach(900), 'an ordinary swing reaches well out, and the hardest counted is 550°/s', `${castReach(400).toFixed(1)} m`);
-  // A swing of 400°/s, let go a tenth of a second after it stopped.
-  for (const fps of [30, 60, 120]) {
-    const swing = createSwing(); let pitch = 40, read = 0;
-    for (let i = 0; i < fps * 0.35; i += 1) { if (i < fps * 0.25) pitch -= 400 / fps; read = swing.step(1 / fps, pitch); }
-    expect(castReach(read) > 9, `${fps} fps: let go a tenth of a second late, it is still a fair cast`, `${read.toFixed(0)}°/s, ${castReach(read).toFixed(1)} m`);
+check('cast: the lure flies off as fast as the rod tip was carrying it, so a harder swing lands further and a late release still counts', () => {
+  // A swing of the real rod: the phone tips forward through `arc` degrees at `rate`°/s with
+  // the finger down, and the finger comes up `late` seconds after it stops. Where the lure lands.
+  const cast = (fps, rate, late = 0.02, arc = 60) => {
+    const rig = createRig({ seed: 1, fps, noSchool: true, sensor: true }); const f = rig.fishing; const end = 1.2 + arc / rate; let from = null;
+    rig.finger = () => rig.time > 1 && rig.time < end + late;
+    while (rig.time < 12) {
+      rig.setLift(rig.time < 1.2 ? 70 : Math.max(70 - arc, 70 - rate * (rig.time - 1.2))); rig.step();
+      if (f.stage === 'flight' && !from) from = { x: rig.line.tip.x, z: rig.line.tip.z, read: f.lastRelease };
+      if (f.stage === 'water') return { reach: Math.hypot(f.lure.x - from.x, f.lure.z - from.z), read: from.read };
+    }
+    return { reach: 0, read: f.lastRelease };
+  };
+  expect(castReach(SPEED_MIN - 0.1) === 0 && castReach(SPEED_MIN) > 0, 'a tip moving slower than a cast needs throws nothing');
+  expect(castReach(SPEED_FULL * 2) === castReach(SPEED_FULL), 'and the line carries a lure only so far', castReach(SPEED_FULL).toFixed(1));
+  expect(cast(60, 100).reach === 0, 'an unhurried tilt of the phone is not a cast');
+  const reach = [200, 300, 400, 500].map((rate) => cast(60, rate).reach);
+  for (let i = 1; i < reach.length; i += 1) expect(reach[i] > reach[i - 1] + 2, 'a harder swing lands further', reach.map((r) => r.toFixed(1)).join(' '));
+  expect(reach[2] > 14 && reach[2] < 24, 'an ordinary swing, 400°/s, reaches well out', `${reach[2].toFixed(1)} m`);
+  // The blank whips: the tip is going faster than a stiff rod's would at the same swing.
+  expect(cast(60, 400).read > 400 * deg * 2.03, 'the tip is going faster than a stiff rod of that length would carry it', `${cast(60, 400).read.toFixed(1)} m/s`);
+  for (const rate of [300, 400]) {
+    const at = [20, 60, 120].map((fps) => cast(fps, rate).reach);
+    expect(Math.max(...at) - Math.min(...at) < 1.5, `${rate}°/s: it lands in the same place at 20, 60 and 120 frames a second`, at.map((r) => r.toFixed(1)).join(' / '));
   }
+  expect(cast(60, 400, 0.1).reach > 9, 'let go a tenth of a second late, it is still a fair cast', `${cast(60, 400, 0.1).reach.toFixed(1)} m`);
+  expect(cast(60, 400, 0.02, 30).reach < reach[2] * 0.6, 'a short stab of the wrist does not get the tip up to speed', `${cast(60, 400, 0.02, 30).reach.toFixed(1)} m`);
 });
 
 check('lure at the tip: it sways with the rod, hangs true when the rod is still, and never flips', () => {

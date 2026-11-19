@@ -40,7 +40,7 @@ export const LURE_KG = 0.01;
 const LURE_SUNK = 0.3;
 
 // Flying: the angle it leaves at, above level, radians. Higher lobs it, lower drives it.
-const LAUNCH_ANGLE = 28 * Math.PI / 180;
+export const LAUNCH_ANGLE = 28 * Math.PI / 180;
 // With the line stopped, how fast its forward speed dies, 1/s. It eases to a stop and
 // drops, it does not hit a wall.
 const BRAKE_RATE = 5;

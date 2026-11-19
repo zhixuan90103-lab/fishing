@@ -1,74 +1,92 @@
 /**
- * How hard the rod is being swung, and how far that throws the lure.
+ * How fast the rod tip is carrying the lure, and how far a lure let go at that speed flies.
  *
- * Owns: how fast the aim is tipping forward, the best of the last moment, and the
- * speed-to-distance table of a cast.
- * Does not own: the phone or the aim (phoneLook.js, aim.js), when a cast may start, or the
- * lure's flight (lureMove.js).
+ * Owns: reading the tip's speed, the best of the last moment, and what speed throws how far.
+ * Does not own: the phone or the aim (phoneLook.js, aim.js), the rod and how its blank
+ * whips (rodFlex.js), when a cast may start, which way it goes, or the lure's flight
+ * (lureMove.js).
  * No Three, no scene: it runs in Node. Rule: docs/FISHING-REQUIREMENTS.md sections 5, 6.
+ * Design: docs/PLAY.md section 4, docs/CHAIN.md.
  *
- * The swing is read at the hand, not at the rod tip. The blank is soft: in a quick flick
- * the tip hangs back and then springs through, so its speed says more about the blank
- * than about the throw, and a 220°/s flick moves the tip forward at barely 1 m/s.
+ * The lure is at the rod tip until it is let go, so it leaves at the tip's speed. That is
+ * all a cast's strength is: the hand swings the grip, the blank whips, the tip carries
+ * the lure, and the speed it has at the release is the speed the lure flies off at. No
+ * table stands between the swing and the distance. Only how fast counts: the direction
+ * and the angle it leaves at are fixed, the view's and LAUNCH_ANGLE.
  *
- * The rate is not a difference of two frames. A value chases the aim's pitch, and how far
- * it trails is the rate: steady, and the same at any frame rate.
+ * The speed is not a difference of two frames. A point chases the tip, and how far it
+ * trails is the speed: steady, and the same at any frame rate.
  */
 
-import { chaseAngle as chase } from '../shore/phoneLook.js';
+import { LAUNCH_ANGLE } from '../shore/lureMove.js';
 
-// How closely the trailing value follows the pitch, 1/s. The rate read is about
-// 1 / TRAIL_RATE seconds old. Lower is steadier and later.
+const GRAVITY = 9.81;
+// How closely the trailing point follows the tip, 1/s. The speed read is about
+// 1 / TRAIL_RATE seconds old, and that much of a swing's sharpest moment is smoothed off.
 const TRAIL_RATE = 18;
 // A release a little after the fastest part of the swing still gets most of it: the best
-// rate fades at this speed, 1/s. Lower forgives a later release. At 4 a release 0.15 s
+// speed fades at this rate, 1/s. Lower forgives a later release. At 4 a release 0.15 s
 // late read half its swing, and a hard cast that was let go a moment late fell short.
 const BEST_FADE = 2.5;
-// Forward tipping rate, degrees per second. Below SWING_MIN a release is not a cast and
-// the line stays in. At SWING_FULL and above the lure goes the full distance.
-export const SWING_MIN = 120;
-export const SWING_FULL = 550;
-// Nearest and furthest a cast lands from under the tip, metres.
-export const REACH_MIN = 4;
+// A tip slower than this, m/s, throws nothing: the release is not a cast and the line
+// stays in. An unhurried tilt of the phone is about half this.
+export const SPEED_MIN = 4.6;
+// The share of its flight in still air that a lure on a line makes: the air and the line
+// it drags hold it back. Lower and every cast lands shorter.
+const CARRY = 0.8;
+// The furthest a cast goes, metres: the most this lure and line will carry.
 export const REACH_MAX = 28;
-// How the distance grows between them. 1 is in step with the swing. Above 1 keeps gentle
-// swings short and leaves the long casts to the hard ones, so the strength of the swing
-// shows in where the lure lands. At 1.6, with SWING_FULL at 750, an ordinary swing went
-// ten metres and only a violent one went far.
-const REACH_CURVE = 1.3;
+// The tip speed that throws that far, m/s.
+export const SPEED_FULL = Math.sqrt((REACH_MAX * GRAVITY) / (CARRY * Math.sin(2 * LAUNCH_ANGLE)));
 
 export function createSwing() {
-  let trail = 0;
-  let last = 0;
+  const trail = { x: 0, y: 0, z: 0 };
+  const last = { x: 0, y: 0, z: 0 };
   let best = 0;
   let started = false;
 
   return {
-    // Forget the swing so far. The next step starts from rest at whatever pitch it is given.
+    // Forget the swing so far. The next step starts from rest wherever the tip is.
     reset() {
       started = false;
       best = 0;
     },
 
-    // Once a frame with the aim's pitch, degrees, positive upward. Tipping forward is the
-    // pitch coming down. Returns the best recent forward rate, degrees per second.
-    step(dt, pitch) {
+    /**
+     * Once a frame. tip: where the rod tip is, world space. (aheadX, aheadZ): the level
+     * direction a cast goes. Returns the best recent speed of the tip while it was
+     * travelling that way, m/s: a tip swung back, or only up and down, throws nothing.
+     */
+    step(dt, tip, aheadX, aheadZ) {
       if (!(dt > 0)) return best;
       if (!started) {
-        trail = last = pitch;
+        trail.x = last.x = tip.x;
+        trail.y = last.y = tip.y;
+        trail.z = last.z = tip.z;
         started = true;
       }
-      trail = chase(trail, pitch, last, TRAIL_RATE, dt);
-      last = pitch;
-      best = Math.max(TRAIL_RATE * (trail - pitch), best * Math.exp(-BEST_FADE * dt));
+      // Exact for a tip that moves evenly through the frame: close on where it was, then
+      // take a share of its move.
+      const keep = Math.exp(-TRAIL_RATE * dt);
+      const share = 1 - (1 - keep) / (TRAIL_RATE * dt);
+      trail.x = last.x + (trail.x - last.x) * keep + (tip.x - last.x) * share;
+      trail.y = last.y + (trail.y - last.y) * keep + (tip.y - last.y) * share;
+      trail.z = last.z + (trail.z - last.z) * keep + (tip.z - last.z) * share;
+      last.x = tip.x;
+      last.y = tip.y;
+      last.z = tip.z;
+      const lx = tip.x - trail.x;
+      const ly = tip.y - trail.y;
+      const lz = tip.z - trail.z;
+      const speed = lx * aheadX + lz * aheadZ > 0 ? TRAIL_RATE * Math.hypot(lx, ly, lz) : 0;
+      best = Math.max(speed, best * Math.exp(-BEST_FADE * dt));
       return best;
     },
   };
 }
 
-// How far a release at this forward rate throws the lure, metres. 0: not a cast.
-export function castReach(rate) {
-  if (rate < SWING_MIN) return 0;
-  const t = Math.min(1, (rate - SWING_MIN) / (SWING_FULL - SWING_MIN));
-  return REACH_MIN + (REACH_MAX - REACH_MIN) * t ** REACH_CURVE;
+// How far a lure let go at this speed flies, metres from under the tip. 0: not a cast.
+export function castReach(speed) {
+  if (speed < SPEED_MIN) return 0;
+  return Math.min(REACH_MAX, (CARRY * speed * speed * Math.sin(2 * LAUNCH_ANGLE)) / GRAVITY);
 }
