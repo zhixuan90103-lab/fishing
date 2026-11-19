@@ -27,7 +27,7 @@ function one({ seed, fps, press, hold, size, noSchool, rodStays, sway, seconds }
     let k = 0;
     for (const x of rig.fishes) { row[k++] = x.x; row[k++] = x.y; row[k++] = x.z; row[k++] = x.yaw; row[k++] = x.pitch || 0; row[k++] = x.roll || 0; }
     const m = f.lure, l = rig.line;
-    for (const v of [m.x, m.y, m.z, m.nose.x, m.nose.y, m.nose.z, m.back.x, m.back.y, m.back.z, m.swum, l.end.x, l.end.y, l.end.z, l.length, l.tied ? 1 : 0, l.tip.x, l.tip.y, l.tip.z,
+    for (const v of [m.x, m.y, m.z, m.nose.x, m.nose.y, m.nose.z, m.back.x, m.back.y, m.back.z, m.swum, l.end.x, l.end.y, l.end.z, l.length, l.lay, l.tied ? 1 : 0, l.tip.x, l.tip.y, l.tip.z,
       rig.rodState.wound, rig.rodState.load, rig.strain, rig.rod.tipTension, STAGE[f.stage], FISH[f.fish], f.lineOut, f.tension, f.pull, f.press, f.effort, f.running, f.stamina, f.landed, f.size,
       f.watch ? f.watch.x : -999, f.watch ? f.watch.z : -999, f.watchRod ? 1 : 0, rig.lureSeen.visible ? 1 : 0, rig.events.length, f.lost ? f.lost.length : 0]) row[k++] = v;
     h.update(Buffer.from(row.buffer, 0, k * 8)); count += k;

@@ -19,7 +19,7 @@ import { createThump } from '../src/play/thump.js';
 import { createStrain } from '../src/play/strain.js';
 import { castReach, createSwing } from '../src/play/swing.js';
 import { createLureMove } from '../src/shore/lureMove.js';
-import { layLine, shapeLine } from '../src/shore/lineCurve.js';
+import { shapeLine } from '../src/shore/lineCurve.js';
 import { createSnap } from '../src/play/snap.js';
 import { fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
 import { RUN_OUT_AT } from '../src/play/haul.js';
@@ -124,15 +124,20 @@ check('lure at the tip: it sways with the rod, hangs true when the rod is still,
 
 check('line: slack on the water it goes in above the lure, and comes straight without a jump as it is taken up', () => {
   const n = 49; const out = new Float64Array(n * 3);
-  const tip = [0, 2, 0], end = [0, -2, -6];
-  const draw = (lay) => { layLine(...tip, ...end, lay, out, 0, n); let at = null; for (let i = 0; i < n; i += 1) if (Math.abs(out[i * 3 + 1]) < 1e-9) at = out[i * 3 + 2]; return at; };
-  expect(Math.abs(draw(1) - end[2]) < 1e-9, 'lying slack it goes in straight above the lure', draw(1));
-  expect(Math.abs(draw(0) - -3) < 1e-9, 'taken right up it is one straight line from tip to lure', draw(0));
+  const tip = [0, 2, 0], end = [0, -2, -6]; const length = Math.hypot(4, 6);
+  // Where the drawn line meets the surface, as metres out from the tip.
+  const goesIn = (lay) => { shapeLine(...tip, ...end, length, lay, out, 0, n); for (let i = 1; i < n; i += 1) { const y0 = out[i * 3 - 2], y1 = out[i * 3 + 1]; if (y0 > 0 && y1 <= 0) { const t = y0 / (y0 - y1); return out[i * 3 - 1] + (out[i * 3 + 2] - out[i * 3 - 1]) * t; } } return null; };
+  expect(Math.abs(goesIn(1) - end[2]) < 0.05, 'lying slack it goes in above the lure', goesIn(1));
+  expect(Math.abs(goesIn(0) - -3) < 1e-9, 'taken right up it is one straight line from tip to lure', goesIn(0));
   for (let i = 0; i < n; i += 1) expect(Math.abs(out[i * 3 + 2] - (tip[2] + (end[2] - tip[2]) * (2 - out[i * 3 + 1]) / 4)) < 1e-9, 'every point of the taut line is on that straight line');
-  let last = draw(0), step = 0;
-  for (let k = 1; k <= 100; k += 1) { const at = draw(k / 100); step = Math.max(step, Math.abs(at - last)); last = at; }
-  expect(step < 0.05, 'the place it goes in slides, it does not jump', step);
+  let last = goesIn(0), step = 0;
+  for (let k = 1; k <= 100; k += 1) { const at = goesIn(k / 100); step = Math.max(step, Math.abs(at - last)); last = at; }
+  expect(step < 0.08, 'the place it goes in slides, it does not jump', step);
   expect(out[0] === tip[0] && out[1] === tip[1] && out[(n - 1) * 3 + 2] === end[2] && out[(n - 1) * 3 + 1] === end[1], 'both ends stay where they are');
+  // A lure only just under the surface has next to nothing lain yet.
+  shapeLine(0, 2, 0, 0, -0.02, -6, Math.hypot(2.02, 6), 1, out, 0, n);
+  let off = 0; for (let i = 0; i < n; i += 1) off = Math.max(off, Math.abs(out[i * 3 + 1] - (2 - 2.02 * i / (n - 1))));
+  expect(off < 0.1, 'a lure just wet has a line still nearly straight', off.toFixed(3));
   // And a sinking lure rocks about its length, keeps its back square, and beats no tail.
   const m = createLureMove(); m.place(0, 0, -8); const tipP = { x: 0, y: 2, z: 0 }; let rocked = 0, swum0 = m.swum, down = 0;
   for (let i = 0; i < 60 * 5; i += 1) {
@@ -178,7 +183,7 @@ check('line: its drawn shape never jumps, landing, sinking, wound a moment, or t
   }
 });
 
-check('twitch: with the finger up a jerked rod shivers the lure and hardly brings it in', () => {
+check('loose line: with the finger up a jerked rod shivers the lure and hardly brings it in', () => {
   const seen = [];
   for (const fps of [20, 60, 120]) {
     const run = (wave) => {

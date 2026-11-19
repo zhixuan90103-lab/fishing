@@ -2,8 +2,7 @@
  * How the lure's body moves: held at the tip, hanging from it, flying through the air,
  * towed through the water by the line.
  *
- * Owns: the lure's position, velocity, the way its nose points and the way its back
- * faces, and the ways it moves.
+ * Owns: the lure's position and velocity, and the ways it moves.
  * Does not own: the model (lure.js), the line or its length (line.js and whoever sets it),
  * which of the three applies, when a cast starts or ends, or any fishing rule.
  * No Three, no scene: it runs in Node. Design: docs/LURE.md.
@@ -13,13 +12,13 @@
  * path does not depend on the frame rate. Unless it is held, point() then turns the nose
  * along the line.
  *
- * Hanging from the tip its nose points straight up, and there "back as near up as it
- * goes" has no answer: worked out afresh each frame, the back flips half a turn whenever
- * the nose wobbles through vertical. So the back is carried as a vector, turned a little
- * each frame with the nose, and only eased upright while the nose lies near level.
+ * Which way it faces while it does so is lurePose.js: this file tells it where the tip
+ * is and how fast the lure is sinking, and shows its nose and back as its own.
  *
  * Units: metres, seconds, newtons. World +Y is up, the water surface is y = 0.
  */
+
+import { createLurePose } from './lurePose.js';
 
 const GRAVITY = 9.81;
 
@@ -57,28 +56,6 @@ const RUN_RATE = 3;
 const DEPTH_NEAR = 1.5;
 const DEPTH_FAR = 4;
 
-// How fast the nose turns to follow the line, 1/s.
-const NOSE_RATE = 10;
-// In the water the nose lies nearer level than the line: this share of the line's slope.
-const NOSE_LEVEL = 0.25;
-// Sinking, its nose goes down: this far below where the line would lay it, as a share of
-// a level unit, at full sinking speed. And it rocks from side to side about its own
-// length as it goes: this far each way, radians, once over for every ROCK_EVERY metres
-// sunk. Not a tail beat: a lure that beats its tail with its nose toward the angler
-// reads as swimming in, when it is only going down.
-const SINK_DIP = 1;
-const SINK_ROCK = 0.5;
-const ROCK_EVERY = 0.45;
-// Held at the tip it is not stiff: its tail trails behind the tip's movement. The tail
-// hangs this far below the tie, m, follows it at this rate, 1/s, and the body never
-// tilts further than this, radians. It eases into that, it does not hit it.
-const SWAY_ARM = 0.09;
-const SWAY_RATE = 9;
-const SWAY_MOST = 28 * Math.PI / 180;
-// How fast it rolls upright, back to the sky, with the nose level, 1/s. Less the steeper
-// the nose, and not at all with it straight up or down, where there is no upright.
-const UPRIGHT_RATE = 7;
-
 function smooth(t) {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
@@ -86,53 +63,9 @@ function smooth(t) {
 }
 
 export function createLureMove() {
-  // Its back before any rock is laid on: this is what is carried from frame to frame.
-  const keel = { x: 0, y: 0, z: 1 };
-  // Metres it has sunk under its own weight, for the rock.
-  let sunk = 0;
-  // Held at the tip: where its tail is, level, and where the tail was last asked to be.
-  let tailX = 0, tailZ = 0;
-  let lastTailX = 0, lastTailZ = 0;
-
-  // Keep the back square to the nose as the nose turns, without spinning it about the
-  // nose, then roll it toward upright by as much as the nose is level.
-  function carryBack(dt) {
-    const nl = Math.hypot(m.nose.x, m.nose.y, m.nose.z) || 1;
-    const nx = m.nose.x / nl, ny = m.nose.y / nl, nz = m.nose.z / nl;
-    const b = keel;
-    const along = b.x * nx + b.y * ny + b.z * nz;
-    let bx = b.x - nx * along, by = b.y - ny * along, bz = b.z - nz * along;
-    let bl = Math.hypot(bx, by, bz);
-    if (bl < 1e-6) {
-      // The back lay along the nose: any direction square to it will do.
-      bx = Math.abs(ny) < 0.9 ? -nx * ny : 1 - nx * nx;
-      by = Math.abs(ny) < 0.9 ? 1 - ny * ny : -ny * nx;
-      bz = Math.abs(ny) < 0.9 ? -nz * ny : -nz * nx;
-      bl = Math.hypot(bx, by, bz);
-    }
-    bx /= bl; by /= bl; bz /= bl;
-    // Upright: the part of straight up that is square to the nose.
-    const level = 1 - ny * ny;
-    if (dt > 0 && level > 1e-6) {
-      const ux = -nx * ny, uy = 1 - ny * ny, uz = -nz * ny;
-      // The angle from the back round to upright, about the nose.
-      const cross = (by * uz - bz * uy) * nx + (bz * ux - bx * uz) * ny + (bx * uy - by * ux) * nz;
-      const dot = bx * ux + by * uy + bz * uz;
-      const turn = Math.atan2(cross, dot) * (1 - Math.exp(-UPRIGHT_RATE * level * dt));
-      const c = Math.cos(turn), s = Math.sin(turn);
-      const rx = bx * c + (ny * bz - nz * by) * s;
-      const ry = by * c + (nz * bx - nx * bz) * s;
-      const rz = bz * c + (nx * by - ny * bx) * s;
-      bx = rx; by = ry; bz = rz;
-    }
-    b.x = bx; b.y = by; b.z = bz;
-    // What is shown: the keel, rocked about the nose by as much as it is sinking.
-    const rock = SINK_ROCK * (m.sinking / SINK_SPEED) * Math.sin(2 * Math.PI * sunk / ROCK_EVERY);
-    const c = Math.cos(rock), s = Math.sin(rock);
-    m.back.x = bx * c + (ny * bz - nz * by) * s;
-    m.back.y = by * c + (nz * bx - nx * bz) * s;
-    m.back.z = bz * c + (nx * by - ny * bx) * s;
-  }
+  // Which way it faces is lurePose.js's. This file tells it what the body is doing.
+  const pose = createLurePose();
+  // Metres it has sunk under its own weight are counted there, for the rock.
 
   const m = {
     x: 0, y: 0, z: 0,
@@ -147,11 +80,10 @@ export function createLureMove() {
     // paid out by this much lets it sink straight down. Held to a fixed length, the
     // line swings it in toward the rod as it sinks.
     sank: 0,
-    // Which way the nose points. Not kept to unit length: the model normalises it.
-    nose: { x: 0, y: 1, z: 0 },
-    // Which way its back faces: a unit vector square to the nose. With the rock of a
-    // sinking lure laid on.
-    back: { x: 0, y: 0, z: 1 },
+    // Which way the nose points, not kept to unit length, and which way its back faces,
+    // a unit vector square to the nose. Both are lurePose.js's, shown here.
+    nose: pose.nose,
+    back: pose.back,
 
     // Put it somewhere, at rest.
     place(x, y, z) {
@@ -170,29 +102,7 @@ export function createLureMove() {
     // the tip is moving: a wave of the rod sways it, a still rod lets it hang true. Call
     // once a frame after hold(). dt of 0 hangs it true at once, for the very start.
     upright(dt) {
-      // Where the tail would hang with the tip still, and the tail chasing that.
-      const tx = m.x, tz = m.z;
-      if (!(dt > 0)) {
-        tailX = lastTailX = tx;
-        tailZ = lastTailZ = tz;
-      } else {
-        const keep = Math.exp(-SWAY_RATE * dt);
-        const share = 1 - (1 - keep) / (SWAY_RATE * dt);
-        tailX = lastTailX + (tailX - lastTailX) * keep + (tx - lastTailX) * share;
-        tailZ = lastTailZ + (tailZ - lastTailZ) * keep + (tz - lastTailZ) * share;
-        lastTailX = tx;
-        lastTailZ = tz;
-      }
-      // The tilt that lag makes, eased into its most.
-      const lagX = tx - tailX, lagZ = tz - tailZ;
-      const lag = Math.hypot(lagX, lagZ);
-      const tilt = SWAY_MOST * Math.tanh(Math.atan2(lag, SWAY_ARM) / SWAY_MOST);
-      const lean = lag > 1e-9 ? Math.sin(tilt) / lag : 0;
-      const k = dt > 0 ? 1 - Math.exp(-NOSE_RATE * dt) : 1;
-      m.nose.x += (lagX * lean - m.nose.x) * k;
-      m.nose.y += (Math.cos(tilt) - m.nose.y) * k;
-      m.nose.z += (lagZ * lean - m.nose.z) * k;
-      carryBack(dt);
+      pose.sway(dt, m.x, m.z);
     },
 
     // Shaken by the line: its body beats as if it had swum this many metres more.
@@ -202,21 +112,7 @@ export function createLureMove() {
 
     // Turn the nose toward the tip, along the line. swimming: lie flatter than the line.
     point(dt, tip, swimming) {
-      const tx = tip.x - m.x;
-      let ty = tip.y - m.y;
-      const tz = tip.z - m.z;
-      if (swimming) ty *= NOSE_LEVEL;
-      let len = Math.hypot(tx, ty, tz) || 1;
-      // Sinking, the nose goes down first.
-      if (swimming && m.sinking > 0) {
-        ty -= len * SINK_DIP * m.sinking / SINK_SPEED;
-        len = Math.hypot(tx, ty, tz) || 1;
-      }
-      const k = 1 - Math.exp(-NOSE_RATE * dt);
-      m.nose.x += (tx / len - m.nose.x) * k;
-      m.nose.y += (ty / len - m.nose.y) * k;
-      m.nose.z += (tz / len - m.nose.z) * k;
-      carryBack(dt);
+      pose.follow(dt, tip.x - m.x, tip.y - m.y, tip.z - m.z, swimming, m.sinking, SINK_SPEED);
     },
 
     // Straight-line distance to a point.
@@ -343,7 +239,7 @@ export function createLureMove() {
       const before = Math.hypot(tip.x - m.x, tip.y - m.y, tip.z - m.z);
       m.sinking = SINK_SPEED * still * hold * room;
       m.y -= m.sinking * dt;
-      sunk += m.sinking * dt;
+      pose.sink(m.sinking * dt);
       m.sank = Math.max(0, Math.hypot(tip.x - m.x, tip.y - m.y, tip.z - m.z) - before);
       if (m.y > RUN_DEPTH) m.y += (RUN_DEPTH - m.y) * (1 - Math.exp(-RUN_RATE * hold * dt));
       if (m.y > 0) m.y = 0;

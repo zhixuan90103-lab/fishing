@@ -160,9 +160,9 @@ export function createAim(yaw, pitch) {
       const aimPitch = basePitch + turned.pitch * AIM_PITCH_GAIN;
       if (watch) turnTo(watch, dt, tip);
       else if (!held) followAim(aimYaw, aimPitch, dt);
-      // Held still, the phone may be swung anywhere. When the view is let go it starts
-      // back gently, the same as after watching.
-      else follow = RETURN_RATE;
+      // Whenever the view is not following the aim, watching or held, the phone may be
+      // swung anywhere meanwhile. So whenever it is given back, it starts back gently.
+      if (watch || held) follow = RETURN_RATE;
       // The steadied tip is only good while it is being fed.
       if (!watch || !tip) tipKnown = false;
       watching = Boolean(watch);
@@ -185,6 +185,25 @@ export function createAim(yaw, pitch) {
     return mid + half * Math.tanh((value - mid) / half);
   }
 
+  // The rod tip's direction, steadied, and how long it has been counting. The first time
+  // it is taken as it is. The tip is in its window while the view looks between
+  // tipYaw - TIP_LEFT and tipYaw + TIP_RIGHT (yaw is positive to the left, so a tip to
+  // the left of centre has the view to its right), and likewise up and down.
+  function keepTip(tip, dt) {
+    const rawYaw = nearest(tip.yaw, aim.viewYaw);
+    if (!tipKnown) {
+      tipYaw = lastTipYaw = rawYaw;
+      tipPitch = lastTipPitch = tip.pitch;
+      tipKnown = true;
+      tipFor = 0;
+    }
+    tipFor += dt;
+    tipYaw = chaseAngle(nearest(tipYaw, aim.viewYaw), rawYaw, nearest(lastTipYaw, aim.viewYaw), TIP_STEADY, dt);
+    tipPitch = chaseAngle(tipPitch, tip.pitch, lastTipPitch, TIP_STEADY, dt);
+    lastTipYaw = rawYaw;
+    lastTipPitch = tip.pitch;
+  }
+
   function turnTo(watch, dt, tip) {
     let toYaw = nearest(watch.yaw, aim.viewYaw);
     // What is watched is looked at no higher and no lower than the limits. The rod tip,
@@ -192,21 +211,7 @@ export function createAim(yaw, pitch) {
     let toPitch = Math.max(WATCH_PITCH_MIN, Math.min(WATCH_PITCH_MAX, watch.pitch));
     let rate = WATCH_RATE;
     if (tip) {
-      // The tip, steadied. The first time it is taken as it is.
-      const rawYaw = nearest(tip.yaw, aim.viewYaw);
-      if (!tipKnown) {
-        tipYaw = lastTipYaw = rawYaw;
-        tipPitch = lastTipPitch = tip.pitch;
-        tipKnown = true;
-        tipFor = 0;
-      }
-      tipFor += dt;
-      tipYaw = chaseAngle(nearest(tipYaw, aim.viewYaw), rawYaw, nearest(lastTipYaw, aim.viewYaw), TIP_STEADY, dt);
-      tipPitch = chaseAngle(tipPitch, tip.pitch, lastTipPitch, TIP_STEADY, dt);
-      lastTipYaw = rawYaw;
-      lastTipPitch = tip.pitch;
-      // The tip is in its window while the view looks between these. Yaw is positive to
-      // the left, so a tip to the left of centre has the view to its right.
+      keepTip(tip, dt);
       // Both the window and the hurry come on over a moment from when the tip starts to
       // count: `on` goes 0 to 1.
       const begun = Math.min(1, tipFor / KEEP_EASES_IN);
@@ -224,8 +229,6 @@ export function createAim(yaw, pitch) {
     aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, toPitch, lastWatchPitch, rate, dt));
     lastWatchYaw = toYaw;
     lastWatchPitch = toPitch;
-    // Whenever the view is given back, it starts back gently.
-    follow = RETURN_RATE;
   }
 
   // The view chases the aim, at the usual rate or on its way back up to it.

@@ -36,10 +36,9 @@
 import { createLureMove } from '../shore/lureMove.js';
 import { FISH_READOUT, createCatch } from './catch.js';
 import { STOW_LENGTH, createLineOut } from './lineOut.js';
-import { toward } from './maths.js';
+import { createLooseLine } from './looseLine.js';
 import { createRetrieve } from './retrieve.js';
 import { SWING_FULL, SWING_MIN, castReach, createSwing } from './swing.js';
-import { createTwitch } from './twitch.js';
 
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
@@ -47,11 +46,6 @@ const LIFT_WITHIN = 1.6;
 // A lure hitting the water this fast makes the biggest splash, m/s. A stopped cast that
 // just drops in makes a smaller one.
 const SPLASH_FULL = 14;
-// With the finger up, line follows the sinking lure and lies slack on the water: how fast
-// it comes to lie so, 1/s. With the finger down it is taken up and comes straight: how
-// fast, 1/s.
-const LAY_SETTLES = 2.5;
-const LAY_TAKEN_UP = 3.5;
 // Desktop stand-in only, no motion sensor: holding this long counts as a full swing, s.
 const DESK_FULL_HOLD = 1;
 
@@ -68,10 +62,9 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   const out = createLineOut();
   const retrieve = createRetrieve();
   const swing = createSwing();
-  const twitch = createTwitch();
-  // How slack the line lies on the water, 0 to 1: let out after a sinking lure it lies
-  // slack, wound it comes straight. Eased, and handed to the line to draw.
-  let lay = 0;
+  // The line while nothing winds it: what it gives to a jerk, how it follows a sinking
+  // lure, how slack it lies.
+  const loose = createLooseLine();
   const lastTip = { x: 0, y: 0, z: 0 };
   // Where the view should look while the lure is out: the water where it lands.
   const spot = { x: 0, y: 0, z: 0 };
@@ -139,7 +132,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     spot.z = move.z;
     splash.burst(move.x, move.z, move.impact / SPLASH_FULL);
     out.land(move.gap(tip));
-    twitch.reset();
     armed = !input.finger;
     lifted = false;
     winding = false;
@@ -151,7 +143,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // A fish has the hook. The empty retrieve stops: from here winding is against the fish.
   function toFight() {
     stage = 'fight';
-    twitch.reset();
     retrieve.reset();
   }
 
@@ -167,7 +158,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     winding = false;
     retrieve.reset();
     out.ease(move.gap(tip));
-    twitch.reset();
     line.setTied(false);
     lure.show(false);
   }
@@ -179,7 +169,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     lifted = true;
     armed = true;
     winding = true;
-    twitch.reset();
     retrieve.reset();
     out.ease(move.gap(tip));
     line.setTied(false);
@@ -228,25 +217,20 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     rod.reel.wind(taken);
     const pulled = out.wind(dt, taken, move.gap(tip));
     if (!lifted) {
-      // Finger up, only winding would bring the lure in. A jerk of the rod is taken up
-      // by the line, and what reaches the lure is a dart and a shiver.
-      lay = toward(lay, reeling ? 0 : 1, reeling ? LAY_TAKEN_UP : LAY_SETTLES, dt);
-      if (reeling) twitch.reset();
-      else move.flutter(twitch.draw(move.gap(tip) - out.length));
-      move.tow(dt, tip, out.length + twitch.give, pulled, line.stiffness);
-      // And the bail is open: line follows the lure down and it sinks where it is.
-      // Finger down, the line is held, and a sinking lure swings in on it.
-      if (!reeling) {
-        out.pay(Math.min(move.sank, Math.max(0, move.gap(tip) - out.length)));
-        twitch.settle(move.gap(tip) - out.length);
-      }
+      // Finger up, the bail is open and the line is loose: only winding would bring the
+      // lure in. A jerk of the rod is taken up by the line, and what reaches the lure is
+      // a dart and a shiver. Then line follows the lure down and it sinks where it is.
+      // Finger down, the line is held: a jerk hauls the lure, and sinking swings it in.
+      if (reeling) loose.takenUp(dt);
+      else move.flutter(loose.drawn(dt, move.gap(tip) - out.length));
+      move.tow(dt, tip, out.length + loose.give, pulled, line.stiffness);
+      if (!reeling) out.pay(loose.follows(move.gap(tip) - out.length, move.sank));
       const level = Math.hypot(tip.x - move.x, tip.z - move.z);
       if (level < LIFT_WITHIN || out.stowed) {
         // From here it is a weight on the line again. A fish still on its way has
         // nothing left to come to.
         lifted = true;
         out.ease(move.gap(tip));
-        twitch.reset();
         line.setTied(false);
         fish.sendAway();
       }
@@ -267,10 +251,10 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
       line.stow(STOW_LENGTH);
       return;
     }
-    // Only a lure in the water with nothing on it has line lying slack. Anything else
-    // takes it up, and it comes straight as fast as winding does: not in one frame.
-    if (stage !== 'water' || lifted) lay = toward(lay, 0, LAY_TAKEN_UP, dt);
-    line.setLay(lay);
+    // Only a lure in the water with nothing on it has a loose line. A fish, or the lure
+    // leaving the water, takes it up.
+    if (stage !== 'water' || lifted) loose.takenUp(dt);
+    line.setLay(loose.lay);
     line.setEnd(move.x, move.y, move.z);
     // In a fight a shake of the fish's head snatches the line: it is that much shorter
     // for the moment, and the rod tip nods to it.
@@ -278,7 +262,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // that much longer for the moment.
     line.setLength(stage === 'landed' ? fish.liftLength()
       : stage === 'fight' ? out.length - fish.snatch
-        : stage === 'water' ? out.length + twitch.give : out.length);
+        : stage === 'water' ? out.length + loose.give : out.length);
     move.point(dt, tip, stage === 'water' && !lifted);
     lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
   }

@@ -174,8 +174,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 这一竿怎么走、没有鱼时手指是什么意思 | [PLAY.md](./PLAY.md)，`src/play/fishing.js` |
 | 抛多远、多用力才算抛 | `src/play/swing.js` |
 | 收线的快慢 | `src/play/retrieve.js` |
-| 松着手抖竿，饵回来多少、晃多少 | `src/play/twitch.js` |
-| 饵收在竿尖时怎么跟着摆、下沉时怎么晃 | `src/shore/lureMove.js` 的 `SWAY_*`、`SINK_DIP`、`SINK_SHIMMY` |
+| 松着手抖竿饵回来多少、晃多少，线搭得多松、收直多快 | `src/play/looseLine.js` |
+| 饵收在竿尖时怎么跟着摆、下沉时怎么晃、鼻尖转多快 | `src/shore/lurePose.js` 的 `SWAY_*`、`SINK_DIP`、`SINK_ROCK`、`NOSE_RATE` |
 | 鱼多久来、来哪条、多近算到身边、提多高、吊多久叫网、网从哪边来 | `src/play/catch.js` 顶部的常量和 `nearestFish` |
 | 鱼游向饵的快慢、多近算碰钩 | `src/play/visit.js` |
 | 每一档鱼冲多大力、多耐累、甩头多重、压竿多重；加一种鱼 | `src/play/fishKind.js` 的表 |
