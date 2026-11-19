@@ -675,6 +675,24 @@ check('landed fish: lifted clear, the line holds its weight and no more, and com
   }
 });
 
+check('camera: lifted out of the water the fish and the rod are both kept in the picture, and the view still turns with the rod', () => {
+  // The view used to be handed back to the phone the moment the fish came to hand.
+  for (const turn of [0, 35]) {
+    let seen = 0, off = 0, rodKept = true, since = -1, follows = 0;
+    fightOne({ seed: 3, fps: 60, press: 'rests', size: 1.3, each: (rig) => {
+      const f = rig.fishing; if (f.stage !== 'landed') return;
+      if (since < 0) since = rig.time;
+      // Part way through the lift the phone carries the rod round to one side.
+      rig.rodStays = true; rig.rodTurn = rig.time - since > 2 ? turn * deg : 0;
+      if (!f.watch) return; seen += 1; rodKept = rodKept && f.watchRod;
+      if (rig.time - since > 4) { off = Math.max(off, Math.hypot(f.watch.x - f.lure.x, f.watch.y - f.lure.y, f.watch.z - f.lure.z)); follows = wrap(Math.atan2(f.watch.x - 0, f.watch.z - 2) - 100 * deg) / deg; }
+    } });
+    expect(seen > 120 && rodKept, `rod turned ${turn}°: all through the lift the view has the fish to watch and the rod to keep`, seen);
+    expect(off < 0.6, `rod turned ${turn}°: what it watches stays with the fish on the hook`, `${off.toFixed(2)} m from it`);
+    if (turn) expect(follows > 8, 'carried round by the rod, the fish takes the view with it', `${follows.toFixed(0)}° round`);
+  }
+});
+
 check('landed fish: it turns about the line to show its sides, and its pose never jumps', () => {
   const frame = (f) => { const cy = Math.cos(f.yaw), sy = Math.sin(f.yaw), cp = Math.cos(f.pitch), sp = Math.sin(f.pitch), cr = Math.cos(f.roll), sr = Math.sin(f.roll); return [[sy * cp, -sp, cy * cp], [-sr * cy + cr * sp * sy, cr * cp, sr * sy + cr * sp * cy]]; };
   const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) / deg;

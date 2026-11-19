@@ -418,10 +418,16 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     /**
      * Once a frame with the fish landed. It hangs on the lure and winding lifts it to
      * just under the tip. Then the net comes in under it, it drops in, and the net
-     * carries it away. Returns true on the frame the net has gone, the fish with it.
+     * carries it away. spot, the point the view watches, drifts after it, up as well as
+     * along. Returns true on the frame the net has gone, the fish with it.
      */
-    land(dt, input, tip) {
+    land(dt, input, tip, spot) {
       kick.fade(dt);
+      // The view drifts after it as it comes up out of the water and hangs: after the
+      // lure it hangs from, which stays on the line when the fish has gone into the net.
+      spot.x = toward(spot.x, move.x, WATCH_FOLLOW, dt);
+      spot.y = toward(spot.y, move.y, WATCH_FOLLOW, dt);
+      spot.z = toward(spot.z, move.z, WATCH_FOLLOW, dt);
       const room = Math.max(0, out.length - SHOW_LENGTH);
       const taken = scoop.dropped ? 0 : Math.min(haul.step(dt, input.finger, LIFT_AS), room);
       rod.reel.wind(taken);

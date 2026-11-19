@@ -348,17 +348,20 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     lure: move,
     // Where the view should look: the water where the lure lands, from the moment it
     // leaves the tip until the line lifts it out again. A fixed point, not the lure: the
-    // view turns there once and rests. null the rest of the time, when the view is the
+    // view turns there once and rests. With a fish on it drifts after the fish, in the
+    // water and lifted out of it alike. null the rest of the time, when the view is the
     // phone's. An object with x, y, z, world space.
     get watch() {
-      return stage === 'flight' || stage === 'fight' || (stage === 'water' && !lifted) ? spot : null;
+      return stage === 'flight' || stage === 'fight' || stage === 'landed' || (stage === 'water' && !lifted) ? spot : null;
     },
     // Whether the view should keep the rod in the picture while it watches. With a fish
-    // on, the rod is what the hand is working: lose sight of it and the phone and the
-    // picture no longer agree. After a cast the phone may be anywhere, and the view
+    // on, in the water or lifted out, the rod is what the hand is working: lose sight of
+    // it and the phone and the picture no longer agree. So the fish and the rod are both
+    // kept in the picture, and turning the phone still turns the view: it moves the rod,
+    // the rod carries the fish, and the view goes after both. After a cast the phone may be anywhere, and the view
     // goes to the water wherever the rod is.
     get watchRod() {
-      return stage === 'fight';
+      return stage === 'fight' || stage === 'landed';
     },
     // How this cast lost its fish, until the line is back in: '' not at all, 'broke' the
     // line parted, 'spooled' the fish took all of it.
@@ -397,7 +400,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
         const ended = fish.fight(dt, input, tip, spot);
         if (ended === 'landed') stage = 'landed';
         else if (ended) toBare(ended, input, tip);
-      } else if (fish.land(dt, input, tip)) toNetted(tip);
+      } else if (fish.land(dt, input, tip, spot)) toNetted(tip);
       fish.carry(dt);
       show(dt, tip);
     },
