@@ -201,7 +201,6 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
       flock.step(dt, 1, ROCKS, cam);
       input.finger = rig.finger();
       input.viewYaw = viewYaw;
-      input.rodYaw = rig.rodYawOf ? rig.rodYawOf() : (rig.rodStays ? tune.yaw * deg + (rig.rodTurn || 0) : viewYaw);
       if (begun) fishing.update(dt, input);
       // The view turns to what the cast wants watched, as aim.js would, simply.
       const watch = begun && fishing.watch;

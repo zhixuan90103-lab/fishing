@@ -333,7 +333,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
      * drew last frame.
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
-     * input.rodYaw: where the rod points, level, radians, the same way round.
      * input.aimPitch: how high the phone aims the rod, degrees, positive upward.
      */
     update(dt, input) {

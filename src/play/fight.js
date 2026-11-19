@@ -3,15 +3,16 @@
  *
  * Owns: the fish's runs and rests, its stamina, the force of each run, how fast it takes
  * line, and the aim of a fish on a line: out, in or held, how deep, how sharply.
- * Does not own: which way a run heads across the line (course.js), being led by the rod
- * (lead.js): catch.js hands in the sideways speed the two come to. Nor the line, its
+ * Does not own: which way a run heads across the line (course.js): catch.js hands in the
+ * sideways speed that comes to. Nor the line, its
  * length or its tension (line.js, lineOut.js), how fast line comes in or when it runs
  * out (haul.js), how a fish swims (src/fish/swim.js), when the fish is hooked or landed
  * (catch.js).
  *
- * A big fish, fresh, pulls harder than the reel holds, so its runs take line. Running
- * tires it, and so does being wound in. Left alone it gets its strength back. Tired
- * enough, its runs no longer take line and it can be brought in. A small one never pulls
+ * A big fish, fresh, pulls harder than the reel holds, so its runs take line. What tires
+ * it is the pull it puts out itself: a run flat out costs it most, a spent run less, and
+ * hanging on the line at rest next to nothing, wound in or not. Tired enough, its runs
+ * no longer take line and it can be brought in. A small one never pulls
  * that hard. Which it is, and every number that differs from fish to fish, is handed in:
  * fishKind.js.
  *
@@ -28,6 +29,14 @@
  * there it swims across, round the rod on a tight line. So the line stays tight between
  * runs, and winding it in leads the fish in head first.
  *
+ * So who moves whom goes by the difference between the line's pull and its own: slack,
+ * it comes for a small pull, and pulling, it takes a harder one to bring it the same way.
+ * And there is no leading it by where the rod points. The line draws it toward the rod
+ * tip, wherever the tip is, and that is all the lead there is.
+ *
+ * It cannot stop and go back the way it came. Brought round by the line it swings round
+ * in an arc, nose first, keeping way on: the tighter the slower it is going.
+ *
  * It chases that place, it is not pushed by the difference in force. A short line is
  * stiff, and a fish answering the force itself overshoots and is snatched back, harder
  * the shorter the line. Chasing a place settles the same however stiff the line is.
@@ -41,11 +50,10 @@ import { between, toward } from './maths.js';
 // are the fish's own: begin() is handed them (fishKind.js). The rest are the same for
 // every fish.
 
-// Stamina runs from 1, fresh, to 0. What a second of running costs, what a metre of
-// being wound in costs, and what a second left alone gives back. The first two are
-// multiplied by the fish's `tire`.
-const TIRE_RUNNING = 0.12;
-const TIRE_PER_METRE = 0.03;
+// Stamina runs from 1, fresh, to 0. What a second of pulling as hard as it ever can costs
+// it, times the fish's `tire`: a lesser pull costs that share of it. And what a second
+// of not pulling at all would give back: pulling, it gets back the less.
+const TIRE_FLAT_OUT = 0.15;
 const RECOVER = 0.03;
 // A run keeps most of its force until the fish is nearly spent, then it goes quickly:
 // the force follows stamina to this power. 1 would fade evenly.
@@ -82,11 +90,21 @@ const SETTLE_IN = 0.4;
 const SLACK_SPEED = 0.3;
 // The fastest the line can lead it in, m/s.
 const LED_MAX = 1.6;
-// Turning back the way it came, it slows to this share of its speed, and leans its turn
-// toward the rod by this much, m/s. A fish cannot stop and reverse: it swings round, and
-// swinging round on the far side would yank the line.
-const TURNING = 0.2;
+// Turning back the way it came under its own power it keeps this share of its speed and
+// swings round: a fish cannot stop and reverse. A fish the line is out-pulling keeps less
+// of it, by as much as the line has the better of it: it is stopped first and then swung
+// by the head. And it leans its turn toward the rod by this much, m/s: swinging round on
+// the far side would yank the line.
+const ARC_KEEPS = 0.6;
 const TURN_INSIDE = 0.3;
+// The tightest it can swing round at speed, m: about a body's length. Its turning is
+// held to what that allows at the speed it is going, plus this much, rad/s, that a fish
+// with no way on can still be swung by the head.
+const ARC_RADIUS = 0.45;
+// A fish with a long way to turn comes round at this many times its `turn`, rad/s
+// (swim.js closes on a heading at a rate that goes as how far off it is, up to this).
+const TURN_SWINGS = 1.2;
+const PIVOT = 0.8;
 
 // Depth it swims at in a run and at rest, and the shallowest it goes, m.
 const RUN_DEPTH = -1.7;
@@ -148,12 +166,12 @@ export function createFight(random = Math.random) {
     },
 
     // Once a frame: the runs and rests, stamina, and the pull following them.
-    // wound: metres of line wound in this frame. Returns true on the frame a run begins.
-    step(dt, wound) {
+    // Returns true on the frame a run begins.
+    step(dt) {
       if (!(dt > 0)) return false;
-      if (running) fight.stamina -= TIRE_RUNNING * kind.tire * dt;
-      else if (wound > 0) fight.stamina -= TIRE_PER_METRE * kind.tire * wound;
-      else fight.stamina += RECOVER * dt;
+      // What it is putting out, against the most it ever can.
+      const exert = kind.runFresh > 0 ? Math.min(1, fight.force / kind.runFresh) : 0;
+      fight.stamina += (RECOVER * (1 - exert) - TIRE_FLAT_OUT * kind.tire * exert) * dt;
       fight.stamina = Math.min(1, Math.max(0, fight.stamina));
       let began = false;
       left -= dt;
@@ -218,7 +236,7 @@ export function createFight(random = Math.random) {
      * winding: how fast line is coming in, m/s. holds: the most tension the reel holds
      * before it gives line, N.
      * across: how fast it is swimming across the line, m/s, positive to the left of the
-     * line out to it: its own course and the rod's lead together.
+     * line out to it: its own course.
      */
     steer(fish, aim, to, stretch, stiffness, winding, holds, across) {
       const ox = to.x;
@@ -240,13 +258,16 @@ export function createFight(random = Math.random) {
       const speed = Math.hypot(vx, vz);
       const facing = speed > 1e-6 ? Math.max(0, (vx * nx + vz * nz) / speed) : 1;
       aim.yaw = Math.atan2(vx, vz);
-      aim.speed = speed * (TURNING + (1 - TURNING) * facing);
+      // What the line's pull has over its own.
+      const overheld = Math.max(0, stiffness * stretch - fight.force);
+      const keeps = ARC_KEEPS * fight.force / (fight.force + overheld + 1e-9);
+      aim.speed = speed * (keeps + (1 - keeps) * facing);
       const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
       aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * dive * dive * (3 - 2 * dive) : REST_DEPTH;
       aim.top = SHALLOWEST;
-      // What the line's pull has over its own.
-      const overheld = Math.max(0, stiffness * stretch - fight.force);
-      aim.turn = (running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld;
+      // However hard it is being turned, it cannot come round tighter than its speed lets it.
+      const tightest = ((fish.speed || 0) / ARC_RADIUS + PIVOT) / TURN_SWINGS;
+      aim.turn = Math.min((running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld, tightest);
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
       aim.slow = SLOW + HELD_SLOWS * overheld;
       aim.rise = running ? RISE_RUN : RISE_REST;

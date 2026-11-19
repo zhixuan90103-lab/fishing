@@ -4,8 +4,8 @@
  * Owns: how far to one side each run leans, when it cuts back the other way, keeping it
  * in the water in front of the angler, and how fast all that carries it across the line.
  * Does not own: how hard it pulls or when it runs and rests (fight.js), how fast line
- * leaves (fight.js, haul.js), being led by the rod (lead.js), or the fish's swimming
- * (src/fish/swim.js). catch.js adds this file's sideways speed to the rest of its aim.
+ * leaves (fight.js, haul.js), or the fish's swimming (src/fish/swim.js). catch.js adds
+ * this file's sideways speed to the rest of its aim.
  * No Three, no scene: it runs in Node. Design: docs/PLAY.md section 8.
  *
  * A run heads out and away: straight out, or out and off to one side, never flat across

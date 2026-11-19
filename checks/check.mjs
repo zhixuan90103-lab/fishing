@@ -14,7 +14,6 @@ import { createRodHold } from '../src/shore/rodHold.js';
 import { createLure } from '../src/shore/lure.js';
 import { createFight } from '../src/play/fight.js';
 import { createCourse } from '../src/play/course.js';
-import { leadFish } from '../src/play/lead.js';
 import { createThump } from '../src/play/thump.js';
 import { createStrain } from '../src/play/strain.js';
 import { castReach, createSwing } from '../src/play/swing.js';
@@ -60,20 +59,43 @@ check('rules alone: the same at 20, 60 and 120 frames a second', () => {
   for (let k = 0; k < 3; k += 1) for (const row of seen) expect(Math.abs(row[k] - seen[0][k]) < 1e-3 * Math.max(1, Math.abs(seen[0][k])), `value ${k} does not depend on the frame rate`, seen.map((r) => r[k].toFixed(5)).join(' / '));
 });
 
-check('lead: a resting fish comes to the rod, a fresh running one does not', () => {
-  const out = { across: 0, against: 0 };
-  const rod = [Math.sin(45 * deg), Math.cos(45 * deg)];
-  leadFish(0, 1, rod[0], rod[1], false, 0.6, out);
-  expect(Math.abs(out.across) > 1 && out.against === 0, 'resting, it is led and nothing is hauled against', `${out.across.toFixed(2)} m/s, against ${out.against}`);
-  const resting = out.across;
-  leadFish(0, 1, rod[0], rod[1], true, 1, out);
-  expect(out.across === 0 && out.against > 0.4, 'running and fresh, it is not led at all and the hand hauls against it', `${out.across} m/s, against ${out.against.toFixed(2)}`);
-  leadFish(0, 1, rod[0], rod[1], true, 0, out);
-  expect(Math.abs(out.across) > 0 && Math.abs(out.across) < Math.abs(resting) * 0.5, 'running and spent, it gives a little', out.across.toFixed(2));
-  leadFish(0, 1, Math.sin(5 * deg), Math.cos(5 * deg), false, 0.6, out);
-  expect(out.across === 0, 'a rod pointing nearly at it leads it nowhere', out.across);
-  leadFish(0, 1, -rod[0], rod[1], false, 0.6, out);
-  expect(Math.sign(out.across) === -Math.sign(resting), 'the other side leads it the other way', out.across);
+check('fight: it tires by what it puts out itself: a fresh run most, a spent one less, hanging at rest hardly at all', () => {
+  const big = fishOf('dorade', 1.3);
+  // Stamina lost over a stretch of running, from a given stamina.
+  const cost = (from, seconds, fps = 60) => { const f = createFight(() => 0.99); f.begin(big); f.stamina = from; const s0 = from; let ran = 0; for (let i = 0; i < seconds * fps && f.running; i += 1) { f.step(1 / fps); ran += 1 / fps; } return (s0 - f.stamina) / ran; };
+  const fresh = cost(1, 1.2), spent = cost(0.15, 0.6);
+  expect(fresh > 0.08, 'a fresh run costs it a tenth of its stamina a second or so', fresh.toFixed(3));
+  expect(spent < fresh * 0.7 && spent > 0, 'a spent run, pulling less, costs it less', `${spent.toFixed(3)} against ${fresh.toFixed(3)}`);
+  // Resting: run it until a rest begins, then watch.
+  const f = createFight(() => 0.99); f.begin(big); while (f.running) f.step(1 / 60); for (let i = 0; i < 60; i += 1) f.step(1 / 60);
+  const before = f.stamina; let rested = 0; for (let i = 0; i < 90 && !f.running; i += 1) { f.step(1 / 60); rested += 1 / 60; }
+  expect(Math.abs(f.stamina - before) / rested < fresh * 0.15, 'hanging on the line at rest it neither tires nor recovers by much', ((f.stamina - before) / rested).toFixed(4));
+  for (const fps of [20, 120]) expect(Math.abs(cost(1, 1.2, fps) - fresh) < 0.004, `${fps} fps: the same`, cost(1, 1.2, fps).toFixed(4));
+});
+
+check('fight: the line draws it toward the rod tip and nowhere else, and brought round it swings in an arc', () => {
+  // Where a fish wound in while it rests comes to hand, with the rod carried off to one side or the other.
+  const lands = (turn) => {
+    let at = 0; const radii = [];
+    for (const seed of [1, 2, 3]) {
+      let lx = null, lz = 0, lyaw = 0, last = null;
+      fightOne({ seed, fps: 60, press: 'rests', size: 0.85, each: (rig) => {
+        rig.rodStays = true; const f = rig.fishing; rig.rodTurn = f.stage === 'fight' ? turn * deg : 0;
+        const fish = rig.fishes.find((x) => x.state === 'held'); if (f.stage !== 'fight' || !fish) { lx = null; return; }
+        last = wrap(Math.atan2(fish.x - 0, fish.z - 2) - 100 * deg) / deg;
+        if (lx !== null) { const sp = Math.hypot(fish.x - lx, fish.z - lz) * 60, w = Math.abs(wrap(fish.yaw - lyaw)) * 60; if (w > 1 && sp > 0.3) radii.push(sp / w); }
+        lx = fish.x; lz = fish.z; lyaw = fish.yaw;
+      } });
+      at += last / 3;
+    }
+    radii.sort((a, b) => a - b);
+    return { at, tight: radii[Math.floor(radii.length * 0.1)] };
+  };
+  const left = lands(50), right = lands(-50);
+  // Yaw is positive to the left: with the rod carried left its tip is to the left, and that is where the fish comes in.
+  expect(left.at > right.at + 8, 'it comes to hand on the side the rod tip is', `${left.at.toFixed(0)}° with the rod to the left, ${right.at.toFixed(0)}° with it to the right`);
+  // It used to all but stop and turn on the spot: a tenth of its sharp turns were inside 4 cm.
+  expect(left.tight > 0.12 && right.tight > 0.12, 'turning hard while it has way on, it swings round on a radius, not on the spot', `${left.tight.toFixed(2)} m, ${right.tight.toFixed(2)} m`);
 });
 
 check('course: runs head out and to a side, not flat across', () => {
@@ -219,7 +241,9 @@ check('line: its drawn shape never jumps, landing, sinking, wound a moment, or t
       if (rig.time > 20 && f.stage === 'ready') break;
     }
     // It was 94 cm in the frame after landing, when the slack line was drawn two ways.
-    expect(worst < 0.2, `${name}: no point of the line moves much more in a frame than its ends do`, `${(worst * 100).toFixed(0)} cm at ${at}`);
+    // A fish swinging round can leave the line really slack for a moment, and the last of
+    // real slack closes fast as the fish takes it up: that is the 20-odd centimetres.
+    expect(worst < 0.3, `${name}: no point of the line moves much more in a frame than its ends do`, `${(worst * 100).toFixed(0)} cm at ${at}`);
   }
 });
 
@@ -511,9 +535,9 @@ check('casts: left alone a fish is neither landed nor lost, and the line does no
 });
 
 check('casts: a line leant on until it breaks leaves bare line to wind in, then a new lure', () => {
-  // A draw of 0 gives the line the least wear it can stand: the biggest fish breaks it.
+  // One of the casts in five on which the biggest fish, leant on all the way, breaks the line.
   let hidden = 0, frames = 0, came = 0, jump = 0, lastOut = 0, lost = false, woundWhileHeld = 0, lostAt = 0;
-  const r = fightOne({ seed: 1, fps: 60, press: 'always', size: 1.4, random: () => 0, each: (rig) => {
+  const r = fightOne({ seed: 4, fps: 60, press: 'always', size: 1.4, each: (rig) => {
     const f = rig.fishing;
     if (f.lost) {
       if (!lost) { lost = true; lostAt = rig.time; lastOut = f.lineOut; rig.finger = () => rig.time - lostAt < 0.5 || rig.time - lostAt > 1.5; }
