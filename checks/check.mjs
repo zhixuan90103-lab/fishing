@@ -18,6 +18,7 @@ import { createThump } from '../src/play/thump.js';
 import { createStrain } from '../src/play/strain.js';
 import { castReach, createSwing } from '../src/play/swing.js';
 import { createLureMove } from '../src/shore/lureMove.js';
+import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
 import { createSnap } from '../src/play/snap.js';
 import { fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
@@ -469,6 +470,36 @@ check('hand: against a pulling line it falls behind the phone, with it or with n
   expect(viewFree - viewAt > 2 && viewFree - viewAt < (60 - rodAt) * 0.8, 'the view falls behind too, but by less than the rod does', `view ${(viewFree - viewAt).toFixed(1)}° behind, rod ${(60 - rodAt).toFixed(1)}° behind`);
 });
 
+check('weight on the line: it comes onto the rod tip through the line, steadily, the same at any frame rate', () => {
+  // It used to be put on the tip apart from the line: a weight and a tip reading each
+  // other a frame apart on a short stiff line jumped between no tension and a spike.
+  const hung = (fps, kg, length) => {
+    const flex = createRodFlex({ length: 2.13, nodes: 18, rigidBelow: 0.34 }); const curve = new Float64Array(18 * 3); const e = 17 * 3;
+    const butt = { x: 0, y: 1.4, z: 0 }; const axisAt = (lift) => ({ x: 0, y: Math.sin(lift * deg), z: -Math.cos(lift * deg) });
+    let axis = axisAt(40); flex.step(1 / fps, butt, axis); flex.shape(axis, curve); const bare = butt.y + curve[e + 1];
+    const m = createLureMove(); m.weigh(kg, 1, -1, -0.9); m.place(butt.x + curve[e], bare - length, butt.z + curve[e + 2]);
+    const k = Math.min(60, 120 / length); let low = 99, high = 0, sum = 0, n = 0, tip = 0, lifted = 0;
+    for (let i = 0; i < fps * 7; i += 1) {
+      const t = i / fps; axis = axisAt(40 + 20 * Math.min(1, Math.max(0, (t - 3) / 0.4)));
+      flex.setTipTether(m.x, m.y, m.z, length, k); flex.step(1 / fps, butt, axis, m); flex.shape(axis, curve);
+      expect(Number.isFinite(flex.tension + m.y), 'nothing goes NaN');
+      if (t > 2 && t < 3) { low = Math.min(low, flex.tension); high = Math.max(high, flex.tension); sum += flex.tension; n += 1; tip = butt.y + curve[e + 1]; }
+      if (t > 3) lifted = Math.max(lifted, flex.tension);
+    }
+    return { mean: sum / n, low, high, tip, bare, lifted, ends: flex.tension };
+  };
+  for (const [kg, length] of [[0.01, 0.025], [0.11, 0.6], [0.36, 0.6], [0.36, 2]]) {
+    const at = [20, 60, 120].map((fps) => hung(fps, kg, length)); const weight = kg * 9.81;
+    for (const r of at) {
+      expect(Math.abs(r.mean - weight) < 0.02 * weight + 0.002, `${kg} kg on ${length} m: hanging still, the line pulls with its weight`, `${r.mean.toFixed(3)} N for ${weight.toFixed(3)} N`);
+      expect(r.high - r.low < 0.1 * weight + 0.01, `${kg} kg on ${length} m: and steadily, not in spikes`, `${r.low.toFixed(3)} to ${r.high.toFixed(3)} N`);
+      expect(r.lifted < 4 * weight + 2 && Math.abs(r.ends - weight) < 0.1 * weight + 0.02, `${kg} kg on ${length} m: a quick lift loads it up and it settles back to its weight`, `${r.lifted.toFixed(2)} N in the lift, ${r.ends.toFixed(3)} N after`);
+    }
+    expect(Math.max(...at.map((r) => r.tip)) - Math.min(...at.map((r) => r.tip)) < 0.005, `${kg} kg on ${length} m: the tip sits at the same height at 20, 60 and 120 frames`, at.map((r) => r.tip.toFixed(3)).join(' / '));
+    if (kg > 0.3) expect(at[1].bare - at[1].tip > 0.2, 'a third of a kilo pulls the tip well down', `${(at[1].bare - at[1].tip).toFixed(2)} m`);
+  }
+});
+
 // ---------------------------------------------------------------- whole casts
 
 // One fish, hooked to landed or lost. Returns what happened.
@@ -573,7 +604,25 @@ check('casts: with no fish the stages run in order and an untouched lure sinks w
     }
     expect(stages.join('>') === 'ready>flight>water>ready', `${fps} fps: ready, flight, water, ready`, stages.join('>'));
     expect(drift < 0.05, `${fps} fps: finger up, the lure sinks straight down`, `${drift.toFixed(3)} m sideways`);
-    expect(rig.strain === 0, 'with no fish the hand never works');
+    // The hand holds what the line pulls: a lure towed in or hanging from the tip is next to nothing.
+    expect(rig.strain < 0.12, 'with no fish the hand hardly works', rig.strain.toFixed(3));
+  }
+});
+
+check('landed fish: lifted clear, the line holds its weight and no more, and coming off the hook it does not fling the lure', () => {
+  for (const [size, fps] of [[0.78, 60], [1.4, 60], [1.4, 20]]) {
+    const load = fishOf('dorade', size).load * 9.81; const held = []; let at = -1, dropped = -1, lureUp = -9;
+    fightOne({ seed: 3, fps, press: 'rests', size, each: (rig) => {
+      const f = rig.fishing; if (f.stage !== 'landed') { if (at >= 0 && dropped < 0) dropped = rig.time; if (dropped >= 0 && rig.time - dropped < 1.5) lureUp = Math.max(lureUp, f.lure.y - rig.line.tip.y); return; }
+      if (at < 0) at = rig.time;
+      // Hanging under the tip with the line wound to its shortest, before the net takes it.
+      if (rig.line.length < 0.61 && f.lure.kg > 0.9 * load / 9.81) held.push(rig.line.tension);
+      if (f.lure.kg < 0.9 * load / 9.81) lureUp = Math.max(lureUp, f.lure.y - rig.line.tip.y);
+    } });
+    const mean = held.reduce((a, b) => a + b, 0) / held.length;
+    expect(held.length > fps * 0.3, `size ${size}, ${fps} fps: it hung under the tip a while`, held.length);
+    expect(Math.abs(mean - load) < 0.2 * load, `size ${size}, ${fps} fps: the line pulls with the fish's weight`, `${mean.toFixed(2)} N for ${load.toFixed(2)} N`);
+    expect(lureUp < -0.2, `size ${size}, ${fps} fps: with the fish off it, the lure stays hanging well below the tip`, `${lureUp.toFixed(2)} m`);
   }
 });
 

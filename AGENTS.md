@@ -37,6 +37,7 @@
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
 | 因果链（设计，还没重构） | `docs/CHAIN.md`。力和运动从手经竿、轮、线到线头上的东西怎么传，现在差在哪，分几段改 |
 | 记下、还没改的手感 | `docs/NOTED.md`。2026-11-19 对过、还没改的那几条 |
+| 《荒野大镖客 2》和 GTA 6 的钓鱼 | `docs/ROCKSTAR-FISHING.md`。检索材料，不是规格 |
 | 规范 | `docs/CONVENTIONS.md` |
 
 岸边不用 `createRenderer()`。`startShore` 自己建 `WebGPURenderer`，Three 的 canvas 隐藏，最终画面画到 `#shore-view`。
@@ -65,7 +66,7 @@
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
 11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线、饵、水花、抄网不含抛投、咬口和拔河。规则只写在 `src/play/`，只通过物料留的口子动物料；口子的表在 `docs/CONVENTIONS.md` 第 1 节。物料只报数，这个数意味着什么由玩法判断；什么时候、多用力归玩法，成什么样归物料。镜头不由玩法直接动，玩法只报出要看的点 `fishing.watch`。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。唯一的例外是出了水、挂在线上的鱼，走鱼群的 `hang` 和 `keep`，见 `docs/FISH-SCHOOL.md` 第 7 节。
-13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量走 `rod.setTipLoad`，握竿的手多吃力走 `rod.setStrain`。见 `docs/ROD.md` 第 2、3 节。
+13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量就是线头上的一个重物，由线带着（`line.carry`），经过线压到竿尖；握竿的手多吃力走 `rod.setStrain`。见 `docs/ROD.md` 第 2、3 节。
 14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个瞄准。不从加速度积分位移，不逐帧累加偏移。镜头在追什么可以换（手机、不动、玩法指的点），换的只是目标，不切换算法。线在拉的时候握竿的手可以欠着手机一段，那是手的状态：有上限，力没了就清掉，手不转就不欠。见 `docs/PHONE-LOOK.md` 第 2、4 节。
 15. **`startShore.js` 只创建、接线、定每帧的顺序。** 规则进 `src/play/`，物料进各自的文件，输入进 `finger.js`，面板进 `tunePanel.js`。
 16. **改了 `src/` 就跑 `npm run check`，只整理结构还要 `npm run record` 前后逐行相同。** 出了新的错，修的同时在 `checks/check.mjs` 加一项。它们判断不了手感和观感，那要真机。见 `docs/CONVENTIONS.md` 第 7 节。

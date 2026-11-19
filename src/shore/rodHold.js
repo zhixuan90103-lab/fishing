@@ -231,6 +231,27 @@ export function createRodHold(root, handAt) {
       return out;
     },
 
+    // A point of the bend's frame back in the world: the other way round from intoBend.
+    outOfBend(bent, out) {
+      if (!root.parent || !started) {
+        out.copy(bent);
+        return out;
+      }
+      invViewQ.copy(easedQ).invert();
+      bendPoint.copy(bent).sub(viewP).applyQuaternion(invViewQ).applyQuaternion(viewQ);
+      out.copy(bendPoint).add(viewP);
+      return out;
+    },
+    // The same two turns for something that has a direction and no place: a speed.
+    turnIntoBend(v) {
+      if (root.parent && started) v.applyQuaternion(invViewQ.copy(viewQ).invert()).applyQuaternion(easedQ);
+      return v;
+    },
+    turnOutOfBend(v) {
+      if (root.parent && started) v.applyQuaternion(invViewQ.copy(easedQ).invert()).applyQuaternion(viewQ);
+      return v;
+    },
+
     // Place the root for this frame and refresh grip. Leaves the root's world matrix current.
     carry(dt) {
       if (root.parent) {

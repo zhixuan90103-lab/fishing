@@ -65,7 +65,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // The line while nothing winds it: what it gives to a jerk, how it follows a sinking
   // lure, how slack it lies.
   const loose = createLooseLine();
-  const lastTip = { x: 0, y: 0, z: 0 };
   // Where the view should look while the lure is out: the water where it lands.
   const spot = { x: 0, y: 0, z: 0 };
 
@@ -101,6 +100,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     bare = false;
     lost = '';
     lure.show(true);
+    move.weigh();
     out.stow();
     fresh = false;
     down = false;
@@ -158,7 +158,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     winding = false;
     retrieve.reset();
     out.ease(move.gap(tip));
-    line.setTied(false);
     lure.show(false);
   }
 
@@ -171,7 +170,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     winding = true;
     retrieve.reset();
     out.ease(move.gap(tip));
-    line.setTied(false);
     haptics?.impact('light');
   }
 
@@ -231,11 +229,8 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
         // nothing left to come to.
         lifted = true;
         out.ease(move.gap(tip));
-        line.setTied(false);
         fish.sendAway();
       }
-    } else {
-      move.hang(dt, tip, lastTip, out.length);
     }
     if (out.stowed) {
       toReady();
@@ -243,6 +238,9 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     }
     if (!lifted && !bare && fish.come(dt)) toFight();
   }
+
+  // The lure is out of the water, hanging on the line: lifted out, or with a landed fish on it.
+  const hanging = () => stage === 'landed' || (stage === 'water' && lifted);
 
   // Tell the line and the lure where things are now.
   function show(dt, tip) {
@@ -254,14 +252,17 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     // Only a lure in the water with nothing on it has a loose line. A fish, or the lure
     // leaving the water, takes it up.
     if (stage !== 'water' || lifted) loose.takenUp(dt);
-    line.setEnd(move.x, move.y, move.z);
+    // Out of the water the lure is a weight on the line, and whatever is on the hook with
+    // it: the line carries it and the rod moves it. In the water, or in a fish's mouth,
+    // it is a place the line runs to.
+    if (hanging()) line.carry(move);
+    else line.setEnd(move.x, move.y, move.z);
     // In a fight a shake of the fish's head snatches the line: it is that much shorter
     // for the moment, and the rod tip nods to it.
     // In the water with the finger up, a rod drawn away finds the line giving: it lies
     // that much longer for the moment.
-    line.setLength(stage === 'landed' ? fish.liftLength()
-      : stage === 'fight' ? out.length - fish.snatch
-        : stage === 'water' ? out.length + loose.give : out.length);
+    line.setLength(stage === 'fight' ? out.length - fish.snatch
+      : stage === 'water' ? out.length + loose.give : out.length);
     move.point(dt, tip, stage === 'water' && !lifted);
     lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
   }
@@ -269,6 +270,12 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // With the line wound in, the lure goes exactly where this frame's tip is, so it never
   // trails the rod.
   function follow() {
+    if (hanging()) {
+      // The rod has just moved the weight on the line: the lure is there, and the fish on it.
+      lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
+      fish.follow(line.tip);
+      return;
+    }
     if (stage !== 'ready') return;
     const end = line.end;
     move.hold(end.x, end.y, end.z);
@@ -319,7 +326,6 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
       const tip = line.tip;
       move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
       move.upright(0);
-      lastTip.x = tip.x; lastTip.y = tip.y; lastTip.z = tip.z;
       toReady();
       fresh = true;
       show(0, tip);
@@ -345,10 +351,9 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
         const ended = fish.fight(dt, input, tip, spot);
         if (ended === 'landed') stage = 'landed';
         else if (ended) toBare(ended, input, tip);
-      } else if (fish.land(dt, input, tip, lastTip)) toNetted(tip);
+      } else if (fish.land(dt, input, tip)) toNetted(tip);
       fish.carry(dt);
       show(dt, tip);
-      lastTip.x = tip.x; lastTip.y = tip.y; lastTip.z = tip.z;
     },
 
     // Once a frame, after the line's update.

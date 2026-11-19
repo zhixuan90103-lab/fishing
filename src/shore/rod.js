@@ -109,6 +109,10 @@ export function createSpinningRod() {
   let tetherLength = 0;
   let tetherStiffness = 0;
   let tetherOn = false;
+  // What the tether is tied to, when that is a weight hanging on the line: it is moved
+  // with the blank. null: a place in the world.
+  let rider = null;
+  const riderSpeed = new THREE.Vector3();
 
   // The flex gives each node relative to the butt, in the axes it was driven with.
   // Bring that into the rod's own frame, then out through the real transform.
@@ -173,13 +177,19 @@ export function createSpinningRod() {
     // Tie the tip to a world point with `length` metres of line that pulls `stiffness`
     // newtons per metre of stretch and nothing while slack. null unties it. The point is
     // remembered in world space and moved into the bend's frame at the start of each step.
-    setTipTether(point, length, stiffness) {
+    // weight: what is at that point, if it is a weight hanging on the line and not
+    // something that holds its place: x, y, z, vx, vy, vz in the world, and advance()
+    // (lureMove.js). The rod then moves it, in step with the blank, and leaves it where
+    // it has got to.
+    setTipTether(point, length, stiffness, weight = null) {
       if (!point) {
         tetherOn = false;
+        rider = null;
         flex.clearTipTether();
         return;
       }
       tetherOn = true;
+      rider = weight;
       tetherWorld.copy(point);
       tetherLength = length;
       tetherStiffness = stiffness;
@@ -205,13 +215,24 @@ export function createSpinningRod() {
       for (let i = 0; i < rings.length; i += 1) rings[i].getWorldPosition(out[i + 1]);
     },
     update(dt) {
+      if (rider) tetherWorld.set(rider.x, rider.y, rider.z);
       hold.setPull(tetherOn ? tetherWorld : null);
       hold.carry(dt);
       if (tetherOn) {
         hold.intoBend(tetherWorld, tetherBend);
         flex.setTipTether(tetherBend.x, tetherBend.y, tetherBend.z, tetherLength, tetherStiffness);
       }
-      flex.step(dt, hold.grip.butt, hold.grip.axis);
+      if (rider) {
+        // The weight is moved in the bend's frame with the blank, then put back in the world.
+        hold.turnIntoBend(riderSpeed.set(rider.vx, rider.vy, rider.vz));
+        rider.x = tetherBend.x; rider.y = tetherBend.y; rider.z = tetherBend.z;
+        rider.vx = riderSpeed.x; rider.vy = riderSpeed.y; rider.vz = riderSpeed.z;
+        flex.step(dt, hold.grip.butt, hold.grip.axis, rider);
+        hold.outOfBend(tetherBend.set(rider.x, rider.y, rider.z), tetherWorld);
+        hold.turnOutOfBend(riderSpeed.set(rider.vx, rider.vy, rider.vz));
+        rider.x = tetherWorld.x; rider.y = tetherWorld.y; rider.z = tetherWorld.z;
+        rider.vx = riderSpeed.x; rider.vy = riderSpeed.y; rider.vz = riderSpeed.z;
+      } else flex.step(dt, hold.grip.butt, hold.grip.axis);
       layBlank();
       poseBones();
     },

@@ -61,6 +61,9 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   const butt = { x: 0, y: 0, z: 0 };
   const axis = { x: 0, y: 1, z: 0 };
   let tether = null;
+  // What the tether is tied to, when that is a weight hanging on the line.
+  let rider = null;
+  const riderSpeed = new THREE.Vector3();
   const events = [];
   let strain = 0;
   const rodState = { wound: 0, load: 0 };
@@ -88,8 +91,9 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     reel: { wind(m) { rodState.wound += m; } },
     setTipLoad(kg) { rodState.load = kg; flex.setTipLoad(kg); },
     setStrain(v) { strain = v; grip.setStrain(v); },
-    setTipTether(point, length, stiffness) {
+    setTipTether(point, length, stiffness, weight = null) {
       tether = point ? { x: point.x, y: point.y, z: point.z, length, stiffness } : null;
+      rider = point ? weight : null;
     },
     get tipTension() { return flex.tension; },
     update(dt) {
@@ -97,14 +101,25 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
       // As aim.js does without a phone turning: the rod keeps pointing where the aim is,
       // whatever the view has turned to.
       if (rig.rodStays) grip.setAim(lift - 20, (tune.yaw * deg + (rig.rodTurn || 0) - viewYaw) / deg, 0);
-      if (tether) tetherWorld.set(tether.x, tether.y, tether.z);
+      if (rider) tetherWorld.set(rider.x, rider.y, rider.z);
+      else if (tether) tetherWorld.set(tether.x, tether.y, tether.z);
       grip.setPull(tether ? tetherWorld : null);
       grip.carry(dt);
       if (tether) {
         grip.intoBend(tetherWorld, tetherBend);
         flex.setTipTether(tetherBend.x, tetherBend.y, tetherBend.z, tether.length, tether.stiffness);
       } else flex.clearTipTether();
-      flex.step(dt, grip.grip.butt, grip.grip.axis);
+      if (rider) {
+        // As rod.js does it: the weight is moved in the bend's frame, with the blank.
+        grip.turnIntoBend(riderSpeed.set(rider.vx, rider.vy, rider.vz));
+        rider.x = tetherBend.x; rider.y = tetherBend.y; rider.z = tetherBend.z;
+        rider.vx = riderSpeed.x; rider.vy = riderSpeed.y; rider.vz = riderSpeed.z;
+        flex.step(dt, grip.grip.butt, grip.grip.axis, rider);
+        grip.outOfBend(tetherBend.set(rider.x, rider.y, rider.z), tetherWorld);
+        grip.turnOutOfBend(riderSpeed.set(rider.vx, rider.vy, rider.vz));
+        rider.x = tetherWorld.x; rider.y = tetherWorld.y; rider.z = tetherWorld.z;
+        rider.vx = riderSpeed.x; rider.vy = riderSpeed.y; rider.vz = riderSpeed.z;
+      } else flex.step(dt, grip.grip.butt, grip.grip.axis);
       flex.shape(grip.grip.axis, curve);
       axis.x = grip.grip.axis.x; axis.y = grip.grip.axis.y; axis.z = grip.grip.axis.z;
       const e = (NODES - 1) * 3;
@@ -130,16 +145,19 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     get tension() { return rod.tipTension; },
     get stiffness() { return Math.min(60, 120 / Math.max(line.length, 1e-3)); },
     setTied(yes) { line.tied = yes; },
-    setEnd(x, y, z) { line.end.x = x; line.end.y = y; line.end.z = z; line.stowed = null; },
-    stow(drop) { line.stowed = drop; },
+    carried: null,
+    setEnd(x, y, z) { line.end.x = x; line.end.y = y; line.end.z = z; line.stowed = null; line.carried = null; },
+    carry(weight) { line.carried = weight; line.stowed = null; },
+    stow(drop) { line.stowed = drop; line.carried = null; },
     setLength(m) { line.length = Math.max(0, m); },
     update() {
       line.tip.x = tipNow.x; line.tip.y = tipNow.y; line.tip.z = tipNow.z;
+      if (line.carried) { line.end.x = line.carried.x; line.end.y = line.carried.y; line.end.z = line.carried.z; }
       if (line.stowed !== null) {
         line.end.x = tipNow.x; line.end.y = tipNow.y - line.stowed; line.end.z = tipNow.z;
         line.length = line.stowed;
       }
-      if (line.tied) rod.setTipTether(line.end, line.length, line.stiffness);
+      if (line.tied) rod.setTipTether(line.end, line.length, line.stiffness, line.carried);
       else rod.setTipTether(null);
     },
   };

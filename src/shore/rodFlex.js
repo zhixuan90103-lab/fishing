@@ -29,6 +29,12 @@
  * Worked out once a frame and handed in as a force, a stiff line shakes itself apart at
  * low frame rates.
  *
+ * What the tether is tied to may be a weight hanging on the line, not a fixed point: a
+ * lure or a fish out of the water. Then it is handed to step() as a rider, and is moved
+ * in the same small steps as the blank, each from where the other is then. A weight and
+ * a tip that read each other a frame apart, on a short stiff line, jump between no
+ * tension and a spike.
+ *
  * Units: metres, seconds, kilograms, newtons. World +Y is up.
  */
 
@@ -74,9 +80,15 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
   let tieX = 0, tieY = 0, tieZ = 0;
   let tieLength = 0;
   let tieStiffness = 0;
+  // The tether's length as of the last step, and the one in use in the substep in hand:
+  // it is carried evenly from one to the other through the frame, like the grip.
+  let tieWas = null;
+  let tieNow = 0;
   let tension = 0;
   // The total of those for the substep in hand. Written by tipPull().
   let pullX = 0, pullY = 0, pullZ = 0;
+  // Where the bent tip was at the start of that substep, world space. Written by tipPull().
+  let tipX = 0, tipY = 0, tipZ = 0;
   // How a pull on the tip reaches each mode. Only the first takes it, scaled so that a
   // steady pull F settles the tip at F / tipStiffness, the deep-bend table's own figure.
   let pullShare = new Float64Array(count);
@@ -148,11 +160,14 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     if (!tied) return;
     curve(ax, ay, az, bent);
     const e = (nodes - 1) * 3;
-    let gx = tieX - (bx + bent[e]);
-    let gy = tieY - (by + bent[e + 1]);
-    let gz = tieZ - (bz + bent[e + 2]);
+    tipX = bx + bent[e];
+    tipY = by + bent[e + 1];
+    tipZ = bz + bent[e + 2];
+    let gx = tieX - tipX;
+    let gy = tieY - tipY;
+    let gz = tieZ - tipZ;
     const gap = Math.hypot(gx, gy, gz);
-    tension = gap > tieLength ? tieStiffness * (gap - tieLength) : 0;
+    tension = gap > tieNow ? tieStiffness * (gap - tieNow) : 0;
     if (!(tension > 0)) return;
     // Split the line's direction into along the grip and across it.
     gx /= gap;
@@ -357,6 +372,7 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     clearTipTether() {
       tied = false;
       tension = 0;
+      tieWas = null;
     },
     // How hard the tether pulls right now, newtons. 0 while it is slack.
     get tension() {
@@ -371,8 +387,11 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
     /**
      * butt: where the butt end of the rod is now, world space.
      * axis: unit vector along the grip, butt to tip, world space.
+     * rider: what the tether is tied to, if that is a weight on the line and not a fixed
+     * point. It has x, y, z, and advance(h, tipX, tipY, tipZ, length, stiffness), which
+     * moves it one small step under the same line. It is carried in step with the blank.
      */
-    step(dt, butt, axis) {
+    step(dt, butt, axis, rider = null) {
       if (stale) {
         reset(butt, axis);
         return;
@@ -383,8 +402,11 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       rigidPlace(next, butt, axis);
       // Grip axis at the start of the substep, to go with the offsets q.
       let sx = prevAx, sy = prevAy, sz = prevAz;
+      // A tether newly tied, or one whose length has been set afresh, starts at its length.
+      if (tieWas === null || Math.abs(tieLength - tieWas) > 1) tieWas = tieLength;
       for (let j = 1; j <= n; j += 1) {
         const f0 = (j - 1) / n;
+        tieNow = tieWas + (tieLength - tieWas) * f0;
         tipPull(
           prevBx + (butt.x - prevBx) * f0,
           prevBy + (butt.y - prevBy) * f0,
@@ -408,10 +430,18 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
           az = axis.z;
         }
         for (let m = 0; m < modes.length; m += 1) advanceMode(m, sub, dt, f, ax, ay, az);
+        // The weight on the line takes the same step, from the same tip.
+        if (rider && tied) {
+          rider.advance(sub, tipX, tipY, tipZ, tieNow, tieStiffness);
+          tieX = rider.x;
+          tieY = rider.y;
+          tieZ = rider.z;
+        }
         sx = ax;
         sy = ay;
         sz = az;
       }
+      tieWas = tied ? tieLength : null;
       base.set(next);
       prevAx = axis.x;
       prevAy = axis.y;

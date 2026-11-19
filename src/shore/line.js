@@ -20,8 +20,14 @@
  * Each frame, after rod.update(): read the guides, draw, hand the rod the end and length
  * for its next step.
  *
- * A far end that cannot hold the tip back (a lure in the air, or hanging under the tip)
- * is drawn the same but not tied: setTied(false).
+ * The far end is one of two things. A place something holds: a lure in the water, a
+ * fish's mouth (setEnd). Or a weight hanging on the line, out of the water (carry): then
+ * the line is what holds it up, its weight comes onto the rod tip through the line, and
+ * the rod moves it in step with itself.
+ *
+ * A line the reel is letting run free pulls nothing whatever is on it: the lure held at
+ * the tip before a cast, and the lure in flight. That is setTied(false), until the reel
+ * is a thing of its own (docs/CHAIN.md).
  *
  * With the line wound right in, the far end is not a place in the world at all: it sits
  * at the tip and goes wherever the tip goes. stow() says so, and the end is then taken
@@ -82,6 +88,8 @@ export function createFishingLine(rod) {
   // Wound right in: the far end rides this far straight below the tip. null: it is a
   // place in the world, given by setEnd.
   let stowed = null;
+  // The far end is this weight, hanging on the line. null: it is a place, as above.
+  let carried = null;
   const stiffnessAt = (metres) => Math.min(STIFFEST, STRETCH_FORCE / Math.max(metres, 1e-3));
 
   return {
@@ -109,20 +117,30 @@ export function createFishingLine(rod) {
       return stiffnessAt(length);
     },
 
-    // Whether the far end can hold the tip back. In the water, or on a fish, it can. A
-    // lure in the air or hanging under the tip cannot: the line is drawn and pulls nothing.
+    // Whether the line can pull at all. Not while the reel lets it run free: the lure
+    // held at the tip before a cast, and in flight.
     setTied(yes) {
       tied = yes;
     },
-    // Where the far end is: the lure, or the fish's mouth.
+    // Where the far end is, when something holds it there: the lure in the water, or the
+    // fish's mouth.
     setEnd(x, y, z) {
       end.set(x, y, z);
+      stowed = null;
+      carried = null;
+    },
+    // The far end is a weight hanging on the line: it has x, y, z, vx, vy, vz and
+    // advance() (lureMove.js). The line holds it up and the rod moves it. `end` is where
+    // it has got to, after each update(). setEnd or stow undoes it.
+    carry(weight) {
+      carried = weight;
       stowed = null;
     },
     // Wound right in: the far end rides `drop` metres straight below the tip, and that is
     // all the line there is out. `end` is valid after the next update(). setEnd undoes it.
     stow(drop) {
       stowed = drop;
+      carried = null;
     },
     // How much line is out past the tip, metres.
     setLength(metres) {
@@ -140,6 +158,7 @@ export function createFishingLine(rod) {
       rod.linePath(path);
       for (let i = 0; i < stops; i += 1) path[i].toArray(positions, i * 3);
       tip.copy(path[stops - 1]);
+      if (carried) end.set(carried.x, carried.y, carried.z);
       if (stowed !== null) {
         end.set(tip.x, tip.y - stowed, tip.z);
         length = stowed;
@@ -159,7 +178,7 @@ export function createFishingLine(rod) {
       }
       geometry.attributes.position.needsUpdate = true;
       geometry.attributes.color.needsUpdate = true;
-      if (tied) rod.setTipTether(end, length, stiffnessAt(length));
+      if (tied) rod.setTipTether(end, length, stiffnessAt(length), carried);
       else rod.setTipTether(null);
     },
 

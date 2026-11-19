@@ -5,8 +5,8 @@
  * Owns: which fish comes and when, when it is hooked, what a fight does to the line each
  * frame, when it counts as landed or lost, the lift, calling the net, and telling the
  * materials: the school which fish is taken, hung and kept, the reel what was wound, the
- * rod what hangs on its tip and how hard the hand is working, the net where it is, the
- * splash and the haptics.
+ * lure what hangs on the hook with it, the rod how hard the hand is working, the net
+ * where it is, the splash and the haptics.
  * Does not own: the stage of the cast or what the finger means before a fish is on
  * (fishing.js), the lure's own motion and the line's length (it is handed both), or any
  * of the sums: what a fish of a kind and size is like (fishKind.js), how it comes
@@ -31,14 +31,14 @@ import { createFight } from './fight.js';
 import { HARDEST_RUN, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
-import { STOW_LENGTH } from './lineOut.js';
 import { between, toward } from './maths.js';
 import { createReelClick } from './reelClick.js';
 import { createScoop } from './scoop.js';
 import { createSnap } from './snap.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
-import { createTipWeight, dryness } from './tipWeight.js';
+import { LURE_KG } from '../shore/lureMove.js';
+import { DRY_BY, DRY_FROM, SUNK_SHARE, dryness } from './tipWeight.js';
 import { steerToLure, touching } from './visit.js';
 
 // What this file reports about the fish, for tuning against a real hand: the names of
@@ -62,16 +62,16 @@ const BOIL_WITHIN = -1;
 const WATCH_FOLLOW = 1.2;
 // A hooked fish this close to under the tip, level metres, is landed.
 const LAND_WITHIN = 2.2;
-// Once landed the fish stops pulling. How fast the stretch it had put in the line goes, 1/s:
-// the rod eases straight, it does not spring.
-const SLACKEN_RATE = 4;
-const SLACKEN_DONE = 0.002;
 // A landed fish is lifted until this much line is left, m, and hangs there this long, s,
 // before the net is called in.
 const SHOW_LENGTH = 0.6;
 const SHOW_FOR = 0.6;
 // The lift is wound as slowly as line against this much tension, N.
 const LIFT_AS = 3.2;
+// Coming off the hook its weight leaves the line over a moment, at this rate, 1/s, not
+// in an instant: it tears free. All at once, the rod springs straight and flings the
+// bare lure up past its own tip.
+const COMES_OFF = 8;
 // The splash it makes breaking the surface, 0 to 1.
 const BREAK_SPLASH = 0.45;
 // The net comes from the angler's free side: this far back toward the angler for every
@@ -95,15 +95,12 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   const strain = createStrain();
   const scoop = createScoop();
   const click = createReelClick();
-  const weight = createTipWeight();
   const kick = createKick(random);
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
   let takesLine = false;
-  // What the hand on the rod is holding this frame, N, and the effort the rod was last
-  // told.
-  let holding = 0;
+  // The effort the rod was last told.
   let toldEffort = 0;
 
   // The level direction the cast went, for keeping a hooked fish in front.
@@ -130,10 +127,12 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   // taking line, m/s.
   const bearing = { x: 0, z: 1, far: 0 };
   let bolt = 0;
-  // Lifting: seconds the fish has still to hang before the net comes, and what is left
-  // of the stretch the fight had put in the line, m.
+  // Lifting: seconds the fish has still to hang before the net comes, and the frame's
+  // length and the kick it is hung with, for follow().
   let showLeft = 0;
-  let leftover = 0;
+  let hangDt = 0;
+  // What is left of the fish's weight on the hook as it comes off, kg.
+  let tearing = 0;
   // Fish landed since the start.
   let landed = 0;
 
@@ -217,10 +216,10 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     kick.reset();
     haul.reset();
     thump.end();
-    // Its weight is on the rod tip from here, not on the line. The stretch the line has
-    // now is let go over the next moments.
-    leftover = Math.max(0, stretch);
-    out.ease(move.gap(tip));
+    // From here it is a weight on the hook: under water a share of what it weighs, all
+    // of it once it is clear. The line carries it, and brings it onto the rod tip.
+    move.weigh(kind.load, SUNK_SHARE, DRY_FROM, DRY_BY);
+    tearing = kind.load;
     haptics?.notification('success');
   }
 
@@ -231,24 +230,20 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     kind = null;
     hung = false;
     net?.hide();
-    leftover = 0;
-    weight.off();
+    tearing = 0;
+    move.weigh();
   }
 
   // The fish is still on the hook: half out of the water it kicks, and once it has hung
   // under the tip a moment the net comes in under it.
   function onHook(dt, input, tip, room) {
     const dry = dryness(move.y);
-    weight.hang(dry, kind.load);
-    // The hand is holding its weight up.
-    holding = weight.pull;
     // Half out of the water: it feels the air and kicks, and the water breaks round it.
     if (kick.rise(dry)) {
       splash.burst(move.x, move.z, BREAK_SPLASH);
       haptics?.impact('medium');
     }
-    // Its mouth is on the lure, its body hangs from there along the line.
-    school.hang(hooked, move.x, move.y, move.z, tip.x, tip.y, tip.z, dt, kick.vigor);
+    hangDt = dt;
     if (scoop.phase === 'away') {
       if (room > 1e-3) return;
       showLeft -= dt;
@@ -261,8 +256,7 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       scoop.begin(move.x, move.y, move.z, leftX / far, leftZ / far);
     } else {
       scoop.step(dt, move.x, move.y, move.z);
-      // Off the hook this frame: the lure is a bare weight on the line again.
-      if (scoop.dropped) weight.off();
+      // Off the hook this frame: from here its weight leaves the line.
     }
     net?.place(scoop.x, scoop.y, scoop.z, scoop.handleX, scoop.handleZ, scoop.stretch, scoop.rock);
   }
@@ -271,7 +265,6 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   // net goes. The lure stays on the line. Returns true when the net has gone.
   function inNet(dt) {
     const gone = scoop.step(dt, move.x, move.y, move.z);
-    weight.off();
     if (scoop.landing) {
       kick.land();
       haptics?.impact('medium');
@@ -394,7 +387,6 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       bolting = fight.running;
       tension = line.tension;
       // What the hand holds is the pull on the rod, read off the rod.
-      holding = tension;
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       // The lure rides in its mouth, and the line ends there.
@@ -428,19 +420,16 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
      * just under the tip. Then the net comes in under it, it drops in, and the net
      * carries it away. Returns true on the frame the net has gone, the fish with it.
      */
-    land(dt, input, tip, lastTip) {
+    land(dt, input, tip) {
       kick.fade(dt);
       const room = Math.max(0, out.length - SHOW_LENGTH);
       const taken = scoop.dropped ? 0 : Math.min(haul.step(dt, input.finger, LIFT_AS), room);
       rod.reel.wind(taken);
       out.wind(dt, taken, move.gap(tip));
-      move.hang(dt, tip, lastTip, out.length);
-      if (leftover > 0) {
-        leftover *= Math.exp(-SLACKEN_RATE * dt);
-        if (leftover < SLACKEN_DONE) {
-          leftover = 0;
-          line.setTied(false);
-        }
+      if (scoop.dropped && tearing > 0) {
+        tearing = toward(tearing, 0, COMES_OFF, dt);
+        if (tearing < 1e-3) tearing = 0;
+        move.weigh(LURE_KG + tearing);
       }
       if (!scoop.dropped) {
         onHook(dt, input, tip, room);
@@ -451,24 +440,23 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       return true;
     },
 
-    // The line's length to draw while the fish is being lifted: what is out, less what
-    // is left of the fight's stretch.
-    liftLength() {
-      return Math.max(STOW_LENGTH, out.length - leftover);
+    // Once a frame after the rod and the line have moved, while the fish hangs on the
+    // hook: its mouth is on the lure, where the rod has just left it, and its body hangs
+    // from there along the line.
+    follow(tip) {
+      if (!hooked || !hung || scoop.dropped) return;
+      school.hang(hooked, move.x, move.y, move.z, tip.x, tip.y, tip.z, hangDt, kick.vigor);
     },
 
-    // Once a frame, whatever the stage, after the stage's own call: the weight on the rod
-    // tip follows, and so does how hard the hand is working. With no fish on, the hand
-    // holds nothing and eases off.
+    // Once a frame, whatever the stage, after the stage's own call: how hard the hand is
+    // working follows what it holds, and that is the line's pull on the rod, fish or no
+    // fish, in the water or hanging from the tip.
     carry(dt) {
-      const kg = weight.step(dt);
-      if (kg !== null) rod.setTipLoad(kg);
-      strain.step(dt, hooked ? holding : 0);
+      strain.step(dt, line.tension);
       if (strain.effort !== toldEffort) {
         toldEffort = strain.effort;
         rod.setStrain(toldEffort);
       }
-      holding = 0;
     },
   };
 }

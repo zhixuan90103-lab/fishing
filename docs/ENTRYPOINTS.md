@@ -59,7 +59,7 @@ fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
            否则饵留在竿尖：lureMove.hold，line.stow
   → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → splash.burst，落点换成真正的位置，lineOut.land，line.setTied(true)，catch.arm
   → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
-           靠近竿尖 → lureMove.hang，watch 变空，catch.sendAway；线收完 → ready
+           靠近竿尖 → 饵成了挂在线上的重物（line.carry），watch 变空，catch.sendAway；线收完 → ready
            catch.come：到时间 school.take 最近的一条鱼，brain 是 visit.steerToLure；嘴碰到饵 → fight
   → fight：catch.fight
            钩住的那一下 fishKind.fishOf(品种, 这条鱼的体型) 取出它的数
@@ -73,7 +73,7 @@ fishing.js update(dt, { finger, sensor, viewYaw, aimPitch })
            haul.step 提线 → lureMove.hang → tipWeight 鱼压竿多重 → kick 甩多用力 → school.hang 把鱼挂在饵上
            提到头吊一小会儿 → scoop.begin；scoop.step 圈在哪、鱼落到哪 → net.place
            网出画面 → school.keep，net.hide → water（饵已出水，线自己收完）
-  → catch.carry：竿尖上的重量一小步一小步交给 rod.setTipLoad；strain.step 手多吃力 → rod.setStrain
+  → catch.carry：strain.step 按线的张力算手多吃力 → rod.setStrain
   → line.setEnd / setLength（遛鱼时减去甩头顿的那一点），lureMove.point，lure.place
 fishing.js follow()
   → ready：把饵摆到这一帧的 line.end 上，鼻尖朝上
@@ -192,7 +192,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 线断时说的那句话、什么时候说 | `src/shore/startShore.js` 的 `LINE_BROKE`；怎么显示在 `src/shore/notice.js` |
 | 挂着鱼时收多快、出线点、线怎么出 | `src/play/haul.js` |
 | 出线和收线时手里咔多密、多重 | `src/play/reelClick.js` |
-| 提出水面的鱼重量来得多快 | `src/play/tipWeight.js`。多重在 `fishKind.js` |
+| 鱼出水时重量来得多快 | `src/play/tipWeight.js`。多重在 `fishKind.js`。挂着的重物怎么荡在 `src/shore/lureMove.js` 的 `advance` |
 | 鱼什么时候猛甩、多用力 | `src/play/kick.js` |
 | 挂在线上的鱼怎么甩、鱼嘴在哪 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) 第 7 节，`src/fish/hung.js` |
 | 被带走的鱼从哪回来 | `src/fish/flock.js` 的 `keep` |

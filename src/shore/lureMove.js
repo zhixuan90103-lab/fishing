@@ -1,16 +1,21 @@
 /**
- * How the lure's body moves: held at the tip, hanging from it, flying through the air,
- * towed through the water by the line.
+ * How the lure's body moves: held at the tip, hanging on the line as a weight, flying
+ * through the air, towed through the water by the line.
  *
  * Owns: the lure's position and velocity, and the ways it moves.
  * Does not own: the model (lure.js), the line or its length (line.js and whoever sets it),
  * which of the three applies, when a cast starts or ends, or any fishing rule.
  * No Three, no scene: it runs in Node. Design: docs/LURE.md.
  *
- * The caller picks one of hold / hang / fly / tow each frame and passes what the line is
+ * The caller picks one of hold / fly / tow each frame and passes what the line is
  * doing. Each is exact for the frame it is given or runs on a fixed small step, so the
  * path does not depend on the frame rate. Unless it is held, point() then turns the nose
  * along the line.
+ *
+ * Out of the water it is none of those: it is a weight on the end of the line, and what
+ * is on the hook with it. Then the caller gives it to the line to carry (line.carry),
+ * and the rod moves it in its own small steps through advance(): the weight and the rod
+ * tip pull on each other through the line, and have to be moved together.
  *
  * Which way it faces while it does so is lurePose.js: this file tells it where the tip
  * is and how fast the lure is sinking, and shows its nose and back as its own.
@@ -22,11 +27,17 @@ import { createLurePose } from './lurePose.js';
 
 const GRAVITY = 9.81;
 
-// Hanging: fixed step, seconds.
-const HANG_DT = 1 / 240;
-// How fast a swinging lure loses speed in air and under water, 1/s. Higher settles sooner.
+// How fast a weight swinging on the line loses speed in air and under water, 1/s. Higher
+// settles sooner.
 const AIR_LOSS = 1.2;
 const WATER_LOSS = 7;
+// A weight coming onto the line does not bounce on it like a ball on elastic: the line
+// takes this share of the damping that would just stop it, from how fast it is being
+// stretched.
+const LINE_DAMPS = 0.5;
+// What the lure itself weighs, kg, and the share of that it weighs under water.
+export const LURE_KG = 0.01;
+const LURE_SUNK = 0.3;
 
 // Flying: the angle it leaves at, above level, radians. Higher lobs it, lower drives it.
 const LAUNCH_ANGLE = 28 * Math.PI / 180;
@@ -65,6 +76,10 @@ function smooth(t) {
 export function createLureMove() {
   // Which way it faces is lurePose.js's. This file tells it what the body is doing.
   const pose = createLurePose();
+  // As a weight on the line: how far it had the line stretched a step ago, and whether
+  // the line was taut then.
+  let stretched = 0;
+  let taut = false;
   // Metres it has sunk under its own weight are counted there, for the rock.
 
   const m = {
@@ -84,6 +99,13 @@ export function createLureMove() {
     // a unit vector square to the nose. Both are lurePose.js's, shown here.
     nose: pose.nose,
     back: pose.back,
+    // What hangs on the line when it is out of the water: its weight, kg, the share of
+    // that it weighs under water, and the heights of the hook, m, between which it comes
+    // out. The lure alone, until weigh() says a fish is on the hook with it.
+    kg: LURE_KG,
+    sunk: LURE_SUNK,
+    dryFrom: -0.05,
+    dryBy: 0.05,
 
     // Put it somewhere, at rest.
     place(x, y, z) {
@@ -120,37 +142,55 @@ export function createLureMove() {
       return Math.hypot(p.x - m.x, p.y - m.y, p.z - m.z);
     },
 
+    // What is on the hook now weighs this much: kg out of the water, `sunk` of that
+    // under it, coming on as the hook rises from dryFrom to dryBy, m. No arguments: the
+    // lure alone again.
+    weigh(kg = LURE_KG, sunk = LURE_SUNK, dryFrom = -0.05, dryBy = 0.05) {
+      m.kg = kg;
+      m.sunk = sunk;
+      m.dryFrom = dryFrom;
+      m.dryBy = dryBy;
+    },
+
     /**
-     * A weight on `length` metres of line below the tip. The line only stops it getting
-     * further away than that. tip moved evenly from lastTip through the frame.
+     * One small step as a weight on the line, h seconds. The rod calls this from its own
+     * steps (rodFlex.js). The tip is at (tx, ty, tz) now, there are `length` metres of
+     * line and it pulls `stiffness` newtons for each metre it is stretched. The weight
+     * falls, is slowed by the air or the water, and is pulled toward the tip by the line
+     * when the line is taut. Nothing else holds it.
      */
-    hang(dt, tip, lastTip, length) {
-      if (!(dt > 0)) return;
-      const tvx = (tip.x - lastTip.x) / dt;
-      const tvy = (tip.y - lastTip.y) / dt;
-      const tvz = (tip.z - lastTip.z) / dt;
-      let done = 0;
-      while (done < dt - 1e-9) {
-        const h = Math.min(HANG_DT, dt - done);
-        done += h;
-        const f = done / dt;
-        const px = lastTip.x + (tip.x - lastTip.x) * f;
-        const py = lastTip.y + (tip.y - lastTip.y) * f;
-        const pz = lastTip.z + (tip.z - lastTip.z) * f;
-        const keep = Math.exp(-(m.y < 0 ? WATER_LOSS : AIR_LOSS) * h);
-        m.vy -= GRAVITY * h;
-        m.vx *= keep; m.vy *= keep; m.vz *= keep;
-        m.x += m.vx * h; m.y += m.vy * h; m.z += m.vz * h;
-        const dx = m.x - px, dy = m.y - py, dz = m.z - pz;
-        const d = Math.hypot(dx, dy, dz);
-        if (d > length && d > 1e-9) {
-          const nx = dx / d, ny = dy / d, nz = dz / d;
-          m.x = px + nx * length; m.y = py + ny * length; m.z = pz + nz * length;
-          // Take out the speed it had going away from the tip. The rest swings it.
-          const away = (m.vx - tvx) * nx + (m.vy - tvy) * ny + (m.vz - tvz) * nz;
-          if (away > 0) { m.vx -= nx * away; m.vy -= ny * away; m.vz -= nz * away; }
-        }
-      }
+    advance(h, tx, ty, tz, length, stiffness) {
+      const out = smooth((m.y - m.dryFrom) / (m.dryBy - m.dryFrom));
+      const heavy = m.sunk + (1 - m.sunk) * out;
+      let ax = 0;
+      let ay = -GRAVITY * heavy;
+      let az = 0;
+      const dx = tx - m.x;
+      const dy = ty - m.y;
+      const dz = tz - m.z;
+      const far = Math.hypot(dx, dy, dz);
+      if (far > length && far > 1e-9) {
+        const nx = dx / far;
+        const ny = dy / far;
+        const nz = dz / far;
+        // The pull the rod tip feels, the other way, and the line's own damping: by how
+        // fast it is stretching, which is nothing while it is only being wound in.
+        const stretch = far - length;
+        const rate = taut ? (stretch - stretched) / h : 0;
+        stretched = stretch;
+        taut = true;
+        const pull = Math.max(0, stiffness * stretch + 2 * LINE_DAMPS * Math.sqrt(stiffness * m.kg) * rate) / m.kg;
+        ax += nx * pull;
+        ay += ny * pull;
+        az += nz * pull;
+      } else taut = false;
+      const keep = Math.exp(-(m.y < 0 ? WATER_LOSS : AIR_LOSS) * h);
+      m.vx = (m.vx + ax * h) * keep;
+      m.vy = (m.vy + ay * h) * keep;
+      m.vz = (m.vz + az * h) * keep;
+      m.x += m.vx * h;
+      m.y += m.vy * h;
+      m.z += m.vz * h;
     },
 
     // Throw it from where it is so it comes down `reach` metres away along the level
