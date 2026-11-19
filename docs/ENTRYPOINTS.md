@@ -187,7 +187,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 冲的时候按住能叠多少力、线多容易断 | `src/play/snap.js` |
 | 鱼甩头的疏密和轻重 | `src/play/thump.js` |
 | 握竿的手多早显出吃力 | `src/play/strain.js` |
-| 吃力的手让多远、被鱼拉过去多少、颤多大、侧倾多少 | `src/shore/rodHand.js` 的 `GIVE_REACH`、`GIVE_MOST`、`SHAKE`、`LEAN_MOST` |
+| 吃力的手让多远、颤多大、侧倾多少 | `src/shore/rodHand.js` 的 `GIVE_REACH`、`SHAKE`、`LEAN_MOST` |
+| 逆着线的力带竿时手欠多少、多快补上，镜头分担几成 | `src/shore/handLag.js` 的 `HEAVY`、`MAKES_UP`、`OWES_MOST`；`src/shore/aim.js` 的 `VIEW_OWES` |
 | 线断时说的那句话、什么时候说 | `src/shore/startShore.js` 的 `LINE_BROKE`；怎么显示在 `src/shore/notice.js` |
 | 挂着鱼时收多快、出线点、线怎么出 | `src/play/haul.js` |
 | 出线和收线时手里咔多密、多重 | `src/play/reelClick.js` |

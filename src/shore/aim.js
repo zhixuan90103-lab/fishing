@@ -23,6 +23,11 @@
  * holder brings it back by working the rod. The tip is steadied first: a tip nodding at
  * the edge of its window must not nudge the view with every nod.
  *
+ * The rod's share is the aim less the view, less what the hand owes: against a pulling
+ * line the hand on the rod cannot keep up with the phone (handLag.js). The view owes a
+ * part of the same debt, a smaller one, so the rod is seen to fall behind in the picture
+ * toward what is pulling it. With no pull nothing is owed and aim = view + rod exactly.
+ *
  * Changing between them only swaps what is chased. Nothing is copied or re-based, so no
  * change can jump. Coming back to the aim after watching, the chase starts slow and picks
  * up: the aim may be far from where the view was looking, and at the usual rate that is
@@ -31,6 +36,7 @@
  * Degrees throughout. Yaw is positive to the view's left, pitch positive upward.
  */
 
+import { createHandLag } from './handLag.js';
 import { chaseAngle } from './phoneLook.js';
 
 // Degrees the aim turns per degree the phone turns. 1 is "the phone is the rod". The view
@@ -77,6 +83,10 @@ export const KEEP_EASES_IN = 0.8;
 // RETURN_RECOVER makes the hand-back slower and softer.
 export const RETURN_RATE = 0.2;
 export const RETURN_RECOVER = 1;
+// Of what the hand owes on the rod, the view owes this share: the hand turns 1, the rod
+// 0.6, the view 0.8. At 1 the view lags as much as the rod and the rod does not move in
+// the picture, so its strain cannot be seen. At 0 the view does not lag at all.
+export const VIEW_OWES = 0.5;
 
 const DEG = 180 / Math.PI;
 
@@ -125,6 +135,9 @@ export function createAim(yaw, pitch) {
   let lastTipPitch = 0;
   // Seconds the tip has been counting.
   let tipFor = 0;
+  // What the hand on the rod owes against a pulling line, and the tip as the view reads it.
+  const lag = createHandLag();
+  const tip = { yaw: 0, pitch: 0 };
 
   const aim = {
     // Where the view looks.
@@ -146,6 +159,15 @@ export function createAim(yaw, pitch) {
       aim.rodRoll = 0;
       watching = false;
       follow = LOOK_RATE;
+      lag.reset();
+    },
+
+    // What the hand owes right now, degrees: the rod points this far short of the phone.
+    get owedYaw() {
+      return lag.yaw;
+    },
+    get owedPitch() {
+      return lag.pitch;
     },
 
     /**
@@ -153,11 +175,14 @@ export function createAim(yaw, pitch) {
      * held keeps the view where it is. watch, if given, is a direction { yaw, pitch } in
      * degrees for the view to turn to instead, and wins over held. tip, if given while
      * watching, is the direction from the eye to the rod tip, { yaw, pitch } in degrees:
-     * the view then keeps the tip inside its window.
+     * the view then keeps the tip inside its window. pull, if given, is the line pulling
+     * on the rod: { force } in newtons and { yaw, pitch }, the direction from the eye to
+     * where it pulls from, degrees.
      */
-    step(turned, held, dt, watch = null, tip = null) {
+    step(turned, held, dt, watch = null, tip = null, pull = null) {
       const aimYaw = baseYaw + turned.yaw * AIM_YAW_GAIN;
       const aimPitch = basePitch + turned.pitch * AIM_PITCH_GAIN;
+      lag.step(dt, aimYaw - lastYaw, aimPitch - lastPitch, aimYaw, aimPitch, pull ? pull.force : 0, pull ? pull.yaw : 0, pull ? pull.pitch : 0);
       if (watch) turnTo(watch, dt, tip);
       else if (!held) followAim(aimYaw, aimPitch, dt);
       // Whenever the view is not following the aim, watching or held, the phone may be
@@ -168,8 +193,8 @@ export function createAim(yaw, pitch) {
       watching = Boolean(watch);
       lastYaw = aimYaw;
       lastPitch = aimPitch;
-      aim.rodYaw = aimYaw - aim.viewYaw;
-      aim.rodPitch = aimPitch - aim.viewPitch;
+      aim.rodYaw = aimYaw - lag.yaw - aim.viewYaw;
+      aim.rodPitch = aimPitch - lag.pitch - aim.viewPitch;
       // Right edge of the phone down tips the rod to the right of the screen.
       aim.rodRoll = -turned.roll;
     },
@@ -189,7 +214,11 @@ export function createAim(yaw, pitch) {
   // it is taken as it is. The tip is in its window while the view looks between
   // tipYaw - TIP_LEFT and tipYaw + TIP_RIGHT (yaw is positive to the left, so a tip to
   // the left of centre has the view to its right), and likewise up and down.
-  function keepTip(tip, dt) {
+  function keepTip(given, dt) {
+    // The tip it is given is the rod's, which is behind the phone by what the hand owes.
+    // The view owes less than that, so it reads the tip that much nearer the phone.
+    tip.yaw = given.yaw + lag.yaw * (1 - VIEW_OWES);
+    tip.pitch = given.pitch + lag.pitch * (1 - VIEW_OWES);
     const rawYaw = nearest(tip.yaw, aim.viewYaw);
     if (!tipKnown) {
       tipYaw = lastTipYaw = rawYaw;

@@ -2,44 +2,28 @@
  * A hand working against a pull: what it does to the rod it holds. Three is used for its
  * maths only: no scene, no model.
  *
- * Owns: how far a working hand is drawn toward the pull, how the rod tips that way, how
- * it shakes, and how it rolls over when it is carried to one side of the pull.
+ * Owns: how far a working hand is drawn toward the pull, how it shakes, and how the rod
+ * rolls over when it is carried to one side of the pull.
  * Does not own: how hard the hand is working (gameplay says, and eases it:
  * src/play/strain.js), where the pull comes from or where the rod sits (rodHold.js hands
  * both in and lays what this returns on the pose), or how the blank bends (rodFlex.js).
  * Design: docs/ROD.md section 3.
  *
  * Everything here is one turn about the hand and one small shift of the hand, in the
- * view's space. Three things make up the turn, each scaled by the effort:
- *   the give    the rod is drawn round toward the side the pull is on. The pull turns
- *               the rod about the hand by as much as it is off to one side of the blank,
- *               and the wrist holds against it: the harder the pull, the more of the way
- *               round the rod goes. So against a fish pulling hard the rod cannot be swung
- *               far from it, and the same swing takes it nearly all the way once the fish
- *               eases. It comes on over a moment, so a quick twitch still gets through.
- *               Only round, never down: how high the rod is held stays the holder's, and
- *               that height is what the line bends the blank against.
+ * view's space. Two things make up the turn, each scaled by the effort:
  *   the shake   it trembles about two axes square to the blank.
  *   the lean    carried to one side of the pull, it is not swept there square. The wrist
  *               lays it over: it rolls about its own length toward the side it is
  *               carried to, and the reel swings out the other way.
  * With no effort there is nothing: the rod sits square and still.
+ * The hand is not drawn round toward the pull here. Falling behind the phone against a
+ * pull is handLag.js, and it never moves a hand that is not itself turning.
  */
 
 import * as THREE from 'three/webgpu';
 
 // A hand working as hard as it can is drawn this far toward the pull, metres.
 const GIVE_REACH = 0.045;
-// The give. How strong the pull's turning of the rod is against the wrist holding it, at
-// full effort: at 1 they are a match and the rod goes half way round to the pull's side.
-// Larger and a pulling fish holds the rod nearer to its own side.
-const GIVE_MOST = 3;
-// A rod held nearer to straight up than this, as the level part of its unit direction,
-// has less and less of a side to be drawn to.
-const GIVE_UPRIGHT = 0.2;
-// How fast the give follows, 1/s. Slower, and more of a quick movement of the rod gets
-// through before it is drawn back.
-const GIVE_RATE = 4;
 // And it shakes: the rod turns about the hand by up to this much, degrees, at full
 // effort. Small: at the tip it is a couple of centimetres. The shake is a few slow beats
 // laid over each other, Hz, so it never repeats on a count.
@@ -73,27 +57,6 @@ export function createRodHand() {
   const up = new THREE.Vector3();
   const sideways = new THREE.Vector3();
   const part = new THREE.Quaternion();
-  // The give as it stands, and where it is heading.
-  const given = new THREE.Quaternion();
-  const giveTo = new THREE.Quaternion();
-
-  // The give: drawn round toward the side the pull is on, a turn about the view's upright.
-  // Seen from above, the pull turns the rod by the sine of the angle it is off to the
-  // side of it (nothing for a pull the rod points along), the wrist holds it back in
-  // proportion to how far it has gone, and this is where the two settle. It never
-  // carries the rod past the pull.
-  // Drawn down toward the pull as well, the rod lost the angle the line bends it across:
-  // run and rest came to within a degree of each other in the bend.
-  function give(blank, dt) {
-    const level = Math.hypot(blank.x, blank.z);
-    const pullLevel = Math.hypot(toward.x, toward.z);
-    const off = level > 1e-6 && pullLevel > 1e-6 ? (blank.z * toward.x - blank.x * toward.z) / (level * pullLevel) : 0;
-    const strength = GIVE_MOST * effort;
-    giveTo.setFromAxisAngle(up.set(0, 1, 0), off * Math.min(1, level / GIVE_UPRIGHT) * strength / (1 + strength));
-    given.slerp(giveTo, 1 - Math.exp(-GIVE_RATE * dt));
-    turn.copy(given);
-  }
-
   // The shake, about two axes square to the blank.
   function shake(blank) {
     sideways.crossVectors(blank, up.set(0, 1, 0));
@@ -144,11 +107,8 @@ export function createRodHand() {
         if (toward.lengthSq() > 1e-8) toward.normalize();
         else toward.copy(from);
       }
-      give(blank, dt);
-      // An idle hand whose give has gone: the rod sits square and still.
-      if (!(effort > 0) && 1 - Math.abs(given.w) < 1e-12) {
-        given.identity();
-        turn.identity();
+      turn.identity();
+      if (!(effort > 0)) {
         shift.set(0, 0, 0);
         return;
       }

@@ -178,6 +178,12 @@ export async function startShore(container, hooks = {}) {
   // The same for the rod tip, steadied, which the view keeps in the picture.
   const tipPoint = new THREE.Vector3();
   const tipDir = { yaw: 0, pitch: 0 };
+  // The line's pull on the rod, as the aim takes it: how hard, and from where.
+  const pullDir = { yaw: 0, pitch: 0, force: 0 };
+  const pullOn = (force, dir) => {
+    dir.force = force;
+    return dir;
+  };
   // Positive yaw turns toward the camera's left. The eye stays at the panel's position
   // and the horizon never rolls.
   const placeLook = (yawDeg, pitchDeg) => {
@@ -220,6 +226,8 @@ export async function startShore(container, hooks = {}) {
       // the rod cannot be turned after a fish, so the view is left free to follow it:
       // desktop stand-in.
       watch && phone.active && fishing.watchRod ? directionTo(tune, rod.steadyTip(tipPoint), tipDir) : null,
+      // The line pulling on the rod: against it the hand cannot keep up with the phone.
+      phone.active && line.tension > 0 ? pullOn(line.tension, directionTo(tune, line.end, pullDir)) : null,
     );
     placeLook(aim.viewYaw, aim.viewPitch);
     rod.setAim(aim.rodPitch, aim.rodYaw, aim.rodRoll);

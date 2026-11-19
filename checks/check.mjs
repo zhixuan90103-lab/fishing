@@ -358,46 +358,91 @@ check('camera: a raised phone pushes the view up after the tip', () => {
 
 // ---------------------------------------------------------------- the rod's grip
 
-check('rod hand: square and still with no effort, laid over toward the side it is carried to, and drawn round to a fish by how hard it pulls', () => {
+check('rod hand: square and still with no effort, laid over toward the side it is carried to, and never dragged round to the fish', () => {
   // The rod's heading, degrees to the right of straight ahead, and where its tip is.
   const heading = (root) => { const a = new THREE.Vector3(0, 1, 0).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion())); return Math.atan2(a.x, -a.z) / deg; };
-  const pose = (side, effort, fps = 60, twitch = 0) => {
+  const pose = (side, effort) => {
     const view = new THREE.PerspectiveCamera(); view.position.set(0, 1.7, 0); view.lookAt(0, 1.7 - Math.sin(10 * deg), -Math.cos(10 * deg)); view.updateMatrixWorld(true);
     const root = new THREE.Object3D(); view.add(root); const hold = createRodHold(root, 0.1);
     hold.setPull(new THREE.Vector3(Math.sin(side * deg) * 14, -0.5, -Math.cos(side * deg) * 14));
-    let fastest = 0, last = 0, before = 0;
-    for (let i = 0; i < 4 * fps; i += 1) {
-      hold.setStrain(effort * (1 - Math.exp(-9 * i / fps)));
-      // A twitch of the phone in the last frame.
-      if (i === 4 * fps - 1) { before = heading(root); hold.setAim(0, twitch, 0); }
-      hold.carry(1 / fps);
+    let fastest = 0, last = 0;
+    for (let i = 0; i < 240; i += 1) {
+      hold.setStrain(effort * (1 - Math.exp(-9 * i / 60))); hold.carry(1 / 60);
       const under = new THREE.Vector3(0, 0, 1).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()));
       const roll = Math.atan2(under.x, -under.y) / deg;
-      if (i > 0) fastest = Math.max(fastest, Math.abs(roll - last) * fps);
+      if (i > 0) fastest = Math.max(fastest, Math.abs(roll - last) * 60);
       last = roll;
     }
-    return { roll: last, fastest, heading: heading(root), twitched: heading(root) - before, tip: new THREE.Vector3(0, 2.13, 0).applyMatrix4(root.matrixWorld) };
+    return { roll: last, fastest, heading: heading(root), tip: new THREE.Vector3(0, 2.13, 0).applyMatrix4(root.matrixWorld) };
   };
-  const idle = pose(25, 0), right = pose(25, 0.5), left = pose(-25, 0.5), ahead = pose(-4, 0.5);
+  const idle = pose(25, 0), right = pose(25, 0.5), left = pose(-25, 0.5), ahead = pose(-4, 0.5), hard = pose(25, 0.95);
   expect(idle.fastest === 0, 'no effort, no movement at all', idle.fastest);
   expect(right.roll - idle.roll > 15, 'fish to the right: the reel swings out to the right', (right.roll - idle.roll).toFixed(1));
   expect(left.roll - idle.roll < -15, 'fish to the left: the reel swings out to the left', (left.roll - idle.roll).toFixed(1));
   expect(Math.abs(ahead.roll - idle.roll) < 4, 'fish dead ahead of the rod: it sits square', (ahead.roll - idle.roll).toFixed(1));
   expect(right.fastest < 400, 'it rolls over, it does not snap', `${right.fastest.toFixed(0)}°/s`);
-  // The give. The fish is 25° to the right, the rod is held 4° to the left: 29° apart.
-  const apart = 25 - idle.heading;
-  const share = (p) => (p.heading - idle.heading) / apart;
-  const light = pose(25, 0.06), hard = pose(25, 0.95);
-  expect(share(light) < 0.2, 'a fish barely pulling leaves the rod where the phone points', `${(100 * share(light)).toFixed(0)}% of the way to it`);
-  expect(share(right) > 0.4 && share(right) < 0.7, 'one pulling as hard as the reel holds draws it about half way round', `${(100 * share(right)).toFixed(0)}%`);
-  expect(share(hard) > share(right) + 0.08 && share(hard) < 0.9, 'leant on, further, and never right round to the fish', `${(100 * share(hard)).toFixed(0)}%`);
-  const leftShare = (left.heading - idle.heading) / (-25 - idle.heading);
-  expect(left.heading < idle.heading - 5 && Math.abs(leftShare - share(right)) < 0.1, 'to the left as to the right', `${(100 * leftShare).toFixed(0)}%`);
-  expect(Math.abs(right.tip.y - idle.tip.y) < 0.06 && Math.abs(hard.tip.y - idle.tip.y) < 0.09, 'round, not down: the tip stays as high as the phone holds it', `${(right.tip.y - idle.tip.y).toFixed(3)} m, ${(hard.tip.y - idle.tip.y).toFixed(3)} m`);
-  for (const fps of [20, 120]) expect(Math.abs(pose(25, 0.5, fps).heading - right.heading) < 0.3, `${fps} fps: it settles in the same place`, pose(25, 0.5, fps).heading.toFixed(2));
-  // A quick twitch of the phone still reaches the rod, nearly whole, before the fish draws it back.
-  const flick = pose(25, 0.5, 60, 10);
-  expect(flick.twitched < -8, 'a 10° twitch away from the fish moves the rod nearly 10° at once', `${flick.twitched.toFixed(1)}°`);
+  // For half a day the hand was drawn round toward wherever the fish was: a fish darting
+  // to one side took the rod and the view with it, with the phone held still.
+  expect(Math.abs(hard.heading - idle.heading) < 1.5, 'a hand that is not turning is not dragged round to the fish, however hard it pulls', `${(hard.heading - idle.heading).toFixed(1)}°`);
+  expect(hard.tip.distanceTo(idle.tip) < 0.15, 'the working hand moves the tip by centimetres, not more', hard.tip.distanceTo(idle.tip).toFixed(3));
+});
+
+check('hand: against a pulling line it falls behind the phone, with it or with no pull it does not, and what it owes goes as the pull goes', () => {
+  // The line pulls from 100° round, level with the water. The phone starts aimed there.
+  const from = { yaw: 100, pitch: -5 };
+  const turn = (fps, force, by, seconds = 0.5, then = null) => {
+    const aim = createAim(100, -10); const turned = { yaw: 0, pitch: 0, roll: 0 }; const dt = 1 / fps;
+    const pull = () => (force > 0 ? { force, ...from } : null);
+    for (let i = 0; i < fps; i += 1) aim.step(turned, true, dt, null, null, pull());
+    const n = Math.round(seconds * fps);
+    for (let i = 0; i < n; i += 1) { turned.yaw += by / n; aim.step(turned, true, dt, null, null, pull()); }
+    const rod = () => aim.rodYaw + aim.viewYaw - 100;
+    const moved = rod();
+    if (then) then(aim, turned, dt, rod);
+    return { moved, aim, turned, rod };
+  };
+  expect(Math.abs(turn(60, 0, 30).moved - 30) < 1e-9, 'no pull: the rod goes 1 to 1 with the phone', turn(60, 0, 30).moved);
+  const light = turn(60, 1, 30).moved / 30, run = turn(60, 4.5, 30).moved / 30, leant = turn(60, 8.5, 30).moved / 30;
+  expect(light > 0.82 && light < 0.97, 'a light pull: nearly all of the turn', light.toFixed(2));
+  expect(run > 0.5 && run < 0.72, 'a pull as hard as the reel holds: about 6 parts in 10', run.toFixed(2));
+  expect(leant < run - 0.08 && leant > 0.3, 'leant on: less still, and never nothing', leant.toFixed(2));
+  // Swung away and then back toward the pull: the way back costs nothing. Nothing more is
+  // owed for it, and the rod goes back with the phone, less only what it was making up.
+  let back = 0, owedBefore = 0, owedAfter = 0;
+  turn(60, 4.5, 30, 0.5, (aim, turned, dt, rod) => { const at = rod(); owedBefore = Math.abs(aim.owedYaw); for (let i = 0; i < 30; i += 1) { turned.yaw -= 10 / 30; aim.step(turned, true, dt, null, null, { force: 4.5, ...from }); } back = at - rod(); owedAfter = Math.abs(aim.owedYaw); });
+  expect(owedAfter <= owedBefore && Math.abs(back - (10 - (owedBefore - owedAfter))) < 1e-6, 'turning back with the pull is 1 to 1: nothing more is owed for it', `back ${back.toFixed(2)}°, owed ${owedBefore.toFixed(2)}° then ${owedAfter.toFixed(2)}°`);
+  // Never past the phone, and what is owed is made up slowly while the pull holds.
+  let after = 0, most = 0;
+  const held = turn(60, 4.5, 30, 0.5, (aim, turned, dt, rod) => { for (let i = 0; i < 180; i += 1) { aim.step(turned, true, dt, null, null, { force: 4.5, ...from }); most = Math.max(most, rod()); } after = rod(); });
+  expect(after > held.moved + 3 && after < 29.5, 'held still under the pull, it slowly makes up what it owes', `${held.moved.toFixed(1)}° then ${after.toFixed(1)}° of 30° three seconds on`);
+  expect(most <= 30 + 1e-9, 'and is never carried past where the phone points', most.toFixed(2));
+  // The pull goes: so does the debt, as fast as the pull does.
+  let quick = 0, slow = 0;
+  turn(60, 4.5, 30, 0.5, (aim, turned, dt, rod) => { for (let i = 0; i < 12; i += 1) aim.step(turned, true, dt, null, null, null); quick = rod(); });
+  turn(60, 4.5, 30, 0.5, (aim, turned, dt, rod) => { for (let i = 0; i < 12; i += 1) aim.step(turned, true, dt, null, null, { force: 4.5 * (1 - (i + 1) / 60), ...from }); slow = rod(); });
+  expect(quick > 28.5, 'the pull gone at once, the rod is across to the phone in a fifth of a second', quick.toFixed(1));
+  expect(slow < quick - 3 && slow > run * 30, 'the pull easing slowly, the rod comes across slowly: it goes by the pull, not by a clock', `${slow.toFixed(1)}° against ${quick.toFixed(1)}°`);
+  // A fish darting about a hand that is not turning moves nothing.
+  const still = createAim(100, -10); const none = { yaw: 0, pitch: 0, roll: 0 };
+  for (let i = 0; i < 240; i += 1) still.step(none, true, 1 / 60, null, null, { force: 6, yaw: 100 + 30 * Math.sin(i / 20), pitch: -5 });
+  expect(Math.abs(still.rodYaw) < 1e-9 && Math.abs(still.owedYaw) < 1e-9, 'a fish darting from side to side does not move a rod the phone holds still', still.rodYaw);
+  // The same at any frame rate.
+  const rates = [20, 60, 120].map((fps) => turn(fps, 4.5, 30).moved);
+  expect(Math.max(...rates) - Math.min(...rates) < 0.6, 'the same at 20, 60 and 120 frames a second', rates.map((r) => r.toFixed(2)).join(' / '));
+  // The view owes less than the rod: the hand turns 30°, the rod about 18°, the view about 24°.
+  const aim = createAim(100, -10); const turned = { yaw: 0, pitch: 0, roll: 0 }; const tipOf = () => ({ yaw: aim.rodYaw + aim.viewYaw, pitch: 10 });
+  for (let i = 0; i < 60; i += 1) aim.step(turned, false, 1 / 60, { yaw: 100, pitch: -9 }, tipOf(), { force: 4.5, ...from });
+  for (let i = 0; i < 30; i += 1) { turned.yaw += 2; aim.step(turned, false, 1 / 60, { yaw: 100, pitch: -9 }, tipOf(), { force: 4.5, ...from }); }
+  for (let i = 0; i < 20; i += 1) aim.step(turned, false, 1 / 60, { yaw: 100, pitch: -9 }, tipOf(), { force: 4.5, ...from });
+  const rodAt = aim.rodYaw + aim.viewYaw - 100, viewAt = aim.viewYaw - 100;
+  // With nothing owed the view would settle TIP_LEFT short of the tip.
+  const free = createAim(100, -10); const t2 = { yaw: 0, pitch: 0, roll: 0 }; const tip2 = () => ({ yaw: free.rodYaw + free.viewYaw, pitch: 10 });
+  for (let i = 0; i < 60; i += 1) free.step(t2, false, 1 / 60, { yaw: 100, pitch: -9 }, tip2());
+  for (let i = 0; i < 30; i += 1) { t2.yaw += 2; free.step(t2, false, 1 / 60, { yaw: 100, pitch: -9 }, tip2()); }
+  for (let i = 0; i < 20; i += 1) free.step(t2, false, 1 / 60, { yaw: 100, pitch: -9 }, tip2());
+  const viewFree = free.viewYaw - 100;
+  expect(rodAt < 60 * 0.8, 'under the pull the rod is well short of the phone', `${rodAt.toFixed(1)}° of 60°`);
+  expect(viewFree - viewAt > 2 && viewFree - viewAt < (60 - rodAt) * 0.8, 'the view falls behind too, but by less than the rod does', `view ${(viewFree - viewAt).toFixed(1)}° behind, rod ${(60 - rodAt).toFixed(1)}° behind`);
 });
 
 // ---------------------------------------------------------------- whole casts

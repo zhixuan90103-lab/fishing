@@ -17,7 +17,7 @@
 | 岸边鱼群 | `docs/FISH-SCHOOL.md`，入口 `src/fish/school.js`，分层见文档第 1 节。出了水的鱼怎么摆在 `src/fish/hung.js` |
 | 鱼竿和渔轮 | `docs/ROD.md`，入口 `src/shore/rod.js`，分层见文档第 1 节。吃力的手是 `src/shore/rodHand.js`，渔轮是 `src/shore/reel.js` |
 | 不用手机能跑的检查 | `checks/`：`rig.mjs` 在 Node 里搭一整竿，`check.mjs` 是常驻的检查，`record.mjs` 给只整理结构的改动做前后对比。见 `docs/CONVENTIONS.md` 第 7 节 |
-| 手机瞄准和镜头 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，镜头追什么、剩下的给竿 `src/shore/aim.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
+| 手机瞄准和镜头 | `docs/PHONE-LOOK.md`，读姿态 `src/shore/phoneLook.js`，镜头追什么、剩下的给竿 `src/shore/aim.js`，逆着线的力手欠多少 `src/shore/handLag.js`，接线在 `src/shore/startShore.js` 的 `applyPhone` |
 | 手指、设置面板和提示 | `src/shore/finger.js`（按没按着、拖了多远，桌面用空格键），`src/shore/tunePanel.js`（滑条、镜头回正、这一竿的读数），`src/shore/notice.js`（画面上一句会淡掉的话，只用来说线断了） |
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js`，朝哪 `src/shore/lurePose.js` |
@@ -35,6 +35,7 @@
 | 震动 Swift 真源 | `plugins/native-haptics/*` |
 | 包名 | `capacitor.config.ts`：`com.wangzhixuan.fishing` |
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
+| 因果链（设计，还没重构） | `docs/CHAIN.md`。力和运动从手经竿、轮、线到线头上的东西怎么传，现在差在哪，分几段改 |
 | 记下、还没改的手感 | `docs/NOTED.md`。2026-11-19 对过、还没改的那几条 |
 | 规范 | `docs/CONVENTIONS.md` |
 
@@ -65,7 +66,7 @@
 11. **物料里不写玩法。** 水面、鱼群、鱼竿、鱼线、饵、水花、抄网不含抛投、咬口和拔河。规则只写在 `src/play/`，只通过物料留的口子动物料；口子的表在 `docs/CONVENTIONS.md` 第 1 节。物料只报数，这个数意味着什么由玩法判断；什么时候、多用力归玩法，成什么样归物料。镜头不由玩法直接动，玩法只报出要看的点 `fishing.watch`。
 12. **鱼不横移，动作连续。** 行为只写目标朝向、速度、深度，由 `src/fish/swim.js` 游过去。不要直接改鱼的位置。唯一的例外是出了水、挂在线上的鱼，走鱼群的 `hang` 和 `keep`，见 `docs/FISH-SCHOOL.md` 第 7 节。
 13. **竿和线：只用位置去追，帧率不改变结果。** 不对镜头的输入求加速度，不设撞上去的上限，竿不拉长。想让竿受力，改线的远端或线长，不要直接往竿尖加力。出了水、挂在线上的重量走 `rod.setTipLoad`，握竿的手多吃力走 `rod.setStrain`。见 `docs/ROD.md` 第 2、3 节。
-14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个瞄准。不从加速度积分位移，不逐帧累加偏移。镜头在追什么可以换（手机、不动、玩法指的点），换的只是目标，不切换算法。见 `docs/PHONE-LOOK.md` 第 2 节。
+14. **手机瞄准只读姿态。** 同一个手机姿态永远是同一个瞄准。不从加速度积分位移，不逐帧累加偏移。镜头在追什么可以换（手机、不动、玩法指的点），换的只是目标，不切换算法。线在拉的时候握竿的手可以欠着手机一段，那是手的状态：有上限，力没了就清掉，手不转就不欠。见 `docs/PHONE-LOOK.md` 第 2、4 节。
 15. **`startShore.js` 只创建、接线、定每帧的顺序。** 规则进 `src/play/`，物料进各自的文件，输入进 `finger.js`，面板进 `tunePanel.js`。
 16. **改了 `src/` 就跑 `npm run check`，只整理结构还要 `npm run record` 前后逐行相同。** 出了新的错，修的同时在 `checks/check.mjs` 加一项。它们判断不了手感和观感，那要真机。见 `docs/CONVENTIONS.md` 第 7 节。
 

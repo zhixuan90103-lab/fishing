@@ -37,7 +37,7 @@ import { between, toward } from './maths.js';
 import { createReelClick } from './reelClick.js';
 import { createScoop } from './scoop.js';
 import { createSnap } from './snap.js';
-import { createStrain, handHolds } from './strain.js';
+import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { createTipWeight, dryness } from './tipWeight.js';
 import { steerToLure, touching } from './visit.js';
@@ -409,9 +409,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       }
       bolting = fight.running;
       tension = line.tension;
-      // What the hand holds is what the line carries: the fish's pull and the drawing of
-      // it in, as far as the reel and the finger on it pass that on.
-      holding = handHolds(fight.draws(haul.speed), RUN_OUT_AT, led.against, snap.press);
+      // What the hand holds is the pull on the rod, read off the rod.
+      holding = tension;
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       wound = taken;
