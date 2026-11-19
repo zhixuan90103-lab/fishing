@@ -11,8 +11,9 @@
  * The lure is at the rod tip until it is let go, so it leaves at the tip's speed. That is
  * all a cast's strength is: the hand swings the grip, the blank whips, the tip carries
  * the lure, and the speed it has at the release is the speed the lure flies off at. No
- * table stands between the swing and the distance. Only how fast counts: the direction
- * and the angle it leaves at are fixed, the view's and LAUNCH_ANGLE.
+ * table stands between the swing and the distance. How fast is the tip's own. Which way
+ * is the view's, fixed. How high it leaves goes by how high the rod is when it lets go:
+ * stopped high, the lure is lobbed, followed through low, it is driven flat.
  *
  * The lure does not leave a tip that is still speeding up. The blank loads before it
  * throws: the hand is half way through its swing before the tip has got going, and a
@@ -41,8 +42,16 @@ export const SPEED_MIN = 4.6;
 const CARRY = 0.8;
 // The furthest a cast goes, metres: the most this lure and line will carry.
 export const REACH_MAX = 28;
-// The tip speed that throws that far, m/s.
+// The tip speed that throws that far at the usual angle, m/s.
 export const SPEED_FULL = Math.sqrt((REACH_MAX * GRAVITY) / (CARRY * Math.sin(2 * LAUNCH_ANGLE)));
+// The angle the lure leaves at goes by how high the phone is aiming the rod as it lets
+// go, degrees: at LEVEL_AIM it is the usual LAUNCH_ANGLE, and each degree the aim is
+// above or below that adds or takes this many degrees, between LOWEST and HIGHEST. A
+// rod stopped high lobs it, one followed through low drives it flat and a little short.
+const LEVEL_AIM = -5;
+const ANGLE_PER_AIM = 0.6;
+const LOWEST = 12;
+const HIGHEST = 50;
 
 export function createSwing() {
   const trail = { x: 0, y: 0, z: 0 };
@@ -95,8 +104,19 @@ export function createSwing() {
   return swing;
 }
 
-// How far a lure let go at this speed flies, metres from under the tip. 0: not a cast.
-export function castReach(speed) {
+// The angle a lure leaves at, radians above level, with the phone aiming the rod this
+// high, degrees. It eases into its lowest and highest, it does not hit them.
+export function launchAngle(aimPitch) {
+  const usual = LAUNCH_ANGLE * 180 / Math.PI;
+  const mid = (LOWEST + HIGHEST) / 2;
+  const half = (HIGHEST - LOWEST) / 2;
+  const wanted = usual + (aimPitch - LEVEL_AIM) * ANGLE_PER_AIM;
+  return (mid + half * Math.tanh((wanted - mid) / half)) * Math.PI / 180;
+}
+
+// How far a lure let go at this speed and this angle flies, metres from under the tip.
+// 0: not a cast.
+export function castReach(speed, angle = LAUNCH_ANGLE) {
   if (speed < SPEED_MIN) return 0;
-  return Math.min(REACH_MAX, (CARRY * speed * speed * Math.sin(2 * LAUNCH_ANGLE)) / GRAVITY);
+  return Math.min(REACH_MAX, (CARRY * speed * speed * Math.sin(2 * angle)) / GRAVITY);
 }

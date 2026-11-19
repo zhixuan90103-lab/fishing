@@ -38,7 +38,7 @@ import { FISH_READOUT, createCatch } from './catch.js';
 import { STOW_LENGTH, createLineOut } from './lineOut.js';
 import { createLooseLine } from './looseLine.js';
 import { createRetrieve } from './retrieve.js';
-import { SPEED_FULL, SPEED_MIN, castReach, createSwing } from './swing.js';
+import { SPEED_FULL, SPEED_MIN, castReach, createSwing, launchAngle } from './swing.js';
 
 // Once the lure is this close to under the tip, level metres, the line lifts it out of
 // the water and it hangs.
@@ -82,6 +82,8 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // ready: how fast the rod tip is carrying the lure now, and at the last release, m/s.
   let swung = 0;
   let released = 0;
+  // The angle the last cast left at, degrees above level.
+  let lobbed = 0;
   // ready: seconds since the finger came up with the lure not yet gone, or -1. And the
   // tip's speed a frame ago, to tell whether it is still rising.
   let leaving = -1;
@@ -123,7 +125,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     retrieve.reset();
   }
 
-  function toFlight(reach, forwardX, forwardZ) {
+  function toFlight(reach, forwardX, forwardZ, angle) {
     stage = 'flight';
     stopped = false;
     // The view goes straight to where the lure is going to land and stays there. It does
@@ -133,7 +135,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     spot.z = move.z + forwardZ * reach;
     homeX = forwardX;
     homeZ = forwardZ;
-    move.launch(reach, forwardX, forwardZ);
+    move.launch(reach, forwardX, forwardZ, angle);
   }
 
   // The line comes straight by itself from here, quickly but not in one frame. A press
@@ -210,11 +212,15 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
         released = input.sensor
           ? peak
           : SPEED_MIN + (SPEED_FULL - SPEED_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
-        const reach = castReach(released);
+        // How high it leaves goes by how high the rod is as it lets go. Without a
+        // sensor the rod cannot be raised: the usual angle.
+        const angle = input.sensor ? launchAngle(input.aimPitch) : undefined;
+        const reach = castReach(released, angle);
         leaving = -1;
         heldFor = 0;
         if (reach > 0) {
-          toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw));
+          lobbed = angle === undefined ? 28 : angle * 180 / Math.PI;
+          toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw), angle);
           return;
         }
       }
@@ -326,6 +332,10 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     },
     get lastRelease() {
       return released;
+    },
+    // The angle the last cast left at, degrees above level.
+    get lastAngle() {
+      return lobbed;
     },
     // Where the lure is and how it is moving. Read only.
     lure: move,

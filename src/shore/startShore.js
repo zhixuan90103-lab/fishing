@@ -400,7 +400,7 @@ export async function startShore(container, hooks = {}) {
       if (tuneUi.open && readoutIn <= 0) {
         readoutIn = READOUT_EVERY;
         tuneUi.setCast(
-          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 竿尖 ${fishing.swing.toFixed(1)} 米/秒 · 上次松手 ${fishing.lastRelease.toFixed(1)} 米/秒`
+          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 竿尖 ${fishing.swing.toFixed(1)} 米/秒 · 上次松手 ${fishing.lastRelease.toFixed(1)} 米/秒 仰角 ${Math.round(fishing.lastAngle)}°`
             + ` · 鱼 ${fishing.fish} ${fishing.mood}${fishing.size ? ` ${fishing.big ? '大' : '小'} ${fishing.size.toFixed(2)}` : ''} · 张力 ${fishing.tension.toFixed(1)} 牛 · 鱼的力 ${fishing.pull.toFixed(1)} 牛 · 硬顶 ${fishing.press.toFixed(1)} 牛 · 手上 ${Math.round(fishing.effort * 100)} · 出线 ${fishing.running.toFixed(1)} 米/秒 · 气力 ${Math.round(fishing.stamina * 100)} · 钓到 ${fishing.landed}${fishing.lost ? ` · ${fishing.lost}` : ''}`,
         );
       }

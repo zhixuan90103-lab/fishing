@@ -172,7 +172,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
   };
   const fishing = createFishing({ rod, line, lure, splash, school: noSchool ? null : school, net, haptics, random });
-  const input = { finger: false, sensor, viewYaw, aimPitch: 0 };
+  const input = { finger: false, sensor, viewYaw, aimPitch: lift - 30 };
   let time = 0;
   let frame = 0;
   let begun = false;
@@ -183,7 +183,8 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
 
   const rig = {
     fishing, flock, fishes, rod, line, events, rodState, lureSeen, dt,
-    setLift(d) { grip.setAim(d - 20, 0, 0); },
+    // The rod raised d degrees: the phone aims it 30 below that, as ROD_POSE mounts it.
+    setLift(d) { grip.setAim(d - 20, 0, 0); input.aimPitch = d - 30; },
     get time() { return time; },
     get strain() { return strain; },
     get tipTurn() { return rod.tipTurn; },
