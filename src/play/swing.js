@@ -14,6 +14,11 @@
  * table stands between the swing and the distance. Only how fast counts: the direction
  * and the angle it leaves at are fixed, the view's and LAUNCH_ANGLE.
  *
+ * The lure does not leave a tip that is still speeding up. The blank loads before it
+ * throws: the hand is half way through its swing before the tip has got going, and a
+ * finger lifted then would let the lure go at next to nothing. So the caller holds the
+ * lure at the tip until the tip's speed has stopped rising (fishing.js), and reads it then.
+ *
  * The speed is not a difference of two frames. A point chases the tip, and how far it
  * trails is the speed: steady, and the same at any frame rate.
  */
@@ -45,11 +50,15 @@ export function createSwing() {
   let best = 0;
   let started = false;
 
-  return {
+  const swing = {
+    // How fast the tip is going this way right now, m/s, by the same reading.
+    speed: 0,
+
     // Forget the swing so far. The next step starts from rest wherever the tip is.
     reset() {
       started = false;
       best = 0;
+      swing.speed = 0;
     },
 
     /**
@@ -78,11 +87,12 @@ export function createSwing() {
       const lx = tip.x - trail.x;
       const ly = tip.y - trail.y;
       const lz = tip.z - trail.z;
-      const speed = lx * aheadX + lz * aheadZ > 0 ? TRAIL_RATE * Math.hypot(lx, ly, lz) : 0;
-      best = Math.max(speed, best * Math.exp(-BEST_FADE * dt));
+      swing.speed = lx * aheadX + lz * aheadZ > 0 ? TRAIL_RATE * Math.hypot(lx, ly, lz) : 0;
+      best = Math.max(swing.speed, best * Math.exp(-BEST_FADE * dt));
       return best;
     },
   };
+  return swing;
 }
 
 // How far a lure let go at this speed flies, metres from under the tip. 0: not a cast.

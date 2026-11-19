@@ -135,6 +135,13 @@ check('cast: the lure flies off as fast as the rod tip was carrying it, so a har
     const at = [20, 60, 120].map((fps) => cast(fps, rate).reach);
     expect(Math.max(...at) - Math.min(...at) < 1.5, `${rate}°/s: it lands in the same place at 20, 60 and 120 frames a second`, at.map((r) => r.toFixed(1)).join(' / '));
   }
+  // The finger lifted early in the swing: the blank has not let go yet, and the lure waits for it.
+  // Ten tries on a phone threw nothing, every one let go before the tip had got going.
+  for (const part of [0.1, 0.25, 0.5, 0.75]) {
+    const early = cast(60, 400, (60 / 400) * (part - 1));
+    expect(Math.abs(early.reach - reach[2]) < 1.5, `let go ${part * 100}% of the way through the swing, it is the same cast`, `${early.reach.toFixed(1)} m against ${reach[2].toFixed(1)} m`);
+  }
+  expect(cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach > 8, 'a quick flick let go almost at once is still a cast', `${cast(60, 600, (40 / 600) * (0.25 - 1), 40).reach.toFixed(1)} m`);
   expect(cast(60, 400, 0.1).reach > 9, 'let go a tenth of a second late, it is still a fair cast', `${cast(60, 400, 0.1).reach.toFixed(1)} m`);
   expect(cast(60, 400, 0.02, 30).reach < reach[2] * 0.6, 'a short stab of the wrist does not get the tip up to speed', `${cast(60, 400, 0.02, 30).reach.toFixed(1)} m`);
 });

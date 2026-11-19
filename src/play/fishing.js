@@ -46,6 +46,12 @@ const LIFT_WITHIN = 1.6;
 // A lure hitting the water this fast makes the biggest splash, m/s. A stopped cast that
 // just drops in makes a smaller one.
 const SPLASH_FULL = 14;
+// A finger lifted while the rod tip is still speeding up: the lure stays on the tip until
+// the tip is at its fastest, and no longer than this, s.
+const LEAVES_WITHIN = 0.3;
+// And for this long, s, it stays whether the tip has started to speed up or not: a finger
+// lifted at the very start of a swing is ahead of the blank, which has yet to move.
+const LEAVES_AFTER = 0.1;
 // Desktop stand-in only, no motion sensor: holding this long counts as a full swing, s.
 const DESK_FULL_HOLD = 1;
 
@@ -76,6 +82,13 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // ready: how fast the rod tip is carrying the lure now, and at the last release, m/s.
   let swung = 0;
   let released = 0;
+  // ready: seconds since the finger came up with the lure not yet gone, or -1. And the
+  // tip's speed a frame ago, to tell whether it is still rising.
+  let leaving = -1;
+  let rising = 0;
+  // ready: the best the tip has read since the finger came up. Waiting for the tip must
+  // not cost the cast anything.
+  let peak = 0;
   // flight: the line has been stopped.
   let stopped = false;
   // water: the finger has been up since landing, and the lure has left the water.
@@ -105,6 +118,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
     fresh = false;
     down = false;
     heldFor = 0;
+    leaving = -1;
     swing.reset();
     retrieve.reset();
   }
@@ -179,20 +193,33 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
       if (!input.finger) fresh = true;
     } else if (input.finger) {
       down = true;
+      leaving = -1;
       heldFor += dt;
-    } else if (down) {
-      // Released. With a sensor the swing decides. Without one the hold time stands in.
-      released = input.sensor
-        ? swung
-        : SPEED_MIN + (SPEED_FULL - SPEED_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
-      const reach = castReach(released);
+    } else if (down || leaving >= 0) {
+      // The finger is up. The lure does not leave a tip that is still speeding up: the
+      // blank is still loading, and the throw is the moment it lets go.
+      if (down) {
+        leaving = 0;
+        peak = 0;
+      }
       down = false;
-      heldFor = 0;
-      if (reach > 0) {
-        toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw));
-        return;
+      leaving += dt;
+      peak = Math.max(peak, swung);
+      if (!(input.sensor && (swing.speed > rising || leaving < LEAVES_AFTER) && leaving < LEAVES_WITHIN)) {
+        // Gone. With a sensor the tip's speed decides. Without one the hold time stands in.
+        released = input.sensor
+          ? peak
+          : SPEED_MIN + (SPEED_FULL - SPEED_MIN) * Math.min(1, heldFor / DESK_FULL_HOLD);
+        const reach = castReach(released);
+        leaving = -1;
+        heldFor = 0;
+        if (reach > 0) {
+          toFlight(reach, Math.sin(input.viewYaw), Math.cos(input.viewYaw));
+          return;
+        }
       }
     }
+    rising = swing.speed;
     // Held at the tip, not hanging from it: a swing must not set it swinging. This is the
     // tip of last frame, good enough to launch from. follow() puts it on this frame's.
     move.hold(tip.x, tip.y - STOW_LENGTH, tip.z);
