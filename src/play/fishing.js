@@ -63,7 +63,7 @@ const DESK_FULL_HOLD = 1;
  * Call begin() once after the line's first update. Then every frame, after the school has
  * moved: update() before the phone and the rod, and follow() after the line's update.
  */
-export function createFishing({ rod, line, lure, splash, school = null, net = null, haptics = null, random = Math.random }) {
+export function createFishing({ rod, line, lure, splash, churn = null, school = null, net = null, haptics = null, random = Math.random }) {
   const move = createLureMove();
   const out = createLineOut();
   const retrieve = createRetrieve();
@@ -109,7 +109,7 @@ export function createFishing({ rod, line, lure, splash, school = null, net = nu
   // How the last fish was lost in this cast: '', 'broke' or 'spooled'.
   let lost = '';
   // The fish's half of the cast. It is handed the lure's motion and the line out.
-  const fish = createCatch({ rod, line, splash, school, net, haptics, random, move, out });
+  const fish = createCatch({ rod, line, splash, churn, school, net, haptics, random, move, out });
 
   function toReady() {
     stage = 'ready';

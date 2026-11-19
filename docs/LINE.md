@@ -148,6 +148,7 @@
 | `slack`、`length` | 余线和放出的长度，米 |
 | `tension` | 线拉竿尖的力，牛。松着时是 0 |
 | `tip`、`end` | 竿尖和远端的世界位置。饵、水花、涟漪从这里取位置 |
+| `entry`、`wet` | 线从空中进到水里的那一点（在静水面上），和现在有没有这一点。`update` 之后读。线只报这个点，它在水面上划出的纹是水纹自己的事，见 [SPLASH.md](./SPLASH.md) 第 8 节 |
 
 调节量在 `line.js` 顶部：`HANG_POINTS`（竿尖到远端画多少段，也是模拟的点数）、`COLOR`、`OPACITY`、`STRETCH_FORCE`、`STIFFEST`。
 

@@ -12,6 +12,7 @@
  */
 const SRC = process.env.SRC || new URL('../src', import.meta.url).pathname;
 const { createFishing } = await import(`${SRC}/play/fishing.js`);
+const { createWakeTrack } = await import(`${SRC}/shore/wakeTrack.js`);
 const { createFlock } = await import(`${SRC}/fish/flock.js`);
 const { createRodFlex } = await import(`${SRC}/shore/rodFlex.js`);
 const { createRodHold } = await import(`${SRC}/shore/rodHold.js`);
@@ -176,7 +177,9 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     notification(type) { events.push({ t: time, kind: 'notify', type }); },
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
   };
-  const fishing = createFishing({ rod, line, lure, splash, school: noSchool ? null : school, net, haptics, random });
+  // The real reading of a fish churning the water; only the drawing is left out.
+  const churn = createWakeTrack(48, seeded(seed + 77));
+  const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random });
   const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, aimPitch: lift - 30 };
   let time = 0;
   let frame = 0;
@@ -187,7 +190,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   const cam = { x: tune.x, z: tune.z, yaw: viewYaw, fov: 55, aspect: 390 / 844 };
 
   const rig = {
-    fishing, flock, fishes, rod, line, events, rodState, lureSeen, dt,
+    fishing, flock, fishes, rod, line, churn, events, rodState, lureSeen, dt,
     // The rod raised d degrees: the phone aims it 30 below that, as ROD_POSE mounts it.
     setLift(d) { grip.setAim(d - 20, 0, 0); input.aimPitch = d - 30; },
     get time() { return time; },

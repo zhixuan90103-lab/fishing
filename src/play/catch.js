@@ -28,7 +28,7 @@
 
 import { createCourse } from './course.js';
 import { createFight } from './fight.js';
-import { HARDEST_RUN, drawNature, fishOf } from './fishKind.js';
+import { drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
 import { between, toward } from './maths.js';
@@ -51,12 +51,16 @@ const SPECIES = 'dorade';
 const COME_AFTER = [1.5, 4];
 // The most line a fish can take, m. With this much out the reel gives no more.
 const SPOOL = 70;
-// A fresh fish bolting near the top boils the water: a splash where it is, this strong at
-// full stamina for the hardest-pulling fish there is and less for a weaker one, and none
-// once its stamina is below BOIL_ABOVE or it is deeper than BOIL_WITHIN, m.
-const BOIL_SPLASH = 0.7;
-const BOIL_ABOVE = 0.2;
-const BOIL_WITHIN = -1;
+// A fish pulling near the top churns the water where it is: all of what its speed makes
+// at CHURN_TOP, m, and none of it deeper than CHURN_DEEP, and of that the share of its
+// freshest pull it is putting out now: it is the beating tail that throws water, and a
+// fish towed in limp throws next to none. There is no splash for the start of a run:
+// a fish that bolts near the top is fast and pulling, and that is the churn.
+// Tried without the share of its pull: a resting fish drawn in near the top showed as
+// much as a running one.
+// What it looks like is the wake's (src/shore/wakeTrack.js). churn: that wake's track.
+const CHURN_TOP = -0.5;
+const CHURN_DEEP = -2;
 // While a fish is on, the point the view watches follows it at this rate, 1/s. Low, so
 // the view drifts after the fish and does not swing with every turn it makes.
 const WATCH_FOLLOW = 1.2;
@@ -86,7 +90,7 @@ const NET_NEARER = 0.45;
  * move: the lure's motion. out: the line out. Both are fishing.js's, shared: while a
  * fish is on, this file says where the lure is and how long the line.
  */
-export function createCatch({ rod, line, splash, school, net, haptics, random, move, out }) {
+export function createCatch({ rod, line, splash, churn = null, school, net, haptics, random, move, out }) {
   const haul = createHaul();
   const fight = createFight(random);
   const course = createCourse(random);
@@ -397,11 +401,9 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
       const shake = thump.step(dt, fight.running, fight.stamina);
       if (shake) haptics?.playTransient(shake.intensity, shake.sharpness);
       school.mouth(hooked, mouth);
-      // It bolts: the water boils where it was lying.
-      if (fight.running && !bolting && fight.stamina > BOIL_ABOVE && mouth.y > BOIL_WITHIN) {
-        splash.burst(mouth.x, mouth.z, BOIL_SPLASH * fight.stamina * kind.runFresh / HARDEST_RUN);
-      }
       bolting = fight.running;
+      // Near the top and pulling, it churns the water, pointing the way it goes.
+      if (churn) churn.follow(dt, mouth.x, mouth.z, Math.min(1, Math.max(0, (mouth.y - CHURN_DEEP) / (CHURN_TOP - CHURN_DEEP))) * Math.min(1, fight.force / kind.runFresh));
       tension = line.tension;
       // What the hand holds is the pull on the rod, read off the rod.
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
@@ -475,6 +477,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     // working follows what it holds, and that is the line's pull on the rod, fish or no
     // fish, in the water or hanging from the tip.
     carry(dt) {
+      // With no fish being fought there is nothing to churn the water.
+      if (churn && !(hooked && !hung)) churn.lift(dt);
       strain.step(dt, line.tension);
       if (strain.effort !== toldEffort) {
         toldEffort = strain.effort;

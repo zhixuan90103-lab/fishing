@@ -27,6 +27,7 @@
 | 鱼线 | `setEnd`（远端是一个地方）或 `carry`（远端是挂在线上的重物）、`setLength` / `tighten`、`stow`、`setTied` | `slack`、`tension`、`stiffness`、`tip`、`end` | [LINE.md](./LINE.md) 第 4 节 |
 | 饵 | `lureMove` 的 `hold` / `launch` / `fly` / `tow` / `point`，在鱼嘴里时 `place`，出了水交给线带着并用 `weigh` 说钩上有多重；`lure.place`；线上没有饵了 `lure.show(false)` | 位置、速度、鼻尖朝向、`swum`、`impact` | [LURE.md](./LURE.md) 第 5 节 |
 | 水花 | `burst(x, z, 力度)` | — | [SPLASH.md](./SPLASH.md) 第 5 节 |
+| 水纹 | `track.follow(dt, x, z, 几成)`、`track.lift(dt)`。线的那一个不归玩法，`startShore` 直接接 `line.entry` | — | [SPLASH.md](./SPLASH.md) 第 8 节 |
 | 抄网 | `place(x, y, z, 柄的方向, 网兜拉多长, 晃多少)`、`hide()`；路径是玩法这边的 `scoop.js` | — | [NET.md](./NET.md) 第 5 节 |
 | 手机瞄准 | 玩法报出 `fishing.watch`（要镜头看着的点）和 `fishing.watchRod`（看的时候要不要把竿留在画面里） | 瞄准的俯仰 | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
 | 震动 | `haptics.impact`、`notification`、`playTransient`。哪一下在哪震见 [PLAY.md](./PLAY.md) 第 11 节 | — | [HAPTICS.md](./HAPTICS.md) |
@@ -172,7 +173,7 @@
 | 玩法 | 饵这一半：`swing`（甩多用力）、`retrieve`（收多快）、`lineOut`（线放出多长）、`looseLine`（没有东西在收的线：让、跟、搭）→ `fishing`（这一竿走到哪）。鱼这一半：`fishKind`（这条鱼是什么样）、`visit`（鱼怎么游向饵）、`fight`（钩住的鱼用多大力、相对线往外还是往里）、`course`（这一冲往哪边去）、`haul`（顶着鱼收多快、出多少线）、`snap`（硬顶叠多少力、线断不断）、`thump`（甩头把线顿多重）、`strain`（手多吃力）、`reelClick`（手里咔不咔）、`tipWeight`（鱼压竿多重）、`kick`（鱼甩多用力）、`scoop`（抄网走到哪）→ `catch`。`fishing` 驱动 `catch`，两个都 → 物料的口子 |
 | 手机瞄准 | `phoneLook`（读姿态）→ `aim`（镜头追什么，剩下的给竿；`handLag` 说逆着线的力手欠多少）→ 镜头，以及 `rodHold`（握）；`startShore` 的 `applyPhone` 串一帧 |
 
-- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下（含 `hung.js`）、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`splashBurst.js`、`phoneLook.js`、`aim.js`、`handLag.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
+- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下（含 `hung.js`）、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`splashBurst.js`、`wakeTrack.js`、`phoneLook.js`、`aim.js`、`handLag.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
 - **玩法也分"只算数的"和"接线的"。** `swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`visit`、`fight`、`course`、`haul`、`snap`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop` 各回答一个问题，互相不知道对方，也不认识物料。认识物料的只有两个：`fishing.js` 管饵这一半和整竿走到哪一段，`catch.js` 管鱼这一半。新的规则先想它回答的是哪个问题，写成新的只算数的文件，再到这两个里接：没有鱼时的事进前者，鱼的事进后者。接线的文件长了，先看是不是里面混着一段该单独回答的问题。
 - **位置和朝向分开放。** 一样东西在哪、怎么动是一问，它朝哪是另一问。朝向的规矩多起来（摆、翻、不许翻面）就单独成文件：`lurePose.js`、`rodHand.js`、`hung.js`。
 - **松紧、快慢这类状态不许被告知，也不许按时间走。** 一样东西有多松、多快变紧，要是有原因的：什么事留下的，什么力带走的。给它一个开关再配一个固定的快慢，不管调成多少，看着都是规则限制出来的，而且从一种样子到另一种没有过程。鱼线试过四种这样的做法，都被否了（[LINE.md](./LINE.md) 第 3 节"试过不行的"）。

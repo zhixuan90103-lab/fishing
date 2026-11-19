@@ -83,6 +83,9 @@ export function createFishingLine(rod) {
   const path = Array.from({ length: stops }, () => new THREE.Vector3());
   const tip = new THREE.Vector3();
   const end = new THREE.Vector3();
+  // Where the line goes into the water, and whether it does.
+  const entry = new THREE.Vector3();
+  let wet = false;
   let length = 0;
   let slack = 0;
   // tighten() asks for the length to be taken from the gap. That needs the tip, so it
@@ -102,6 +105,12 @@ export function createFishingLine(rod) {
     // World space. tip is where the line leaves the rod. Both valid after update().
     tip,
     end,
+    // Where the line goes into the water, world space, on the still surface. Only good
+    // while `wet` is true: the line runs from the air down into the water. After update().
+    entry,
+    get wet() {
+      return wet;
+    },
     // Line out past the tip, metres.
     get length() {
       return length;
@@ -183,6 +192,15 @@ export function createFishingLine(rod) {
       if (stowed !== null) curve.reset();
       slack = curve.step(dt, tip.x, tip.y, tip.z, end.x, end.y, end.z, length, tied ? rod.tipTension : 0, hang, 0);
       positions.set(hang, hangAt);
+      wet = false;
+      for (let i = 1; i <= HANG_POINTS && !wet; i += 1) {
+        const a = hang[i * 3 - 2];
+        const b = hang[i * 3 + 1];
+        if (!(a > 0 && b <= 0)) continue;
+        const t = a / (a - b);
+        entry.set(hang[i * 3 - 3] + (hang[i * 3] - hang[i * 3 - 3]) * t, 0, hang[i * 3 - 1] + (hang[i * 3 + 2] - hang[i * 3 - 1]) * t);
+        wet = true;
+      }
       for (let i = 0; i < stops + HANG_POINTS; i += 1) {
         const depth = -positions[i * 3 + 1];
         shade[i * 4 + 3] = depth > 0 ? Math.exp(-depth / FADE_DEPTH) : 1;

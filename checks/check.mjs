@@ -20,6 +20,7 @@ import { SPEED_FULL, SPEED_MIN, castReach } from '../src/play/swing.js';
 import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
+import { createWakeTrack } from '../src/shore/wakeTrack.js';
 import { createSnap } from '../src/play/snap.js';
 import { drawNature, fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
 import { RUN_OUT_AT } from '../src/play/haul.js';
@@ -793,6 +794,52 @@ check('fight: a run beats the tail wide and fast all the way through, a rest goe
     expect(mean(run) > 0.9, `size ${size}: well into a run its tail still beats wider than cruising (0.55)`, mean(run).toFixed(2));
     expect(Math.min(...stroke) > 0.7, `size ${size}: and at least twice as fast as cruising (0.35 m/s)`, Math.min(...stroke).toFixed(2));
     expect(mean(rest) < 0.4, `size ${size}: resting, it barely beats`, mean(rest).toFixed(2));
+  }
+});
+
+check('wake: it is as strong as the thing is fast, points the way it goes, and nobody turns it on', () => {
+  // Led along the surface at a steady speed for long enough to settle.
+  const led = (speed, fps, share = 1) => {
+    const w = createWakeTrack(32, seeded(5)); const dt = 1 / fps; let thrown = 0;
+    for (let t = 0; t < 3; t += dt) { w.follow(dt, 2 + speed * t * 0.6, -5 + speed * t * 0.8, share); thrown = Math.max(thrown, w.drops.filter((d) => d.left > 0).length); }
+    return { w, thrown, dt };
+  };
+  const slow = led(0.2, 60);
+  expect(slow.w.strength < 0.01 && slow.thrown === 0, 'too slow to cut the water, there is no wake and no spray', `${slow.w.strength.toFixed(3)} / ${slow.thrown}`);
+  const mid = led(0.9, 60);
+  expect(mid.w.strength > 0.15 && mid.w.strength < 0.5 && mid.thrown === 0, 'a middling speed makes a wake but throws no spray', `${mid.w.strength.toFixed(2)} / ${mid.thrown}`);
+  const fast = led(3, 60);
+  expect(fast.w.strength > 0.95 && fast.thrown > 3, 'fast, the wake is full and it throws spray', `${fast.w.strength.toFixed(2)} / ${fast.thrown}`);
+  expect(Math.abs(fast.w.dirX - 0.6) < 0.01 && Math.abs(fast.w.dirZ - 0.8) < 0.01, 'it points the way the thing is going', `${fast.w.dirX.toFixed(2)}, ${fast.w.dirZ.toFixed(2)}`);
+  expect(led(3, 60, 0.25).w.strength < 0.27, 'a thing deep down makes only its share of it');
+  // The same at any frame rate.
+  const coarse = led(1.5, 20), fine = led(1.5, 120);
+  expect(Math.abs(coarse.w.speed - 1.5) < 0.05 && Math.abs(fine.w.speed - 1.5) < 0.05, 'the speed it reads is the speed, at 20 and at 120 frames a second', `${coarse.w.speed.toFixed(2)} / ${fine.w.speed.toFixed(2)}`);
+  expect(Math.abs(coarse.w.strength - fine.w.strength) < 0.02, 'and the wake is as strong', `${coarse.w.strength.toFixed(2)} / ${fine.w.strength.toFixed(2)}`);
+  // Stopped, it dies away by itself; lifted off the surface, the same.
+  for (let t = 0; t < 2.5; t += fast.dt) fast.w.follow(fast.dt, fast.w.x, fast.w.z);
+  expect(fast.w.strength < 0.01, 'stopped, it has died away', fast.w.strength.toFixed(3));
+  const up = led(3, 60).w;
+  for (let t = 0; t < 2.5; t += 1 / 60) up.lift(1 / 60);
+  expect(up.strength < 0.01 && up.drops.every((d) => !(d.left > 0)), 'off the surface, it and its spray are gone');
+});
+
+check('wake: a fish churns the water only while it is being fought, and not from deep down', () => {
+  for (const size of [0.85, 1.3]) {
+    let before = 0, deep = 0, most = 0, after = 0, landedAt = -1;
+    const r = fightOne({ seed: 3, fps: 60, press: 'rests', size, seconds: 120, each: (rig) => {
+      const f = rig.fishing; const c = rig.churn;
+      const drops = c.drops.filter((d) => d.left > 0).length;
+      if (f.stage === 'fight') { most = Math.max(most, c.strength); if (f.lure.y < -2.2) deep = Math.max(deep, c.strength); }
+      else if (landedAt < 0 && f.stage !== 'landed') before = Math.max(before, c.strength + drops);
+      if (f.stage === 'landed' && landedAt < 0) landedAt = rig.time;
+      if (landedAt >= 0 && rig.time > landedAt + 2.5) after = Math.max(after, c.strength + drops);
+    } });
+    expect(r.sawFight, `size ${size}: there was a fight`);
+    expect(before === 0, `size ${size}: nothing before a fish is on`, before.toFixed(3));
+    expect(most > 0.05, `size ${size}: fought near the top, it shows`, most.toFixed(2));
+    expect(deep < 0.05, `size ${size}: from more than two metres down it does not`, deep.toFixed(3));
+    expect(after < 0.01, `size ${size}: out of the water it is gone`, after.toFixed(3));
   }
 });
 

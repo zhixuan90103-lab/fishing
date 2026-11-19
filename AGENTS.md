@@ -22,7 +22,7 @@
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js`，朝哪 `src/shore/lurePose.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
-| 水花 | `docs/SPLASH.md`，画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。放在海面上方，不动海面 |
+| 水花和水纹 | `docs/SPLASH.md`。落水的水花：画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
 | 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`visit`、`fight`、`course`、`haul`、`snap`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
@@ -98,7 +98,7 @@ npm run ios           # sync 并打开 Xcode
 - 抛投的快慢是松手时竿尖的速度，照实；往哪抛、抛多高是手指按下那一刻镜头看的方向，不是竿尖出手的方向，往左右甩不会抛偏。线挡不开合：松手算线挡开着、按住算关上，只在规则里，模型上看不出来。
 - 饵的重量不压竿，落水以后水面上读不出饵在哪，远处的饵只有几个像素。见 `docs/LURE.md` 第 6 节。
 - 竿的软硬已经按鱼的力定过一次（`docs/ROD.md` 第 4 节的转角表）。出线点、断开点或者鱼的力再改时，要回来对这张表。竿放得低、鱼又远时，再大的力也只多弯一点。
-- 气泡、咬口涟漪、水面上真正的涟漪。落水的水花已有，同时只能放一次，见 `docs/SPLASH.md` 第 6 节。
+- 气泡、咬口涟漪、水面上真正的涟漪。落水的水花已有，同时只能放一次；线切水和鱼近水面的水纹已有，没在真机上看过，见 `docs/SPLASH.md` 第 6、8 节。
 - 音效。按 `docs/AUDIO.md`，禁止热路径 `new Audio()`。震动已经有几处（钩住、甩头的顿、出线和收线的咔咔、线断、到身边、出水、落网），表在 `docs/PLAY.md` 第 11 节，轻重都没在真机上试过。
 - 鱼出水、入网时水面和网的细节：水花同时只能放一次，网兜是整体拉长的，没有拿网的手。见 `docs/SPLASH.md` 第 6 节和 `docs/NET.md` 第 6 节。
 - Android。

@@ -15,6 +15,7 @@ import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
 import { createLure } from './lure.js';
 import { createSplash } from './splash.js';
+import { createWake } from './wake.js';
 import { createNet } from './net.js';
 import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
@@ -257,11 +258,16 @@ export async function startShore(container, hooks = {}) {
   const onWater = new THREE.Scene();
   const splash = createSplash();
   onWater.add(splash.object);
+  // The line cutting the water where it goes in, and a fish churning it near the top.
+  const lineWake = createWake(1);
+  const fishWake = createWake(2.6, 48);
+  onWater.add(lineWake.object);
+  onWater.add(fishWake.object);
   // The cast: it alone says where the line ends, how much is out, where the view looks
   // and which fish is on the line.
   const net = createNet();
   scene.add(net.object);
-  const fishing = createFishing({ rod, line, lure, splash, school: shoreSchool, net, haptics });
+  const fishing = createFishing({ rod, line, lure, splash, churn: fishWake.track, school: shoreSchool, net, haptics });
   let fishingBegun = false;
   // The panel's cast readout is refreshed every this many frames.
   const READOUT_EVERY = 6;
@@ -393,6 +399,11 @@ export async function startShore(container, hooks = {}) {
     line.update(dt);
     splash.seenFrom(camera.position);
     splash.update(dt);
+    // The line makes its own wake, by how fast the place it goes in is moving. Nobody tells it to.
+    if (line.wet) lineWake.track.follow(dt, line.entry.x, line.entry.z);
+    else lineWake.track.lift(dt);
+    lineWake.update();
+    fishWake.update();
     if (fishingBegun) {
       fishing.follow();
       if (fishing.lost !== lostSeen) {
@@ -477,6 +488,8 @@ export async function startShore(container, hooks = {}) {
       notice.remove();
       finger.dispose();
       splash.dispose();
+      lineWake.dispose();
+      fishWake.dispose();
       net.dispose();
       lure.dispose();
       line.dispose();
