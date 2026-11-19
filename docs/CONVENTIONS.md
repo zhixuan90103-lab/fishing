@@ -330,6 +330,8 @@
 | [ENTRYPOINTS.md](./ENTRYPOINTS.md) | 启动链、每帧的顺序，"要改什么找哪个文件" |
 | [FISHING-REQUIREMENTS.md](./FISHING-REQUIREMENTS.md) | 这一竿的规则。唯一的玩法真源 |
 | [CHAIN.md](./CHAIN.md) | 因果链：力和运动从手经竿、渔轮、线到线头上的东西怎么传。设计，还没按它重构；分段和待定的事都在里面 |
+| [FISH-RUN.md](./FISH-RUN.md) | 钩住的鱼怎么跑：设计，还没改代码。做完以后并进 PLAY.md 第 8 节 |
+| [ROCKSTAR-FISHING.md](./ROCKSTAR-FISHING.md) | 《荒野大镖客 2》和 GTA 6 里钓鱼的检索纪要，不是规格 |
 | [PLAY.md](./PLAY.md) | 玩法层的设计：每个文件回答什么，规则怎么落到代码上，和物料怎么接，量出来的数，先填的数字，和需求的出入 |
 | [FISHING-FEEL.md](./FISHING-FEEL.md)、[FISHING-RESEARCH.md](./FISHING-RESEARCH.md)、[LURE-FIGHT-RESEARCH.md](./LURE-FIGHT-RESEARCH.md) | 参考材料，不是本版范围。最后一份是路亚遛鱼的检索纪要：手上的信号、竿角、泄力、压竿防跳 |
 | [FISH-SCHOOL.md](./FISH-SCHOOL.md) | 鱼群的设计 |

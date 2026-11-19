@@ -226,6 +226,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
       flock.step(dt, 1, ROCKS, cam);
       input.finger = rig.finger();
       input.viewYaw = viewYaw;
+      input.rodYaw = rig.rodStays ? tune.yaw * deg + (rig.rodTurn || 0) : viewYaw;
       // How high the view is said to look, for where a cast is thrown. The rig's own
       // camera stays as it is.
       if (rig.viewPitch !== undefined) input.viewPitch = rig.viewPitch;

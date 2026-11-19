@@ -36,6 +36,7 @@
 | 包名 | `capacitor.config.ts`：`com.wangzhixuan.fishing` |
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
 | 因果链（设计，还没重构） | `docs/CHAIN.md`。力和运动从手经竿、轮、线到线头上的东西怎么传，现在差在哪，分几段改 |
+| 鱼怎么跑（设计，还没改） | `docs/FISH-RUN.md`。鱼往哪跑是它自己的事，我们只能牵制；线拉住时沿弧滑；牵制有回报；看得出它往哪去 |
 | 记下、还没改的手感 | `docs/NOTED.md`。2026-11-19 对过、还没改的那几条 |
 | 《荒野大镖客 2》和 GTA 6 的钓鱼 | `docs/ROCKSTAR-FISHING.md`。检索材料，不是规格 |
 | 规范 | `docs/CONVENTIONS.md` |

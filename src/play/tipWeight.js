@@ -15,8 +15,10 @@
  * Units: metres.
  */
 
-// Still in the water a fish weighs this share of what it does out of it.
-export const SUNK_SHARE = 0.25;
+// Still in the water a fish puts this share of its weight on the line: what the water
+// does not carry, and its hanging back. The same number is what it pulls with when it
+// is doing nothing at all in a fight (fishKind.js).
+export const SUNK_SHARE = 0.45;
 // The weight comes on as the hook rises between these, metres: the fish has some length
 // and leaves the water bit by bit.
 export const DRY_FROM = -0.3;

@@ -18,34 +18,67 @@
  *   size      the body's scale
  *   runFresh  how hard it pulls in a run at full stamina, N
  *   runSpent  and worn out, N
- *   rest      and between runs, N. Never zero: the line stays tight
- *   tire      how fast it tires, against the rates in fight.js. Higher is spent sooner
- *   runFor    how long its runs last, against the times in fight.js
+ *   tire      how fast it tires, against the rate in fight.js. Higher is spent sooner
+ *   burst     how long it can pull flat out against a line that holds it, s: a run's worth
+ *   recover   how long it takes to get that back, hanging on a line that is not drawing it, s
  *   dash      how fast it tears off across the line in a run, fresh, m/s
  *   thump     how hard a shake of its head snatches the line at its peak, fresh, N
  *   beat      seconds between head shakes within a burst, fresh: [shortest, longest]
- *   load      what it weighs on the rod tip once out of the water, kg
+ *   load      what it weighs out of the water, kg. In the water it puts a share of that
+ *             on the line (tipWeight.js), and that is all it pulls with when it is doing
+ *             nothing: `rest`, N, worked out from it and never zero
+ *
+ * No two fish of a size are alike. Each has a nature, drawn once (drawNature) and its own
+ * from then on: how strong, how fast, how lasting, how quick to recover, and how bold.
+ * fishOf() lays it over the table. Nothing in a nature can carry a small fish over the
+ * point where the reel gives line, or any fish over the line's breaking point.
  *
  * The first two rows are the small fish: runFresh stays below the point where the reel
  * gives line (haul.js), so they never take any. The last two are the big ones: fresh,
  * they pull harder than the reel holds, and less than breaks the line (snap.js).
  */
+import { SUNK_SHARE } from './tipWeight.js';
+
 const KINDS = {
   dorade: [
-    { size: 0.78, runFresh: 2.8, runSpent: 1.3, rest: 0.5, tire: 1.9, runFor: 0.55, dash: 2, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
-    { size: 0.95, runFresh: 3.8, runSpent: 1.6, rest: 0.7, tire: 1.6, runFor: 0.65, dash: 2.3, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
-    { size: 1.2, runFresh: 8, runSpent: 2.4, rest: 1.2, tire: 1.1, runFor: 0.95, dash: 3.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
-    { size: 1.4, runFresh: 9.8, runSpent: 2.8, rest: 1.6, tire: 0.9, runFor: 1.1, dash: 3.6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
+    { size: 0.78, runFresh: 2.8, runSpent: 1.3, tire: 1.9, burst: 1.3, recover: 3.2, dash: 2, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
+    { size: 0.95, runFresh: 3.8, runSpent: 1.6, tire: 1.6, burst: 1.5, recover: 3.4, dash: 2.3, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
+    { size: 1.2, runFresh: 8, runSpent: 2.4, tire: 1.1, burst: 1.9, recover: 3.8, dash: 3.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
+    { size: 1.4, runFresh: 9.8, runSpent: 2.8, tire: 0.9, burst: 2.1, recover: 4, dash: 3.6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
   ],
 };
+
+const GRAVITY = 9.81;
+// How far a fish's own nature can carry it from the table, either way, as a share: its
+// strength, its speed, how long it lasts and how fast it recovers.
+const VARIES = 0.15;
+const RECOVERS_VARIES = 0.22;
+// A bold fish bolts again when it has this much of a run back, a placid one waits for
+// this much, as a share of what it can get back at all.
+const GO_BOLD = 0.4;
+const GO_PLACID = 0.85;
+
+// A fish with nothing of its own: the table as it stands.
+const PLAIN = { strength: 1, speed: 1, lasting: 1, recovery: 1, bold: 0.5 };
+
+/**
+ * One fish's own nature, drawn with random(), 0 to 1. strength, speed, lasting and
+ * recovery are shares of the table's figure, about 1. bold is 0, placid, to 1.
+ */
+export function drawNature(random) {
+  const about = (spread) => 1 + (random() * 2 - 1) * spread;
+  return { strength: about(VARIES), speed: about(VARIES), lasting: about(VARIES), recovery: about(RECOVERS_VARIES), bold: random() };
+}
 
 const mix = (a, b, t) => a + (b - a) * t;
 
 /**
- * The fish of this species and body size. Sizes off either end of the table read as the
- * end row. Returns a new object with the columns above, plus kind and size.
+ * The fish of this species and body size, with this nature (drawNature) or none. Sizes
+ * off either end of the table read as the end row. Returns a new object with the columns
+ * above, plus kind, size, rest, and goAt: the share of a run it has to have back before
+ * it bolts again.
  */
-export function fishOf(kind, size) {
+export function fishOf(kind, size, nature = PLAIN) {
   const rows = KINDS[kind];
   if (!rows) throw new Error(`No such fish: ${kind}`);
   let i = 1;
@@ -53,20 +86,24 @@ export function fishOf(kind, size) {
   const a = rows[i - 1];
   const b = rows[i];
   const t = Math.min(1, Math.max(0, (size - a.size) / (b.size - a.size)));
+  const load = mix(a.load, b.load, t);
   return {
     kind,
     size,
-    runFresh: mix(a.runFresh, b.runFresh, t),
-    runSpent: mix(a.runSpent, b.runSpent, t),
-    rest: mix(a.rest, b.rest, t),
-    tire: mix(a.tire, b.tire, t),
-    runFor: mix(a.runFor, b.runFor, t),
-    dash: mix(a.dash, b.dash, t),
-    thump: mix(a.thump, b.thump, t),
+    runFresh: mix(a.runFresh, b.runFresh, t) * nature.strength,
+    runSpent: mix(a.runSpent, b.runSpent, t) * nature.strength,
+    rest: load * GRAVITY * SUNK_SHARE,
+    tire: mix(a.tire, b.tire, t) / nature.lasting,
+    burst: mix(a.burst, b.burst, t),
+    recover: mix(a.recover, b.recover, t) / nature.recovery,
+    goAt: GO_PLACID + (GO_BOLD - GO_PLACID) * nature.bold,
+    bold: nature.bold,
+    dash: mix(a.dash, b.dash, t) * nature.speed,
+    thump: mix(a.thump, b.thump, t) * nature.strength,
     beat: [mix(a.beat[0], b.beat[0], t), mix(a.beat[1], b.beat[1], t)],
-    load: mix(a.load, b.load, t),
+    load,
   };
 }
 
 // The hardest any fish of any kind pulls, N. The line's breaking point has to stay above it.
-export const HARDEST_RUN = Math.max(...Object.values(KINDS).flat().map((row) => row.runFresh));
+export const HARDEST_RUN = Math.max(...Object.values(KINDS).flat().map((row) => row.runFresh)) * (1 + VARIES);

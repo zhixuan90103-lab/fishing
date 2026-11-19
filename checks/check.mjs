@@ -21,7 +21,7 @@ import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
 import { createSnap } from '../src/play/snap.js';
-import { fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
+import { drawNature, fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
 import { RUN_OUT_AT } from '../src/play/haul.js';
 import { BREAK_AT } from '../src/play/snap.js';
 import { TIP_LEFT, TIP_RIGHT, TIP_UP } from '../src/shore/aim.js';
@@ -60,18 +60,29 @@ check('rules alone: the same at 20, 60 and 120 frames a second', () => {
   for (let k = 0; k < 3; k += 1) for (const row of seen) expect(Math.abs(row[k] - seen[0][k]) < 1e-3 * Math.max(1, Math.abs(seen[0][k])), `value ${k} does not depend on the frame rate`, seen.map((r) => r[k].toFixed(5)).join(' / '));
 });
 
-check('fight: it tires by what it puts out itself: a fresh run most, a spent one less, hanging at rest hardly at all', () => {
+check('fight: no clock. A run ends when its burst is spent, sooner the harder it is held, and the next waits for the burst to come back', () => {
   const big = fishOf('dorade', 1.3);
-  // Stamina lost over a stretch of running, from a given stamina.
-  const cost = (from, seconds, fps = 60) => { const f = createFight(() => 0.99); f.begin(big); f.stamina = from; const s0 = from; let ran = 0; for (let i = 0; i < seconds * fps && f.running; i += 1) { f.step(1 / fps); ran += 1 / fps; } return (s0 - f.stamina) / ran; };
-  const fresh = cost(1, 1.2), spent = cost(0.15, 0.6);
-  expect(fresh > 0.08, 'a fresh run costs it a tenth of its stamina a second or so', fresh.toFixed(3));
-  expect(spent < fresh * 0.7 && spent > 0, 'a spent run, pulling less, costs it less', `${spent.toFixed(3)} against ${fresh.toFixed(3)}`);
-  // Resting: run it until a rest begins, then watch.
-  const f = createFight(() => 0.99); f.begin(big); while (f.running) f.step(1 / 60); for (let i = 0; i < 60; i += 1) f.step(1 / 60);
-  const before = f.stamina; let rested = 0; for (let i = 0; i < 90 && !f.running; i += 1) { f.step(1 / 60); rested += 1 / 60; }
-  expect(Math.abs(f.stamina - before) / rested < fresh * 0.15, 'hanging on the line at rest it neither tires nor recovers by much', ((f.stamina - before) / rested).toFixed(4));
-  for (const fps of [20, 120]) expect(Math.abs(cost(1, 1.2, fps) - fresh) < 0.004, `${fps} fps: the same`, cost(1, 1.2, fps).toFixed(4));
+  // One run from fresh, against a line pulling `share` of what the fish pulls. How long it lasted and what it cost.
+  const run = (share, fps = 60, fish = big) => { const f = createFight(() => 0.5); f.begin(fish); let t = 0; while (f.running && t < 30) { f.step(1 / fps, f.force * share); t += 1 / fps; } return { lasted: t, cost: 1 - f.stamina, f }; };
+  const held = run(1), free = run(0);
+  expect(held.lasted > 1 && held.lasted < 3, 'held hard, a fresh run is over in a couple of seconds', `${held.lasted.toFixed(2)} s`);
+  expect(free.lasted > held.lasted * 2, 'on a free reel the same run goes on more than twice as long', `${free.lasted.toFixed(2)} s against ${held.lasted.toFixed(2)} s`);
+  expect(Math.abs(free.cost - held.cost) < 0.05, 'either way a run costs it the same: holding it gets that run over with, and keeps the line', `${free.cost.toFixed(2)} and ${held.cost.toFixed(2)}`);
+  for (const fps of [20, 120]) expect(Math.abs(run(1, fps).lasted - held.lasted) < 0.06, `${fps} fps: the same`, run(1, fps).lasted.toFixed(2));
+  // The rest: how long until it bolts again, hanging on the line or being drawn along.
+  const rest = (drawn, fish = big) => { const { f } = run(1, 60, fish); let t = 0; while (!f.running && t < 60) { f.step(1 / 60, fish.rest * drawn); t += 1 / 60; } return t; };
+  expect(rest(1) > 1 && rest(1) < 6, 'hanging on the line it has its burst back in a few seconds', `${rest(1).toFixed(1)} s`);
+  expect(rest(2.5) > rest(1) * 1.4, 'drawn along by the line it takes a good deal longer', `${rest(2.5).toFixed(1)} s against ${rest(1).toFixed(1)} s`);
+  // Worn down, a run is weaker and shorter-lived, and it never stops trying.
+  const f = createFight(() => 0.5); f.begin(big); let runs = 0, first = 0, lastForce = 0, t = 0, peak = 0;
+  while (t < 200 && runs < 12) { const was = f.running; f.step(1 / 60, f.force); t += 1 / 60; if (f.running) peak = Math.max(peak, f.force); if (was && !f.running) { runs += 1; if (runs === 1) first = peak; lastForce = peak; peak = 0; } }
+  expect(runs >= 6, 'it goes on running, run after run', runs);
+  expect(lastForce < first * 0.6, 'each weaker than the last, until it can no longer take line', `${first.toFixed(1)} N then ${lastForce.toFixed(1)} N`);
+  // No two fish alike.
+  const draws = seeded(11); const kinds = Array.from({ length: 40 }, () => fishOf('dorade', 1.3, drawNature(draws)));
+  const spread = (key) => Math.max(...kinds.map((k) => k[key])) / Math.min(...kinds.map((k) => k[key]));
+  expect(spread('runFresh') > 1.15 && spread('recover') > 1.25 && spread('goAt') > 1.4, 'fish of one size differ in strength, in how fast they recover and in how soon they bolt again', `${spread('runFresh').toFixed(2)}, ${spread('recover').toFixed(2)}, ${spread('goAt').toFixed(2)} times`);
+  expect(Math.max(...Array.from({ length: 200 }, () => fishOf('dorade', 0.95, drawNature(draws)).runFresh)) < RUN_OUT_AT && Math.max(...kinds.map((k) => k.runFresh)) <= HARDEST_RUN && HARDEST_RUN < BREAK_AT, 'and no nature carries a small fish over the reel, or any fish over the line');
 });
 
 check('fight: the line draws it toward the rod tip and nowhere else, and brought round it swings in an arc', () => {
@@ -296,7 +307,7 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
   const N = 49;
   for (const [size, press, fps] of [[0.85, 'always', 60], [1.3, 'rests', 60], [1.3, 'never', 60], [1.3, 'rests', 20]]) {
     const rig = createRig({ seed: 5, fps, press, hold: 0.6, sizes: () => size }); const f = rig.fishing;
-    const curve = createLineCurve(N), out = new Float64Array(N * 3); let hooked = -1, loose = 0, soon = 9, worst = 0, saw = 0;
+    const curve = createLineCurve(N), out = new Float64Array(N * 3); let hooked = -1, loose = 0, soon = 9, bent = 0, frames = 0, saw = 0;
     while (rig.time < 45) {
       rig.step(); const l = rig.line; if (l.stowed !== null) { curve.reset(); continue; }
       curve.step(rig.dt, l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.tied ? l.tension : 0, out, 0);
@@ -309,7 +320,7 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
       let turns = 0, side = 0;
       for (let i = 1; i < N - 1; i += 1) { const ay = out[i * 3 + 1] - out[i * 3 - 2], by = out[i * 3 + 4] - out[i * 3 + 1]; const k = by / Math.hypot(out[i * 3 + 3] - out[i * 3], by, out[i * 3 + 5] - out[i * 3 + 2]) - ay / Math.hypot(out[i * 3] - out[i * 3 - 3], ay, out[i * 3 + 2] - out[i * 3 - 1]); const sgn = Math.abs(k) > 0.004 ? Math.sign(k) : 0; if (sgn && side && sgn !== side) turns += 1; if (sgn) side = sgn; }
       saw = Math.max(saw, turns);
-      if (rig.time - hooked > 2) worst = Math.max(worst, far);
+      if (rig.time - hooked > 2) { frames += 1; if (far > 0.05) bent += 1; }
     }
     const who = `size ${size}, finger ${press}, ${fps} fps`;
     expect(hooked >= 0, `${who}: a fish took it`);
@@ -318,7 +329,8 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
     // The rod kicks back at the strike and the line is really slack for a moment. That
     // slack used to go in as a saw's edge: over twenty bends along the line.
     expect(saw <= 8, `${who}: slack coming into it hangs in a belly or two, not a saw's edge`, `${saw} changes of bend along it`);
-    expect(worst < 0.05, `${who}: and stays within a couple of fingers of straight for the rest of the fight`, `${(worst * 100).toFixed(1)} cm`);
+    // A fish that turns in a run, or comes at the angler, leaves the line slack for a moment. Only for a moment.
+    expect(bent / frames < 0.06, `${who}: and for the rest of the fight it is straight all but a few moments`, `${(100 * bent / frames).toFixed(1)}% of the time more than 5 cm off`);
   }
 });
 
@@ -589,7 +601,7 @@ check('casts: every size of fish is landed by winding only while it rests, at 20
     const times = {};
     for (const fps of [60, 20]) {
       times[fps] = [];
-      for (const seed of [1, 2, 3]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
         const r = fightOne({ seed, fps, press: 'rests', size });
         expect(r.end === 'landed', `size ${size}, ${fps} fps, seed ${seed}: landed`, r.end || 'still on the line');
         expect(r.maxTension < RUN_OUT_AT + 3.2, `size ${size}: unpressed, the tension stays near the point where line runs out`, r.maxTension.toFixed(1));
@@ -603,7 +615,8 @@ check('casts: every size of fish is landed by winding only while it rests, at 20
       }
     }
     const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-    expect(Math.abs(mean(times[60]) - mean(times[20])) < 0.35 * mean(times[60]), `size ${size}: the fight takes about as long at 20 frames as at 60`, `${mean(times[60]).toFixed(0)} s and ${mean(times[20]).toFixed(0)} s`);
+    // A fight is a handful of runs and rests now, and one more or one fewer is a good part of it.
+    expect(Math.abs(mean(times[60]) - mean(times[20])) < 0.4 * mean(times[60]), `size ${size}: the fight takes about as long at 20 frames as at 60`, `${mean(times[60]).toFixed(0)} s and ${mean(times[20]).toFixed(0)} s`);
   }
 });
 
@@ -618,7 +631,7 @@ check('casts: left alone a fish is neither landed nor lost, and the line does no
 check('casts: a line leant on until it breaks leaves bare line to wind in, then a new lure', () => {
   // One of the casts in five on which the biggest fish, leant on all the way, breaks the line.
   let hidden = 0, frames = 0, came = 0, jump = 0, lastOut = 0, lost = false, woundWhileHeld = 0, lostAt = 0;
-  const r = fightOne({ seed: 4, fps: 60, press: 'always', size: 1.4, each: (rig) => {
+  const r = fightOne({ seed: 8, fps: 60, press: 'always', size: 1.4, each: (rig) => {
     const f = rig.fishing;
     if (f.lost) {
       if (!lost) { lost = true; lostAt = rig.time; lastOut = f.lineOut; rig.finger = () => rig.time - lostAt < 0.5 || rig.time - lostAt > 1.5; }
@@ -710,24 +723,36 @@ check('landed fish: it turns about the line to show its sides, and its pose neve
   }
 });
 
-check('fight: fish run out and away, and stay in front of the angler', () => {
-  let ahead = 0, across = 0, total = 0, worst = 0;
-  for (const seed of [1, 2, 3, 4]) {
-    let lx = null, lz = 0;
-    fightOne({ seed, fps: 60, press: 'rests', size: seed % 2 ? 1.3 : 0.9, each: (rig) => {
-      const f = rig.fishing; if (f.stage !== 'fight') { lx = null; return; }
-      const e = rig.line.end, tip = rig.line.tip;
-      worst = Math.max(worst, Math.abs(wrap(Math.atan2(e.x - tip.x, e.z - tip.z) - 100 * deg)) / deg);
-      if (lx !== null && f.mood === 'run') {
-        const vx = (e.x - lx) * 60, vz = (e.z - lz) * 60;
-        if (Math.hypot(vx, vz) > 1) { const a = Math.abs(wrap(Math.atan2(vx, vz) - Math.atan2(e.x - tip.x, e.z - tip.z))) / deg; total += 1; if (a < 60) ahead += 1; else if (a < 100) across += 1; }
-      }
-      lx = e.x; lz = e.z;
-    } });
-  }
-  expect(ahead / total > 0.7, 'most of a run heads out, straight or slanting', `${(100 * ahead / total).toFixed(0)}%`);
-  expect(across / total < 0.15, 'little of it is flat across', `${(100 * across / total).toFixed(0)}%`);
-  expect(worst < 50, 'it stays within reach in front', `${worst.toFixed(0)}° off the cast line`);
+check("fight: where it runs is its own business, what comes of it is the line's, and it leans away from the rod", () => {
+  // Which way a running fish is travelling: out along the line, or across it.
+  const travel = (opts, turn = 0, givingLine = false) => {
+    let out = 0, across = 0, total = 0, worst = 0, left = 0, sided = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      let lx = null, lz = 0;
+      fightOne({ seed, fps: 60, ...opts, each: (rig) => {
+        const f = rig.fishing; if (f.stage !== 'fight') { lx = null; return; }
+        if (turn) { rig.rodStays = true; rig.rodTurn = turn * deg; }
+        const e = rig.line.end, tip = rig.line.tip; const radial = Math.atan2(e.x - tip.x, e.z - tip.z);
+        worst = Math.max(worst, Math.abs(wrap(radial - 100 * deg)) / deg);
+        if (lx !== null && f.mood === 'run' && (!givingLine || f.running > 1)) {
+          const vx = (e.x - lx) * 60, vz = (e.z - lz) * 60;
+          if (Math.hypot(vx, vz) > 0.6) { const a = wrap(Math.atan2(vx, vz) - radial) / deg; total += 1; if (Math.abs(a) < 45) out += 1; else if (Math.abs(a) < 135) { across += 1; sided += 1; if (a > 0) left += 1; } }
+        }
+        lx = e.x; lz = e.z;
+      } });
+    }
+    return { out: out / total, across: across / total, worst, left: left / sided };
+  };
+  // A big fish let run takes line, and while the reel is giving it a metre a second or more it goes mostly out. A small one the reel holds cannot: it goes round.
+  const taking = travel({ press: 'never', size: 1.4, seconds: 40 }, 0, true), heldIn = travel({ press: 'rests', size: 0.85 });
+  expect(taking.out > 0.5, 'taking line, most of its travel is out and away', `${(100 * taking.out).toFixed(0)}% out, ${(100 * taking.across).toFixed(0)}% across`);
+  // It used to be held to a third of its speed across whenever the line would not give.
+  expect(heldIn.across > 0.6, 'held by a line that will not give, it goes round the arc the line allows', `${(100 * heldIn.across).toFixed(0)}% across`);
+  expect(taking.worst < 50 && heldIn.worst < 50, 'and either way it stays in front of the angler', `${taking.worst.toFixed(0)}° and ${heldIn.worst.toFixed(0)}° off the cast line`);
+  // The rod carried well to its left: it goes right more often than left, and not always.
+  const rodLeft = travel({ press: 'rests', size: 0.85 }, 45), rodRight = travel({ press: 'rests', size: 0.85 }, -45);
+  expect(rodLeft.left < rodRight.left - 0.1, 'with the rod to its left it goes right more often than with the rod to its right', `left ${(100 * rodLeft.left).toFixed(0)}% of the time, against ${(100 * rodRight.left).toFixed(0)}%`);
+  expect(rodLeft.left > 0.1 && rodRight.left < 0.9, 'more often, not always: where it goes is still its own', `${(100 * rodLeft.left).toFixed(0)}% and ${(100 * rodRight.left).toFixed(0)}%`);
 });
 
 check('hand: what it holds is what the line carries, winding or not', () => {

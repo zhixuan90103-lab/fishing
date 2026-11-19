@@ -28,7 +28,7 @@
 
 import { createCourse } from './course.js';
 import { createFight } from './fight.js';
-import { HARDEST_RUN, fishOf } from './fishKind.js';
+import { HARDEST_RUN, drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
 import { between, toward } from './maths.js';
@@ -103,6 +103,8 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   // The effort the rod was last told.
   let toldEffort = 0;
 
+  // Each fish's own nature, drawn the first time it is hooked and its own from then on.
+  const natures = new WeakMap();
   // The level direction the cast went, for keeping a hooked fish in front.
   let homeX = 0;
   let homeZ = 1;
@@ -127,6 +129,13 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
   // taking line, m/s.
   const bearing = { x: 0, z: 1, far: 0 };
   let bolt = 0;
+  // The level direction the rod points, as of the last frame of the fight, how far to the
+  // left of the line out to the fish that is, radians, and how far the fish was from
+  // under the tip a frame ago.
+  let rodX = 0;
+  let rodZ = 0;
+  let rodOff = 0;
+  let farWas = 0;
   // Lifting: seconds the fish has still to hang before the net comes, and the frame's
   // length and the kick it is hung with, for follow().
   let showLeft = 0;
@@ -142,14 +151,15 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     steerToLure(fish, aim, brainMouth, move, Math.hypot(move.vx, move.vz));
   };
   // The hooked fish's aim is put together from two answers: how its pull sets it against
-  // the line (fight.js), and which way this run heads (course.js). The rod leads it only
-  // by where its tip is: the line draws the fish toward that.
+  // the line (fight.js), and where this run means to go (course.js). The rod has its say
+  // only through the line: where its tip is, and that a fish leans away from it.
   const fightBrain = (fish, aim) => {
     fight.bearing(fish, line.tip, homeX, homeZ, bearing);
     course.keepInFront(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
     bolt = fight.bolt(RUN_OUT_AT);
-    const own = course.across(fight.running, fight.stamina, kind.dash, bolt, bearing.far);
-    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own);
+    rodOff = rodX || rodZ ? Math.atan2(rodZ * bearing.x - rodX * bearing.z, rodX * bearing.x + rodZ * bearing.z) : 0;
+    const own = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
+    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.toward(kind.dash), course.deep);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.
@@ -178,11 +188,14 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
     running = 0;
     bolting = false;
     bolt = 0;
-    kind = fishOf(SPECIES, hooked.size);
+    if (!natures.has(hooked)) natures.set(hooked, drawNature(random));
+    kind = fishOf(SPECIES, hooked.size, natures.get(hooked));
     takesLine = kind.runFresh > RUN_OUT_AT;
     click.reset();
     fight.begin(kind);
-    course.begin();
+    rodOff = 0;
+    farWas = 0;
+    course.begin(0, kind.bold, 1);
     thump.begin(kind);
     snap.begin();
     haul.reset();
@@ -368,9 +381,13 @@ export function createCatch({ rod, line, splash, school, net, haptics, random, m
      * '' while it goes on.
      */
     fight(dt, input, tip, spot) {
-      // Its runs and rests, and which way a run that has just begun heads.
-      if (fight.step(dt)) course.begin();
-      course.step(dt, fight.running, bolt);
+      rodX = Math.sin(input.rodYaw);
+      rodZ = Math.cos(input.rodYaw);
+      // Its runs and rests, by what its pull is costing it against the line as it was a
+      // frame ago, and where a run that has just begun means to go.
+      if (fight.step(dt, tension)) course.begin(rodOff, kind.bold, fight.stamina);
+      course.step(dt, fight.running, rodOff, kind.bold, farWas - bearing.far, bearing.far);
+      farWas = bearing.far;
       // A finger held down on a fish that is taking line leans on it, and may break it.
       if (snap.step(dt, input.finger, fight.force > RUN_OUT_AT, fight.force)) {
         lose('broke');
