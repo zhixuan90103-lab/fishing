@@ -30,6 +30,14 @@ const DRIVE_FLAT_OUT = 1.3;
 // Working flat out its tail beats at least as fast as it would swimming this fast, m/s,
 // however slowly it is really going: a fish straining against a line that holds it.
 const STROKE_FLAT_OUT = 1.4;
+// Tail amplitude caps at high speed (research: ~0.2 BL at ~5 beats/s). Below STROKE_LOW
+// amplitude follows effort; above STROKE_HIGH it's capped at DRIVE_CAP; smoothly between.
+// STROKE_LOW and STROKE_HIGH are in m/s, treating stroke as speed-equivalent.
+const STROKE_LOW = 0.4;   // Below this, amplitude unlimited
+const STROKE_HIGH = 2.0;  // Above this, amplitude capped
+const DRIVE_CAP = 0.85;   // High-speed amplitude cap (less than DRIVE_FLAT_OUT)
+// During acceleration, amplitude can exceed steady-state by this multiplier.
+const ACCEL_BOOST = 1.15;
 
 export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -176,9 +184,30 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   // A fish whose effort is given beats by that alone: a run does not go slack in the tail
   // once it is up to speed, and a fish hanging spent on a line does not work to keep up.
   const want = (aim.speed - fish.speed) / Math.max(aim.cruise, 0.05);
-  const driveAim = aim.effort === null
+  const baseDrive = aim.effort === null
     ? clamp(0.55 + want * 1.5, DRIVE_IDLE, DRIVE_FLAT_OUT)
     : DRIVE_IDLE + (DRIVE_FLAT_OUT - DRIVE_IDLE) * clamp(aim.effort, 0, 1);
+
+  // Research: amplitude caps at high speed (~0.2 BL at ~5 beats/s), unlimited at low speed.
+  // This is for CRUISING. When effort is given (e.g., a run), amplitude stays high regardless of speed.
+  const effortGiven = aim.effort !== null && aim.effort > 0.5;
+
+  let driveAim;
+  if (effortGiven) {
+    // Effort given (e.g., fish running): amplitude not limited by speed
+    driveAim = baseDrive;
+  } else {
+    // Cruising: apply speed-based cap
+    const speedFactor = clamp((fish.stroke - STROKE_LOW) / (STROKE_HIGH - STROKE_LOW), 0, 1);
+    const driveCap = DRIVE_CAP + (DRIVE_FLAT_OUT - DRIVE_CAP) * (1 - speedFactor);
+
+    // During acceleration, amplitude can exceed steady-state
+    const accelerating = want > 0.1;
+    driveAim = accelerating
+      ? Math.min(baseDrive * ACCEL_BOOST, DRIVE_FLAT_OUT)
+      : Math.min(baseDrive, driveCap);
+  }
+
   fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-5 * dt));
   const k = aim.speed > fish.speed ? aim.accel : aim.slow;
   fish.speed += (aim.speed - fish.speed) * (1 - Math.exp(-k * dt));

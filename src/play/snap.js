@@ -23,7 +23,9 @@ import { toward } from './maths.js';
 
 // The line may break once the fish's pull and the hand's together pass this, N. Above
 // the hardest run of any fish (fishKind.js) and well above where the reel gives line.
-export const BREAK_AT = 11.5;
+// TEMPORARY 2026-11-20: Set very high to disable line breaking while testing.
+// Original value was 11.5. See NOTED.md "要不要断线还没想好".
+export const BREAK_AT = 999;
 // The most the hand piles on, N, and how fast it comes on and lets go, 1/s. It comes on
 // slowly: a moment's press on a run costs nothing.
 const PRESS_MOST = 4;

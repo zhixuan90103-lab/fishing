@@ -51,8 +51,8 @@ function flock(fish, aim, env, dt) {
   const fz = Math.cos(fish.yaw);
   let nearest = 1e9;
   let aheadSpeed = fish.speed;
-  let aheadYaw = shoal.yaw;
-  let aheadY = shoal.y + fish.followY;
+  let aheadYaw = shoal.homeYaw;
+  let aheadY = shoal.homeDepth + fish.followY;
 
   for (let j = 0; j < fishes.length; j++) {
     const other = fishes[j];
@@ -73,9 +73,9 @@ function flock(fish, aim, env, dt) {
   }
 
   // Compute following aim (high weight) vs own bias (low weight)
-  let followYaw = shoal.yaw;
+  let followYaw = shoal.homeYaw;
   let followSpeed = aim.cruise;
-  let followY = shoal.y + fish.followY;
+  let followY = shoal.homeDepth + fish.followY;
 
   if (nearest < 3.2) {
     followYaw = aheadYaw;
@@ -86,9 +86,9 @@ function flock(fish, aim, env, dt) {
   }
 
   // Own bias: slight deviation from shoal heading
-  const ownYaw = wrapPi(shoal.yaw + fish.headingBias);
+  const ownYaw = wrapPi(shoal.homeYaw + fish.headingBias);
   const ownSpeed = aim.cruise * fish.pace;
-  const ownY = shoal.y + fish.followY;
+  const ownY = shoal.homeDepth + fish.followY;
 
   // Blend based on flocking weight
   aim.yaw = wrapPi(followYaw + wrapPi(ownYaw - followYaw) * (1 - weight));
@@ -128,25 +128,52 @@ export function sendHome(fish) {
 
 // Things every free fish does on top of its state, each on its own clock.
 export function seedHabits(fish) {
+  // Wander: slow drift
   fish.wanderT = Math.random() * 100;
   fish.wanderW1 = 0.23 + Math.random() * 0.22;
   fish.wanderW2 = 0.61 + Math.random() * 0.5;
   fish.wanderW3 = 0.17 + Math.random() * 0.2;
   fish.wanderYaw = 0.05 + Math.random() * 0.08;
   fish.wanderDepth = 0.05 + Math.random() * 0.13;
+  // Dart: short kick (original behavior, kept)
   fish.darting = false;
   fish.dartT = 2 + Math.random() * 18;
   fish.dartGain = 1;
   fish.dartYaw = 0;
+  // Tempo: each fish has its own sprint/glide rhythm (moved from shoal)
+  fish.tempo = 'cruise';
+  fish.tempoT = Math.random() * 10;
+  fish.tempoGain = 1;
 }
 
-export function habits(fish, aim, dt) {
+export function habits(fish, aim, env, dt) {
   // Wander: a slow drift off the shared heading and depth.
   fish.wanderT += dt;
   const wt = fish.wanderT;
   aim.yaw += (Math.sin(wt * fish.wanderW1) * 0.6 + Math.sin(wt * fish.wanderW2 + 1.7) * 0.4) * fish.wanderYaw;
   aim.y += Math.sin(wt * fish.wanderW3 + 0.6) * fish.wanderDepth;
-  // Dart: a short kick. The slow coast in swimFish turns the rest into a glide.
+
+  // Tempo: each fish has its own sprint/glide rhythm influenced by shoal activity.
+  fish.tempoT += dt;
+  if (fish.tempo === 'cruise' && fish.tempoT > 7 + Math.random() * 14) {
+    // Chance to sprint increases with shoal activity
+    if (Math.random() < env.shoal.activity) {
+      fish.tempo = 'sprint';
+      fish.tempoT = 0;
+      fish.tempoGain = 2.0 + Math.random() * 1.5;
+    }
+  } else if (fish.tempo === 'sprint' && fish.tempoT > 1.0 + Math.random() * 1.5) {
+    fish.tempo = 'glide';
+    fish.tempoT = 0;
+    fish.tempoGain = 0.2;
+  } else if (fish.tempo === 'glide' && fish.tempoT > 3 + Math.random() * 6) {
+    fish.tempo = 'cruise';
+    fish.tempoT = 0;
+    fish.tempoGain = 1;
+  }
+  aim.speed *= fish.tempoGain;
+
+  // Dart: a short kick on top of tempo. The slow coast in swimFish turns it into a glide.
   fish.dartT -= dt;
   if (fish.dartT <= 0) {
     fish.darting = !fish.darting;

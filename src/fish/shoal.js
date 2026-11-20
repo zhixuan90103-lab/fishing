@@ -1,50 +1,60 @@
 /**
- * The shoal is the school as one body. It is not drawn. It carries the shared heading,
- * depth and tempo that fish in the school aim at. Its position is rewritten every frame
- * as the average of its members, so the fish move the shoal, not the other way round.
+ * The shoal as an environment, not a controller. It carries the bias for this area of
+ * water: a suggested heading, depth, and activity level. Each fish decides its own speed.
+ * Position is rewritten every frame as the average of free fish.
+ *
+ * Refactored 2026-11-20: Removed shared tempo (mode/effort/speed). Fish now have
+ * individual rhythms in behaviors.js habits().
  */
 
 import { clamp, wrapPi, DEPTH_MIN, DEPTH_MAX } from './swim.js';
 
-// Speed of a fish with pace 1 while the shoal cruises and the swim-rate slider is 1.
+// Speed of a fish with pace 1 at swim-rate slider 1. Used for tail animation.
 export const CRUISE_SPEED = 0.351;
 // Clip time scale at that speed.
 export const TAIL_RATE = 2.2;
 // Where the shoal likes to be: this far in front of the camera.
 const HOME_AHEAD = 24;
 const START_DEPTH = -2.7;
+// Activity: how likely fish are to sprint on their own. Fluctuates slowly.
+const ACTIVITY_MIN = 0.3;
+const ACTIVITY_MAX = 0.8;
+const ACTIVITY_CHANGE = 0.08; // per second
+// Occasional jump in activity (like a startle with no cause)
+const ACTIVITY_JUMP = 0.4;
+const JUMP_EVERY = [25, 45]; // seconds
 
 export function createShoal() {
   return {
+    // Camera position and view (read by advanceHeading for staying in frame)
     camX: 0,
     camZ: 2,
     camYaw: (100 * Math.PI) / 180,
     camFov: 55,
     camAspect: 390 / 844,
+    // Current position (rewritten each frame as average of free fish)
     x: 0,
     z: 0,
     y: START_DEPTH,
-    yaw: 0,
+    // Environmental bias: suggested heading for this area of water
+    homeYaw: 0,
     yawRate: 0,
     wishYawRate: 0,
     wishT: 0.6,
     veerT: 18,
-    depth: START_DEPTH,
+    // Environmental bias: suggested depth
+    homeDepth: START_DEPTH,
     y0: START_DEPTH,
     y1: START_DEPTH,
     vert: 'level',
     vertT: 0,
     vertDur: 12,
     searchW: 0.8,
-    cruiseFor: 14,
-    sprintFor: 2.6,
-    glideFor: 9,
-    sprintTarget: 4.2,
-    effort: 1,
-    mode: 'cruise',
-    stageT: 0,
     pitch: 0,
-    speed: CRUISE_SPEED,
+    // Environmental bias: activity level (how likely fish are to sprint)
+    activity: 0.5,
+    activityTarget: 0.5,
+    jumpIn: 30,
   };
 }
 
@@ -63,11 +73,14 @@ export function resetShoal(shoal, start) {
   shoal.x = start.x;
   shoal.z = start.z;
   shoal.y = start.y;
-  shoal.depth = start.y;
-  shoal.yaw = start.yaw;
+  shoal.homeDepth = start.y;
+  shoal.homeYaw = start.yaw;
   shoal.yawRate = 0;
   beginLevel(shoal);
   shoal.vertDur = 10;
+  shoal.activity = 0.5;
+  shoal.activityTarget = 0.5;
+  shoal.jumpIn = JUMP_EVERY[0] + Math.random() * (JUMP_EVERY[1] - JUMP_EVERY[0]);
 }
 
 export function watchCamera(shoal, cam) {
@@ -78,49 +91,36 @@ export function watchCamera(shoal, cam) {
   shoal.camAspect = cam.aspect;
 }
 
-export function advanceShoal(shoal, dt, rate) {
-  advanceTempo(shoal, dt, rate);
+export function advanceShoal(shoal, dt) {
+  advanceActivity(shoal, dt);
   advanceDepth(shoal, dt);
   advanceHeading(shoal, dt);
 }
 
-// Cruise, sprint, glide. Each stage draws its own length, so the rhythm never repeats.
-// Speeding up is quick, slowing down coasts.
-function advanceTempo(shoal, dt, rate) {
-  shoal.stageT += dt;
-  let target = 1;
-  if (shoal.mode === 'cruise' && shoal.stageT > shoal.cruiseFor) {
-    shoal.mode = 'sprint';
-    shoal.stageT = 0;
-    shoal.sprintFor = 1.2 + Math.random() * 1.8;
-    shoal.sprintTarget = 2.4 + Math.random() * 1.8;
+// Activity: how likely fish are to sprint on their own. Drifts slowly, jumps occasionally.
+function advanceActivity(shoal, dt) {
+  // Countdown to next jump
+  shoal.jumpIn -= dt;
+  if (shoal.jumpIn <= 0) {
+    shoal.activityTarget = clamp(shoal.activity + ACTIVITY_JUMP, ACTIVITY_MIN, ACTIVITY_MAX);
+    shoal.jumpIn = JUMP_EVERY[0] + Math.random() * (JUMP_EVERY[1] - JUMP_EVERY[0]);
   }
-  if (shoal.mode === 'sprint') {
-    target = shoal.sprintTarget;
-    if (shoal.stageT > shoal.sprintFor) {
-      shoal.mode = 'glide';
-      shoal.stageT = 0;
-      shoal.glideFor = 4 + Math.random() * 7;
-    }
-  } else if (shoal.mode === 'glide') {
-    target = 0.18;
-    if (shoal.stageT > shoal.glideFor) {
-      shoal.mode = 'cruise';
-      shoal.stageT = 0;
-      shoal.cruiseFor = 7 + Math.random() * 14;
-    }
+  // Otherwise drift slowly toward a random target
+  else if (Math.abs(shoal.activity - shoal.activityTarget) < 0.05) {
+    shoal.activityTarget = ACTIVITY_MIN + Math.random() * (ACTIVITY_MAX - ACTIVITY_MIN);
   }
-  const k = target > shoal.effort ? 1.1 : 0.22;
-  shoal.effort += (target - shoal.effort) * (1 - Math.exp(-k * dt));
-  shoal.speed = CRUISE_SPEED * rate * shoal.effort;
+  // Smooth approach to target
+  const change = (shoal.activityTarget > shoal.activity ? 1 : -1) * ACTIVITY_CHANGE * dt;
+  shoal.activity = clamp(shoal.activity + change, ACTIVITY_MIN, ACTIVITY_MAX);
 }
 
 // Level for a while, then either step to another layer or search up and down a little.
+// Updates homeDepth (the bias) which fish read to decide their own depth.
 function advanceDepth(shoal, dt) {
   shoal.vertT += dt;
   const yPrev = shoal.y;
   if (shoal.vert === 'level') {
-    shoal.y = shoal.depth;
+    shoal.y = shoal.homeDepth;
     if (shoal.vertT >= shoal.vertDur) {
       if (Math.random() < 0.16) beginSearch(shoal);
       else beginStep(shoal);
@@ -132,14 +132,16 @@ function advanceDepth(shoal, dt) {
     if (u >= 1) beginLevel(shoal);
   } else {
     shoal.y = clamp(
-      shoal.depth + Math.sin(shoal.vertT * shoal.searchW) * shoal.y0,
+      shoal.homeDepth + Math.sin(shoal.vertT * shoal.searchW) * shoal.y0,
       DEPTH_MIN,
       DEPTH_MAX,
     );
     if (shoal.vertT >= shoal.vertDur) beginLevel(shoal);
   }
+  shoal.homeDepth = shoal.y;
   const vy = dt > 0 ? (shoal.y - yPrev) / dt : 0;
-  const aim = -Math.atan2(vy, Math.max(shoal.speed, 0.04));
+  // Pitch is for visual only (not used by fish anymore)
+  const aim = -Math.atan2(vy, 0.3);
   shoal.pitch += (clamp(aim, -0.45, 0.45) - shoal.pitch) * (1 - Math.exp(-4 * dt));
 }
 
@@ -147,8 +149,8 @@ function beginLevel(shoal) {
   shoal.vert = 'level';
   shoal.vertT = 0;
   shoal.vertDur = 8 + Math.random() * 17;
-  shoal.depth = clamp(shoal.y, DEPTH_MIN, DEPTH_MAX);
-  shoal.y = shoal.depth;
+  shoal.homeDepth = clamp(shoal.y, DEPTH_MIN, DEPTH_MAX);
+  shoal.y = shoal.homeDepth;
 }
 
 function beginStep(shoal) {
@@ -160,7 +162,7 @@ function beginStep(shoal) {
   if (Math.abs(shoal.y1 - shoal.y0) < 0.12) {
     shoal.y1 = clamp(shoal.y0 + (shoal.y0 > -2.7 ? -0.45 : 0.45), DEPTH_MIN, DEPTH_MAX);
   }
-  shoal.depth = shoal.y1;
+  shoal.homeDepth = shoal.y1;
   shoal.vert = 'step';
   shoal.vertT = 0;
   const dy = Math.abs(shoal.y1 - shoal.y0);
@@ -172,25 +174,20 @@ function beginSearch(shoal) {
   shoal.vertT = 0;
   shoal.vertDur = 9 + Math.random() * 6;
   const room = Math.min(shoal.y - DEPTH_MIN, DEPTH_MAX - shoal.y);
-  shoal.depth = shoal.y;
+  shoal.homeDepth = shoal.y;
   shoal.y0 = Math.min(0.45 + Math.random() * 0.25, Math.max(0.12, room * 0.85));
   shoal.searchW = 0.7 + Math.random() * 0.35;
 }
 
 // A slow random wish to turn, a rare hard veer, and a pull back into the camera's view.
+// Updates homeYaw (the bias) which fish read to decide their own heading.
 function advanceHeading(shoal, dt) {
-  // Now and then the whole school veers hard and kicks, like a startle with no cause.
+  // Occasional hard veer (now handled by activity jump, not here)
   shoal.veerT -= dt;
   if (shoal.veerT <= 0) {
     shoal.veerT = 20 + Math.random() * 30;
     shoal.wishYawRate = (Math.random() < 0.5 ? -1 : 1) * (0.75 + Math.random() * 0.5);
     shoal.wishT = 1.1 + Math.random() * 0.7;
-    if (shoal.mode !== 'sprint') {
-      shoal.mode = 'sprint';
-      shoal.stageT = 0;
-      shoal.sprintFor = 0.9 + Math.random() * 0.9;
-      shoal.sprintTarget = 2.2 + Math.random() * 1.2;
-    }
   }
   shoal.wishT -= dt;
   if (shoal.wishT <= 0) {
@@ -214,9 +211,9 @@ function advanceHeading(shoal, dt) {
   const nearEdge = edge > 0.6 || forward < HOME_AHEAD - 2 || forward > HOME_AHEAD + 3;
   const centerX = shoal.camX + fx * HOME_AHEAD;
   const centerZ = shoal.camZ + fz * HOME_AHEAD;
-  const err = wrapPi(Math.atan2(centerX - shoal.x, centerZ - shoal.z) - shoal.yaw);
+  const err = wrapPi(Math.atan2(centerX - shoal.x, centerZ - shoal.z) - shoal.homeYaw);
   const steer = err * (outside ? 2.4 : nearEdge ? 1.15 : 0.2);
   const wish = clamp((outside || nearEdge ? 0 : shoal.wishYawRate) + steer, -1.3, 1.3);
   shoal.yawRate += (wish - shoal.yawRate) * (1 - Math.exp(-1.6 * dt));
-  shoal.yaw = wrapPi(shoal.yaw + shoal.yawRate * dt);
+  shoal.homeYaw = wrapPi(shoal.homeYaw + shoal.yawRate * dt);
 }

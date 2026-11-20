@@ -79,10 +79,10 @@ const mix = (a, b, t) => a + (b - a) * t;
 /**
  * The fish of this species and body size, with this nature (drawNature) or none. Sizes
  * off either end of the table read as the end row. Returns a new object with the columns
- * above, plus kind, size, rest, and goAt: the share of a run it has to have back before
- * it bolts again.
+ * above, plus kind, size, rest, goAt, and comfortDepth.
+ * random: for drawing comfortDepth variation (0 to 1).
  */
-export function fishOf(kind, size, nature = PLAIN) {
+export function fishOf(kind, size, nature = PLAIN, random = Math.random) {
   const rows = KINDS[kind];
   if (!rows) throw new Error(`No such fish: ${kind}`);
   let i = 1;
@@ -91,6 +91,8 @@ export function fishOf(kind, size, nature = PLAIN) {
   const b = rows[i];
   const t = Math.min(1, Math.max(0, (size - a.size) / (b.size - a.size)));
   const load = mix(a.load, b.load, t);
+  // Comfort depth: bigger fish go deeper. Range -1.5 to -3.5 m.
+  const comfortDepth = -(1.2 + size * 1.8 + random() * 0.6);
   return {
     kind,
     size,
@@ -106,6 +108,7 @@ export function fishOf(kind, size, nature = PLAIN) {
     thump: mix(a.thump, b.thump, t) * nature.strength,
     beat: [mix(a.beat[0], b.beat[0], t), mix(a.beat[1], b.beat[1], t)],
     load,
+    comfortDepth,
   };
 }
 

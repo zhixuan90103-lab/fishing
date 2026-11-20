@@ -117,11 +117,12 @@ const ARC_RADIUS = 0.45;
 const TURN_SWINGS = 1.2;
 const PIVOT = 0.8;
 
-// The deepest a run takes it, the depth it rests at, and the shallowest it goes, m. How
-// deep a given run goes is the run's own (course.js).
-const RUN_DEPTH = -2.9;
-const REST_DEPTH = -0.5;
-const SHALLOWEST = -0.25;
+// Depth targets for different fighting stages, m.
+const BURST_DEPTH = -0.3;      // Initial burst: shallow, may jump
+const TIRED_DEPTH = -0.8;      // Tired: rises toward surface
+const SHALLOWEST = -0.25;      // Shallowest it may go
+// Depth during deep_fight is fish's comfort depth (from fishKind.js).
+// Depth during last_surge ignores depth (panicked).
 // It only dives in a run when further than DIVE_FAR from under the tip, level metres, and
 // not at all inside DIVE_NEAR. Close in the line runs steeply down to it, and a dive
 // there is a straight pull on a short, stiff line.
@@ -149,7 +150,7 @@ const FLICK = 0.6;
 
 export function createFight(random = Math.random) {
   // The fish on the line: see fishKind.js for the fields.
-  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, burst: 1, recover: 1, goAt: 0.6 };
+  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, burst: 1, recover: 1, goAt: 0.6, comfortDepth: -2.5 };
   // What the pull has over the resting pull, in two parts: one goes at once when a run
   // ends, the other eases off.
   let quick = 0;
@@ -160,6 +161,10 @@ export function createFight(random = Math.random) {
   // Looks only: seconds until its next flick, and seconds of this one left.
   let flickIn = 0;
   let flicking = 0;
+  // Fighting stage and time in current stage.
+  let stage = 'burst';  // 'burst' | 'deep_fight' | 'tired' | 'last_surge'
+  let timeInStage = 0;
+  let hadLastSurge = false;  // Prevent last_surge from triggering repeatedly
 
   const fight = {
     // How hard the fish is pulling right now, N.
@@ -171,6 +176,14 @@ export function createFight(random = Math.random) {
     // Whether it is in a run.
     get running() {
       return running;
+    },
+    // Current fighting stage.
+    get stage() {
+      return stage;
+    },
+    // This fish's comfort depth (passed from fishKind).
+    get comfortDepth() {
+      return kind.comfortDepth;
     },
 
     // Just hooked: it runs at once. fish: its numbers, from fishOf() in fishKind.js.
@@ -184,6 +197,10 @@ export function createFight(random = Math.random) {
       running = true;
       flickIn = between(random, FLICK_EVERY);
       flicking = 0;
+      // Initial stage: burst (shallow, explosive)
+      stage = 'burst';
+      timeInStage = 0;
+      hadLastSurge = false;  // Reset for new fish
     },
 
     /**
@@ -195,6 +212,35 @@ export function createFight(random = Math.random) {
      */
     step(dt, tension = 0, uneasy = 0) {
       if (!(dt > 0)) return false;
+
+      // Advance fighting stage
+      timeInStage += dt;
+      switch (stage) {
+        case 'burst':
+          // 2-5 seconds after hooking → deep_fight
+          if (timeInStage > 2 + random() * 3) {
+            stage = 'deep_fight';
+            timeInStage = 0;
+          }
+          break;
+        case 'deep_fight':
+          // stamina < 0.4 → tired
+          if (fight.stamina < 0.4) {
+            stage = 'tired';
+            timeInStage = 0;
+          }
+          break;
+        case 'tired':
+          // tired → last_surge is handled in steer() (needs distance)
+          break;
+        case 'last_surge':
+          // last_surge → tired when run ends
+          if (!running) {
+            stage = 'tired';
+            timeInStage = 0;
+          }
+          break;
+      }
       // What it is putting out, against the most it ever can, and how much of that the
       // line is standing against.
       const exert = kind.runFresh > 0 ? Math.min(1, fight.force / kind.runFresh) : 0;
@@ -291,6 +337,18 @@ export function createFight(random = Math.random) {
     steer(fish, aim, to, stretch, stiffness, winding, holds, across, toward = 0, deep = 1) {
       const ox = to.x;
       const oz = to.z;
+
+      // Stage transition: tired → last_surge when pulled close (< 3m), only once
+      // Distance is less than landing distance (2.2m) + small margin to allow landing after surge
+      if (stage === 'tired' && to.far < 3 && !hadLastSurge) {
+        stage = 'last_surge';
+        timeInStage = 0;
+        hadLastSurge = true;
+        // Trigger a last surge
+        running = true;
+        fight.burst = 0.4;  // Shorter surge, less than a full run
+      }
+
       // The stretch that holds it: its own pull, plus what it takes to drag it in as fast
       // as the line is coming. It swims to there, and comes in with the line meanwhile.
       const held = fight.draws(winding) / stiffness;
@@ -321,8 +379,29 @@ export function createFight(random = Math.random) {
       const overheld = Math.max(0, stiffness * stretch - fight.force);
       const keeps = ARC_KEEPS * fight.force / (fight.force + overheld + 1e-9);
       aim.speed = speed * (keeps + (1 - keeps) * facing);
-      const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
-      aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * deep * dive * dive * (3 - 2 * dive) : REST_DEPTH;
+
+      // Depth based on fighting stage, not distance to rod
+      let targetDepth;
+      switch (stage) {
+        case 'burst':
+          targetDepth = BURST_DEPTH;  // -0.3m, shallow
+          break;
+        case 'deep_fight':
+          // Return to comfort depth, modulated by distance (dive factor)
+          const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
+          targetDepth = running
+            ? kind.comfortDepth * deep * dive
+            : kind.comfortDepth * 0.7;  // Resting slightly shallower
+          break;
+        case 'tired':
+          targetDepth = TIRED_DEPTH;  // -0.8m, rising
+          break;
+        case 'last_surge':
+          // Panicked, any depth
+          targetDepth = kind.comfortDepth * 0.5;
+          break;
+      }
+      aim.y = targetDepth;
       aim.top = SHALLOWEST;
       // However hard it is being turned, it cannot come round tighter than its speed lets it.
       const tightest = ((fish.speed || 0) / ARC_RADIUS + PIVOT) / TURN_SWINGS;

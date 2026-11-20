@@ -73,15 +73,16 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
 
   function step(dt, rate, rocks = [], cam = null) {
     if (cam) watchCamera(shoal, cam);
-    advanceShoal(shoal, dt, rate);
+    advanceShoal(shoal, dt);
     measureCrowd(fishes, crowd);
     findCentre();
     for (let i = 0; i < fishes.length; i++) {
       const fish = fishes[i];
-      aim.cruise = shoal.speed * fish.pace;
+      // aim.cruise is the base speed for this fish at this swim-rate
+      aim.cruise = CRUISE_SPEED * rate * fish.pace;
       aim.speed = aim.cruise;
-      aim.yaw = shoal.yaw;
-      aim.y = shoal.y + fish.followY;
+      aim.yaw = shoal.homeYaw;
+      aim.y = shoal.homeDepth + fish.followY;
       aim.turn = TURN_SCHOOL;
       aim.accel = ACCEL_CRUISE;
       aim.slow = COAST;
@@ -95,7 +96,7 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
         fish.brain(fish, aim, env, dt);
       } else {
         STATES[fish.state](fish, aim, env, dt);
-        habits(fish, aim, dt);
+        habits(fish, aim, env, dt);
         regroup(fish, aim, env);
       }
       swimFish(fish, aim, crowd.x[i], crowd.y[i], crowd.z[i], rocks, dt);
