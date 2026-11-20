@@ -6,7 +6,7 @@
 |------|------|
 | `npm run dev` | http://127.0.0.1:5190/ 是游戏，`/fish.html` 单看一条鱼 |
 | `npm run build` | `tsc` 检查（只严格查 `.ts`）+ `dist/`（相对路径） |
-| `npm run check` | 不用手机能跑的检查，十几秒。后面带一个词只跑名字里有它的，如 `npm run check camera` |
+| `npm run check` | 不用手机能跑的检查，一分钟以内。后面带一个词只跑名字里有它的，如 `npm run check camera` |
 | `npm run record` | 把二十几竿和握竿的每一帧折成散列打出来。只整理结构时前后各跑一遍，逐行相同才算没改行为 |
 | `npm run cap:sync` | build + cap sync ios |
 | `npm run ios:bootstrap` | add ios + 拷插件 + 改 storyboard **和 SceneDelegate** + pbx + sync |
@@ -54,7 +54,7 @@ school.js update
 玩法一帧（`fishing.update` 在鱼群之后、手机和竿之前，`fishing.follow` 在 `line.update` 之后。第一帧的 `line.update` 之后先调一次 `fishing.begin`）：
 
 ```
-fishing.js update(dt, { finger, sensor, viewYaw, viewPitch, rodYaw, aimPitch })
+fishing.js update(dt, { finger, sensor, viewYaw, viewPitch, aimPitch })
   → 读上一帧线画出来的竿尖 line.tip
   → ready：手指按下那一刻记下镜头看的方向和俯仰；swing.step 量竿尖带着饵走多快
            松手以后饵等竿尖不再加速才走；够快 → 按记下的方向和仰角 lureMove.launch，从这一帧起 watch 是落点

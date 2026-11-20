@@ -72,6 +72,14 @@ const DRAWN_EASY = 2;
 const BURST_SPENT = 0.3;
 // Each rest it bolts a little sooner or later than its nature says: this much either way.
 const GO_VARIES = 0.1;
+// A fish wants deep water and room, away from the shore. Brought in close it will not
+// lie quiet: inside SHORE_NEAR, level metres from under the rod tip, it bolts again with
+// this much less of a run back, as a share, and not at all sooner beyond SHORE_FAR. This
+// is the run it makes at the bank, when it looked to be in the hand. Higher, and a fish
+// near the bank hardly rests at all.
+const SHORE_ALARMS = 0.45;
+const SHORE_NEAR = 3;
+const SHORE_FAR = 9;
 // A run keeps most of its force until the fish is nearly spent, then it goes quickly:
 // the force follows stamina to this power. 1 would fade evenly.
 const RUN_FADE = 0.6;
@@ -89,7 +97,7 @@ const FORCE_OFF = 2.5;
 const BODY_DRAG = 1.5;
 // Bolting, it is swimming, not being dragged: line runs out at what its pull has over the
 // reel's hold, divided by this, N per m/s. Lower and a run takes line faster.
-const BOLT_DRAG = 1.1;
+const BOLT_DRAG = 3;
 // How soon it is where the line holds it, s. Lower follows the line more tightly and
 // overshoots more at low frame rates. Higher, it gives way later to a rod swung against it.
 const SETTLE_IN = 0.4;
@@ -126,7 +134,7 @@ const SHALLOWEST = -0.25;
 // not at all inside DIVE_NEAR. Close in the line runs steeply down to it, and a dive
 // there is a straight pull on a short, stiff line.
 const DIVE_NEAR = 3;
-const DIVE_FAR = 9;
+const DIVE_FAR = 13;
 // How sharply it turns and speeds up, in a run and at rest, 1/s.
 const TURN_RUN = 7;
 const TURN_REST = 3.5;
@@ -188,10 +196,11 @@ export function createFight(random = Math.random) {
 
     /**
      * Once a frame: what its pull costs it, the run ending or the next beginning, and the
-     * pull following that. tension: how hard the line is pulling now, N.
+     * pull following that. tension: how hard the line is pulling now, N. far: how far it
+     * is from under the rod tip, level metres: the nearer the bank, the sooner it bolts.
      * Returns true on the frame a run begins.
      */
-    step(dt, tension = 0) {
+    step(dt, tension = 0, far = 99) {
       if (!(dt > 0)) return false;
       // What it is putting out, against the most it ever can, and how much of that the
       // line is standing against.
@@ -215,7 +224,8 @@ export function createFight(random = Math.random) {
         // A worn fish gets it back more slowly as well as getting less of it back: it
         // rests longer between runs the longer the fight has gone on.
         fight.burst = Math.min(most, fight.burst + (dt / kind.recover) * most * Math.sqrt(most) * (kind.rest + DRAWN_EASY) / (Math.max(tension, kind.rest) + DRAWN_EASY));
-        if (fight.burst >= goAt * most) {
+        const near = Math.min(1, Math.max(0, (SHORE_FAR - far) / (SHORE_FAR - SHORE_NEAR)));
+        if (fight.burst >= goAt * most * (1 - SHORE_ALARMS * near * near * (3 - 2 * near))) {
           running = true;
           began = true;
         }

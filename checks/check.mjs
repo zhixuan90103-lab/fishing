@@ -66,7 +66,8 @@ check('fight: no clock. A run ends when its burst is spent, sooner the harder it
   // One run from fresh, against a line pulling `share` of what the fish pulls. How long it lasted and what it cost.
   const run = (share, fps = 60, fish = big) => { const f = createFight(() => 0.5); f.begin(fish); let t = 0; while (f.running && t < 30) { f.step(1 / fps, f.force * share); t += 1 / fps; } return { lasted: t, cost: 1 - f.stamina, f }; };
   const held = run(1), free = run(0);
-  expect(held.lasted > 1 && held.lasted < 3, 'held hard, a fresh run is over in a couple of seconds', `${held.lasted.toFixed(2)} s`);
+  // A run used to be over in a second or two: too short for the fish to get anywhere, or to turn.
+  expect(held.lasted > 4 && held.lasted < 9, 'held hard, a fresh run still lasts several seconds', `${held.lasted.toFixed(2)} s`);
   expect(free.lasted > held.lasted * 2, 'on a free reel the same run goes on more than twice as long', `${free.lasted.toFixed(2)} s against ${held.lasted.toFixed(2)} s`);
   expect(Math.abs(free.cost - held.cost) < 0.05, 'either way a run costs it the same: holding it gets that run over with, and keeps the line', `${free.cost.toFixed(2)} and ${held.cost.toFixed(2)}`);
   for (const fps of [20, 120]) expect(Math.abs(run(1, fps).lasted - held.lasted) < 0.06, `${fps} fps: the same`, run(1, fps).lasted.toFixed(2));
@@ -112,6 +113,44 @@ check('fight: the line draws it toward the rod tip and nowhere else, and brought
   expect(left.tight > 0.12 && right.tight > 0.12, 'brought round by the line while it has way on, it swings round on a radius, not on the spot', `${left.tight.toFixed(2)} m, ${right.tight.toFixed(2)} m`);
 });
 
+check('fight: it tears about, both ways and of its own accord, and from a big one line is won only while it rests', () => {
+  // It used to make a run of under a second, half a metre to one side, always the side
+  // away from the rod, and be wound in whatever it did: a weight on a string.
+  for (const [name, size, lasts, goes, fast] of [['small', 0.85, 1.5, 1.2, 1.6], ['big', 1.3, 2.5, 2, 2.2]]) {
+    const runs = [], side = [], peaks = []; let left = 0, right = 0, turns = 0, fights = 0, wonRun = 0, wonRest = 0, tRun = 0, tRest = 0, flips = 0, same = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      let was = '', t0 = 0, from = null, px = null, pz = 0, last = 0, lineWas = null, peak = 0, ran = 0;
+      fightOne({ seed, fps: 60, press: 'always', size, seconds: 200, each: (rig) => {
+        const f = rig.fishing; if (f.stage !== 'fight') { px = null; lineWas = null; return; }
+        // The rod stays 30 degrees to one side from first to last: nothing the angler does changes.
+        rig.rodStays = true; rig.rodTurn = 30 * deg;
+        const e = rig.line.end, tip = rig.line.tip; const dx = e.x - tip.x, dz = e.z - tip.z, far = Math.hypot(dx, dz);
+        if (f.mood === 'run' && was !== 'run') { t0 = rig.time; from = { x: e.x, z: e.z, ux: dx / far, uz: dz / far }; peak = 0; }
+        if (f.mood !== 'run' && was === 'run' && from) { const went = (e.x - from.x) * -from.uz + (e.z - from.z) * from.ux; runs.push(rig.time - t0); side.push(Math.abs(went)); peaks.push(peak); if (Math.abs(went) > 0.5) { if (ran && Math.sign(went) !== ran) flips += 1; else if (ran) same += 1; ran = Math.sign(went); } }
+        if (px !== null) {
+          // Which way round the rod it is going, while it is going anywhere.
+          const across = ((e.x - px) * -dz + (e.z - pz) * dx) / far * 60;
+          if (f.mood === 'run') peak = Math.max(peak, Math.hypot(e.x - px, e.z - pz) * 60);
+          if (f.mood === 'run' && Math.abs(across) > 0.5) { if (across > 0) left += 1; else right += 1; const now = Math.sign(across); if (last && now !== last) turns += 1; last = now; }
+          const won = lineWas - rig.line.length;
+          if (f.mood === 'run') { wonRun += won; tRun += rig.dt; } else { wonRest += won; tRest += rig.dt; }
+        }
+        px = e.x; pz = e.z; was = f.mood; lineWas = rig.line.length;
+      } });
+      fights += 1;
+    }
+    const mid = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    expect(mid(runs) > lasts, `${name}: a run lasts seconds, not a moment`, `${mid(runs).toFixed(1)} s`);
+    expect(mid(side) > goes, `${name}: and takes it metres across`, `${mid(side).toFixed(1)} m`);
+    expect(mid(peaks) > fast, `${name}: at a real fish's pace`, `${mid(peaks).toFixed(1)} m/s`);
+    expect(Math.min(left, right) / (left + right) > 0.25, `${name}: with the rod never moved it still goes both ways`, `${(100 * left / (left + right)).toFixed(0)}% one way`);
+    expect(turns / fights >= 2, `${name}: turning of its own accord, more than once a fight`, `${(turns / fights).toFixed(1)} turns a fight`);
+    expect(flips > same, `${name}: brought round by the line, its next run goes to the other side more often than the same`, `${flips} to the other side, ${same} to the same`);
+    // Only of a fish that can take line. A small one pulls less than the reel holds, run or rest, and comes in either way: docs/NOTED.md.
+    if (size > 1) expect(wonRest / tRest > 0.4 && wonRun / tRun < 0.1, `${name}: line is won while it rests and none while it runs`, `${(wonRest / tRest).toFixed(2)} m/s resting, ${(wonRun / tRun).toFixed(2)} m/s running`);
+  }
+});
+
 check('course: runs head out and to a side, not flat across', () => {
   const course = createCourse(seeded(3)); const lean = [];
   for (let i = 0; i < 400; i += 1) { course.begin(); lean.push(course.across(true, 1, 3, 5, 20) / 3); }
@@ -119,7 +158,8 @@ check('course: runs head out and to a side, not flat across', () => {
   expect(sides > 0.4 && sides < 0.6, 'left and right about as often', sides.toFixed(2));
   expect(Math.min(...lean.map(Math.abs)) > 0.1 && Math.max(...lean.map(Math.abs)) <= 1, 'every run leans a little, none more than its dash', `${Math.min(...lean.map(Math.abs)).toFixed(2)}..${Math.max(...lean.map(Math.abs)).toFixed(2)}`);
   course.begin();
-  expect(Math.abs(course.across(true, 1, 3, 0, 20)) < Math.abs(course.across(true, 1, 3, 5, 20)) * 0.5, 'held by the line it does not slide off sideways at speed');
+  // Close in it used to be held to a third. It is brought in to a bank it wants away from, and is not to go quiet there.
+  expect(Math.abs(course.across(true, 1, 3, 0)) < Math.abs(course.across(true, 1, 3, 7)) * 0.6 && Math.abs(course.across(true, 1, 3, 0)) > Math.abs(course.across(true, 1, 3, 7)) * 0.35, 'right under the rod it goes across at about half the speed, where the same speed would whip it round');
   expect(Math.abs(course.across(false, 1, 3, 0, 20)) < 0.1, 'resting it barely moves across');
 });
 
@@ -267,6 +307,36 @@ check('line: it is as slack as what happened to it left it, and a pull draws it 
   expect(rocked > 0.2, 'sinking, it rocks from side to side', rocked.toFixed(2));
   expect(down < -0.4, 'and goes nose down', down.toFixed(2));
   expect(m.swum === swum0, 'and does not beat its tail as if swimming', m.swum - swum0);
+});
+
+check('line: under a sinking lure the bend is spread along the wet line, no corner at the surface and no drop by the lure', () => {
+  // It used to lie where it was, flat on the water, all but the last metre, which went
+  // down with the lure: a corner and a drop. Worst with a little line to spare, as a
+  // hand-held rod leaves it.
+  const n = 49; const out = new Float64Array(n * 3); const reach = 13;
+  const sunk = (fps, spare) => {
+    const c = createLineCurve(n); const dt = 1 / fps; const tip = [0, 2.7, 0]; let end = [0, 2.6, -0.3];
+    c.step(dt, ...tip, ...end, 0.32, 0, out, 0);
+    const flight = Math.round(1.2 * fps);
+    for (let i = 1; i <= flight; i += 1) { const u = i / flight; end = [0, 2.6 * (1 - u) + 5 * u * (1 - u) - 0.05 * u, -0.3 - (reach - 0.3) * u]; c.step(dt, ...tip, ...end, Math.hypot(end[1] - 2.7, end[2]) * 1.001, 0, out, 0); }
+    for (let i = 0; i < 3 * fps; i += 1) { end = [0, end[1] - 0.4 * dt, -reach]; c.step(dt, ...tip, ...end, Math.hypot(end[1] - 2.7, end[2]) + spare, 0, out, 0); }
+    // Each wet stretch's slope below the level, degrees, from the surface to the lure.
+    const slopes = [];
+    for (let i = 1; i < n; i += 1) if (out[i * 3 + 1] < 0) slopes.push(Math.atan2(out[i * 3 - 2] - out[i * 3 + 1], out[i * 3 - 1] - out[i * 3 + 2]) / deg);
+    let sharpest = 0; for (let i = 1; i < slopes.length; i += 1) sharpest = Math.max(sharpest, Math.abs(slopes[i] - slopes[i - 1]));
+    // How deep the line is two and a half metres short of the lure.
+    let back = 0; for (let i = 1; i < n; i += 1) if (out[i * 3 + 2] + reach < 2.5) { back = -out[i * 3 + 1]; break; }
+    return { last: slopes[slopes.length - 1], first: slopes[0], sharpest, back, depth: -end[1] };
+  };
+  for (const spare of [0, 0.3]) {
+    const s = sunk(60, spare);
+    expect(s.last < 36, `by the lure it slopes, it does not drop (${spare} m to spare)`, `${s.last.toFixed(0)} degrees`);
+    expect(s.first < 15, `it goes into the water flat (${spare} m to spare)`, `${s.first.toFixed(0)} degrees`);
+    expect(s.sharpest < 4, `no corner anywhere under the water (${spare} m to spare)`, `${s.sharpest.toFixed(1)} degrees between two stretches`);
+    expect(s.back > s.depth * 0.2, `the line well back from the lure has gone down with it (${spare} m to spare)`, `${s.back.toFixed(2)} m down, the lure ${s.depth.toFixed(2)}`);
+  }
+  const at = [20, 60, 120].map((fps) => sunk(fps, 0.3).last);
+  expect(Math.max(...at) - Math.min(...at) < 1.5, 'the same at 20, 60 and 120 frames a second', at.map((a) => a.toFixed(1)).join(' / '));
 });
 
 check('line: its drawn shape never jumps, landing, sinking, wound a moment, or taken by a fish', () => {
@@ -610,7 +680,8 @@ check('casts: every size of fish is landed by winding only while it rests, at 20
         // fault this guards against, was half a turn in one frame: over 3000°/s.
         expect(r.lureTurn < 1400, `size ${size}, ${fps} fps, seed ${seed}: the lure never flips over`, `${r.lureTurn.toFixed(0)}°/s`);
         expect(r.tipFast < 6, `size ${size}: the rod tip never jumps`, `${r.tipFast.toFixed(1)} m/s`);
-        if (size < 1) expect(r.given < 2, `size ${size}: a small fish takes next to no line`, `${r.given.toFixed(1)} m`);
+        // It pulls less than the reel holds. But tearing about at twice the old speed it comes up hard against the line as it turns, and each time the reel gives a little: under 2 m in a fight before, now up to about 4.
+        if (size < 1) expect(r.given < 6, `size ${size}: a small fish takes line only in snatches, a few metres in a whole fight`, `${r.given.toFixed(1)} m`);
         else expect(r.given > 2, `size ${size}: a big fish takes line`, `${r.given.toFixed(1)} m`);
         times[fps].push(r.fightFor);
       }
@@ -724,7 +795,7 @@ check('landed fish: it turns about the line to show its sides, and its pose neve
   }
 });
 
-check("fight: where it runs is its own business, what comes of it is the line's, and it leans away from the rod", () => {
+check("fight: where it runs is its own business, what comes of it is the line's, and it sets off the way its head points", () => {
   // Which way a running fish is travelling: out along the line, or across it.
   const travel = (opts, turn = 0, givingLine = false) => {
     let out = 0, across = 0, total = 0, worst = 0, left = 0, sided = 0;
@@ -746,14 +817,21 @@ check("fight: where it runs is its own business, what comes of it is the line's,
   };
   // A big fish let run takes line, and while the reel is giving it a metre a second or more it goes mostly out. A small one the reel holds cannot: it goes round.
   const taking = travel({ press: 'never', size: 1.4, seconds: 40 }, 0, true), heldIn = travel({ press: 'rests', size: 0.85 });
-  expect(taking.out > 0.5, 'taking line, most of its travel is out and away', `${(100 * taking.out).toFixed(0)}% out, ${(100 * taking.across).toFixed(0)}% across`);
+  // It used to go mostly out. It takes line more slowly now and tears about across it as well.
+  expect(taking.out > 0.1 && taking.across > 0.3, 'taking line, it goes out and away as well as across', `${(100 * taking.out).toFixed(0)}% out, ${(100 * taking.across).toFixed(0)}% across`);
   // It used to be held to a third of its speed across whenever the line would not give.
   expect(heldIn.across > 0.6, 'held by a line that will not give, it goes round the arc the line allows', `${(100 * heldIn.across).toFixed(0)}% across`);
   expect(taking.worst < 50 && heldIn.worst < 50, 'and either way it stays in front of the angler', `${taking.worst.toFixed(0)}° and ${heldIn.worst.toFixed(0)}° off the cast line`);
-  // The rod carried well to its left: it goes right more often than left, and not always.
-  const rodLeft = travel({ press: 'rests', size: 0.85 }, 45), rodRight = travel({ press: 'rests', size: 0.85 }, -45);
-  expect(rodLeft.left < rodRight.left - 0.1, 'with the rod to its left it goes right more often than with the rod to its right', `left ${(100 * rodLeft.left).toFixed(0)}% of the time, against ${(100 * rodRight.left).toFixed(0)}%`);
-  expect(rodLeft.left > 0.1 && rodRight.left < 0.9, 'more often, not always: where it goes is still its own', `${(100 * rodLeft.left).toFixed(0)}% and ${(100 * rodRight.left).toFixed(0)}%`);
+  // A run sets off the way its head points, more often than not and not always. Asked of the course itself.
+  // It used to go by where the rod was, away from it: a rod left to one side sent it the same way every run.
+  const sets = (head) => { const draws = seeded(31); let left = 0; for (let i = 0; i < 2000; i += 1) { const c = createCourse(draws); c.hooked(); c.begin(head, 0.5, 1); if (c.across(true, 1, 1, 99) > 0) left += 1; } return left / 2000; };
+  const headLeft = sets(0.8), headRight = sets(-0.8), ahead = sets(0);
+  expect(headLeft > 0.7 && headRight < 0.3, 'with its head to the left it sets off left, to the right right', `left ${(100 * headLeft).toFixed(0)}% and ${(100 * headRight).toFixed(0)}% of the time`);
+  expect(headLeft < 0.92 && headRight > 0.08, 'more often, not always: where it goes is still its own', `${(100 * headLeft).toFixed(0)}% and ${(100 * headRight).toFixed(0)}%`);
+  expect(Math.abs(ahead - 0.5) < 0.06 && sets(0.1) > ahead + 0.03 && sets(0.1) < headLeft - 0.1, 'head on to the rod it goes either way, and a head a little to one side leads it a little', `${(100 * ahead).toFixed(0)}% dead ahead, ${(100 * sets(0.1)).toFixed(0)}% a little to the left`);
+  // And well round to one side of its own place, it heads back more often than on.
+  const back = (() => { const draws = seeded(32); let n = 0; for (let i = 0; i < 2000; i += 1) { const c = createCourse(draws); c.hooked(); c.keepInFront(30 * deg); c.begin(0, 0.5, 1); if (c.across(true, 1, 1, 99) < 0) n += 1; } return n / 2000; })();
+  expect(back > 0.6 && back < 0.95, 'far round to the left it turns back right more often than not', `${(100 * back).toFixed(0)}%`);
 });
 
 check('hand: what it holds is what the line carries, winding or not', () => {
@@ -838,7 +916,8 @@ check('wake: a fish churns the water only while it is being fought, and not from
     expect(r.sawFight, `size ${size}: there was a fight`);
     expect(before === 0, `size ${size}: nothing before a fish is on`, before.toFixed(3));
     expect(most > 0.05, `size ${size}: fought near the top, it shows`, most.toFixed(2));
-    expect(deep < 0.05, `size ${size}: from more than two metres down it does not`, deep.toFixed(3));
+    // It dives faster now, and what it churned up near the top is still fading as it goes through two metres.
+    expect(deep < 0.09, `size ${size}: from more than two metres down it does not`, deep.toFixed(3));
     expect(after < 0.01, `size ${size}: out of the water it is gone`, after.toFixed(3));
   }
 });

@@ -72,6 +72,16 @@ const PULL_HOLDS = 0.05;
 // drops out for a frame or two, as it does when a rod kicks back at the strike, is hardly
 // felt at all.
 const PULL_TRAVELS = 250;
+// A line does not come through the water for nothing. Whatever is on its far end and
+// going away has to draw the line after it, along its own length, and the line in the
+// water holds back: this many N for each m/s it is drawn at, for each metre of it that is
+// wet. It is a small pull, a few hundredths of a newton under a sinking lure, and the rod
+// never feels it: this is the drawn shape only, and only the wet part of it. But it is
+// what spreads the bend by the lure along the line. With none,
+// only the last metre of line went down with the lure and the rest lay where it was, a
+// corner at the surface and a drop from it. Higher and the line under a sinking lure
+// runs flatter and bends further back; lower and it hangs steeper by the lure.
+const DRAWN_DRAG = 0.006;
 // Slack much smaller than this, m, hardly shows. A line sags by the square root of its
 // slack, so the first centimetre of it would drop the middle of ten metres of line by a
 // hand's breadth at once. It is let in gently. Slack well past this is drawn as it is.
@@ -104,6 +114,8 @@ export function createLineCurve(count) {
   let flew = 0;
   // The pull as the whole line feels it, N.
   let felt = 0;
+  // The pull the far end puts into the wet line by drawing it after itself, N.
+  let drawn = 0;
   let started = false;
 
   function straight(ax, ay, az, bx, by, bz) {
@@ -178,9 +190,11 @@ export function createLineCurve(count) {
   // of its two neighbours, by the pull over what holds it where it is: the bends flatten
   // and spread, as they do in a string under tension moving through something thick. It
   // is solved along the whole string at once, so no size of pull can make it overshoot.
-  function straighten(pull, h, spacing) {
-    const held = (pull * h) / (LINE_DRAG * spacing * spacing);
-    for (let i = 1; i < last; i += 1) stiff[i] = held;
+  // pull is on the whole line. wetPull is what the wet part carries when that is more: the
+  // far end drawing it through the water. The line in the air does not feel that one.
+  function straighten(pull, wetPull, h, spacing) {
+    const by = h / (LINE_DRAG * spacing * spacing);
+    for (let i = 1; i < last; i += 1) stiff[i] = (y[i] < 0 ? Math.max(pull, wetPull) : pull) * by;
     for (const p of [x, y, z]) {
       // (1 + 2k) p[i] - k p[i-1] - k p[i+1] = what it was. The ends are given.
       let was = p[0];
@@ -259,11 +273,19 @@ export function createLineCurve(count) {
         // Only a line with nothing pulling on it: one under pull cannot run on.
         if (to[1] > 0 && by <= 0 && !(pull > 0)) over = Math.max(over, OVERRUN * Math.max(speed, flew));
         flew = speed;
+        // How fast the far end is drawing the line after it: its speed along the last of
+        // the line, away from the rest. And how much line is in the water to be drawn.
+        let wet = 0;
+        for (let i = 1; i < last; i += 1) if (y[i] < 0) wet += 1;
+        const lx = x[last] - x[last - 1], ly = y[last] - y[last - 1], lz = z[last] - z[last - 1];
+        const along = ((bx - to[0]) * lx + (by - to[1]) * ly + (bz - to[2]) * lz) / (dt * Math.max(Math.hypot(lx, ly, lz), 1e-6));
+        drawn = by <= 0 ? DRAWN_DRAG * Math.max(0, along) * wet * (gap / last) : 0;
         felt += (Math.max(0, pull) - felt) * (1 - Math.exp(-dt * PULL_TRAVELS / Math.max(gap, 0.5)));
       } else {
         over = 0;
         flew = 0;
         felt = 0;
+        drawn = 0;
       }
       const soft = slack > 0 ? (slack * slack) / (slack + SLACK_SOFT) : 0;
       if (!carried) {
@@ -292,8 +314,10 @@ export function createLineCurve(count) {
             // a moment, or one its slack has not reached yet, has used none.
             const rest = between + real + over;
             const lay = Math.min(lies(), rest);
-            straighten(felt, h, Math.max(between / last, 1e-4));
+            straighten(felt, drawn, h, Math.max(between / last, 1e-4));
             over = Math.max(0, over - Math.max(0, lay - Math.min(lies(), rest)));
+          } else if (drawn > 0) {
+            straighten(0, drawn, h, Math.max(between / last, 1e-4));
           }
           weigh();
           for (let n = 0; n < PASSES; n += 1) fit((between + real + over) / last, n % 2 === 0);

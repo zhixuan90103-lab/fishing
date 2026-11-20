@@ -22,6 +22,10 @@
  *   burst     how long it can pull flat out against a line that holds it, s: a run's worth
  *   recover   how long it takes to get that back, hanging on a line that is not drawing it, s
  *   dash      how fast it tears off across the line in a run, fresh, m/s
+ *             Set against a real fish's burst speed: about 0.4 + 7.4 x its length, m/s,
+ *             for fish under half a metre (Videler 1993). The table is a fifth or so over
+ *             that, on purpose: it is a game, and a fish that crosses the picture reads
+ *             better than one that is true to the metre. docs/PLAY.md section 8
  *   thump     how hard a shake of its head snatches the line at its peak, fresh, N
  *   beat      seconds between head shakes within a burst, fresh: [shortest, longest]
  *   load      what it weighs out of the water, kg. In the water it puts a share of that
@@ -41,10 +45,10 @@ import { SUNK_SHARE } from './tipWeight.js';
 
 const KINDS = {
   dorade: [
-    { size: 0.78, runFresh: 2.8, runSpent: 1.3, tire: 1.9, burst: 1.3, recover: 3.2, dash: 2, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
-    { size: 0.95, runFresh: 3.8, runSpent: 1.6, tire: 1.6, burst: 1.5, recover: 3.4, dash: 2.3, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
-    { size: 1.2, runFresh: 8, runSpent: 2.4, tire: 1.1, burst: 1.9, recover: 3.8, dash: 3.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
-    { size: 1.4, runFresh: 9.8, runSpent: 2.8, tire: 0.9, burst: 2.1, recover: 4, dash: 3.6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
+    { size: 0.78, runFresh: 2.8, runSpent: 1.3, tire: 0.42, burst: 4, recover: 2.6, dash: 3.6, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
+    { size: 0.95, runFresh: 3.8, runSpent: 1.6, tire: 0.38, burst: 4.5, recover: 2.8, dash: 4.2, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
+    { size: 1.2, runFresh: 8, runSpent: 2.4, tire: 0.5, burst: 5.5, recover: 3.2, dash: 5.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
+    { size: 1.4, runFresh: 9.8, runSpent: 2.8, tire: 0.44, burst: 6, recover: 3.4, dash: 6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
   ],
 };
 
