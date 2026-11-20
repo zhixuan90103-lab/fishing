@@ -386,6 +386,7 @@
 | [NET.md](./NET.md) | 抄网的设计：模型和它走的路 |
 | [NOTED.md](./NOTED.md) | 对过手感以后记下、还没改的几条，对过不用改的，和还没定的 |
 | [LINE-RESEARCH.md](./LINE-RESEARCH.md) | 鱼线做法的检索纪要，不是规格。和实现有出入的地方记在 LINE.md 第 4 节 |
+| [FISH-SWIM-RESEARCH.md](./FISH-SWIM-RESEARCH.md) | 鱼怎么游、怎么结群、行为该分几层的检索纪要，不是规格 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
 
