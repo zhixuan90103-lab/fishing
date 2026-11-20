@@ -61,8 +61,9 @@ const SPOOL = 70;
 // What it looks like is the wake's (src/shore/wakeTrack.js). churn: that wake's track.
 const CHURN_TOP = -0.5;
 const CHURN_DEEP = -2;
-// While a fish is on, the point the view watches follows it at this rate, 1/s. Low, so
-// the view drifts after the fish and does not swing with every turn it makes.
+// While a fish is on, the point the view watches follows it at this rate, 1/s. Lower and
+// the view drifts after the fish and swings less with every turn it makes; too low and a
+// fish crossing at speed is out of the picture before the view has come round.
 const WATCH_FOLLOW = 2.5;
 // A hooked fish this close to under the tip, level metres, is landed.
 const LAND_WITHIN = 2.2;
@@ -156,7 +157,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // only through the line: where its tip is, and which way that has brought its head.
   const fightBrain = (fish, aim) => {
     fight.bearing(fish, line.tip, homeX, homeZ, bearing);
-    course.keepInFront(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
+    course.stands(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
     bolt = fight.bolt(RUN_OUT_AT);
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
@@ -386,7 +387,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     fight(dt, input, tip, spot) {
       // Its runs and rests, by what its pull is costing it against the line as it was a
       // frame ago, and where a run that has just begun means to go.
-      if (fight.step(dt, tension, bearing.far)) course.begin(head, kind.bold, fight.stamina);
+      if (fight.step(dt, tension, course.uneasy(bearing.far))) course.begin(head, kind.bold, fight.stamina);
       course.step(dt, fight.running, kind.bold, farWas - bearing.far, bearing.far);
       farWas = bearing.far;
       // A finger held down on a fish that is taking line leans on it, and may break it.

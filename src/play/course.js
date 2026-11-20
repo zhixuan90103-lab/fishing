@@ -3,7 +3,8 @@
  *
  * Owns: what the fish wants. Which side it tears off to and how far across, how deep it
  * dives, when it cuts to the other side, whether this run is one of the few that rush in
- * at the angler, and keeping it in the water in front of the angler.
+ * at the angler, how ill at ease it is near the bank, and keeping it in the water in
+ * front of the angler.
  * Does not own: what comes of that. The line decides what it can actually do (fight.js):
  * out, if the reel gives line; round the arc the line allows, if it does not. Nor how
  * hard it pulls or when it runs and rests (fight.js), or the fish's swimming
@@ -24,6 +25,8 @@
  * The rest is its own. It has a place it would be, drawn when it is hooked, and heads
  * back there the likelier the further off it is. And in the middle of a run it may cut
  * across to the other side.
+ * It wants deep water and room. Brought in close to the bank it will not lie quiet, and
+ * bolts again with less of a run back: uneasy(). When that run comes is fight.js's.
  * It used to pick a side by where the rod was, away from it seven times in ten: a rod
  * left to one side sent it the same way run after run, and bringing its head round
  * showed in nothing it did next.
@@ -66,6 +69,14 @@ const DEEP = [0.5, 1];
 // It stays within this angle of the cast's direction, radians, seen from the rod tip.
 // Past it, it swims back across. This keeps it in the water in front of the angler.
 const KEEP_WITHIN = 36 * Math.PI / 180;
+// Brought in close it will not lie quiet. Inside BANK_NEAR, level metres from under the
+// rod tip, it bolts again with this much less of a run back, as a share, and no sooner
+// at all beyond BANK_FAR. This is the run it makes at the bank, when it looked to be in
+// the hand. Higher, and a fish near the bank hardly rests at all. There is no sea bed
+// here: how near the rod tip it is stands in for how shallow the water is.
+const BANK_ALARMS = 0.45;
+const BANK_NEAR = 3;
+const BANK_FAR = 9;
 // A run rushes in at the angler this often, and only with this much stamina left. Rare:
 // it is the moment a fish is lost, not the way a fish fights.
 const RUSH_OFTEN = 0.07;
@@ -85,8 +96,8 @@ export function createCourse(random = Math.random) {
   let dartIn = 0;
   let deep = 1;
   let rush = 0;
-  // Where it would be, radians round from the cast's direction, positive to the left.
-  // And where it is, as keepInFront() was last told.
+  // Where it would be, and where it is as stands() was last told: radians round from the
+  // cast's direction, positive to the left.
   let haunt = 0;
   let round = 0;
 
@@ -140,9 +151,10 @@ export function createCourse(random = Math.random) {
       dartIn = between(random, DART_EVERY) * (1.3 - 0.6 * bold);
     },
 
-    // off: how far round from the cast's direction the fish is, radians, positive to the
-    // left. Too far round to one side, it swims back across.
-    keepInFront(off) {
+    // Once a frame, where the fish is: off, how far round from the cast's direction,
+    // radians, positive to the left. What it picks next goes by this. And too far round
+    // to one side, it swims back across at once: that is the edge of the picture.
+    stands(off) {
       round = off;
       if (off > KEEP_WITHIN && side > 0) {
         side = -1;
@@ -163,6 +175,13 @@ export function createCourse(random = Math.random) {
       if (!running) return 0;
       const room = Math.min(1, far / ACROSS_FAR);
       return dash * (DASH_SPENT + (1 - DASH_SPENT) * stamina) * (ACROSS_NEAR_SHARE + (1 - ACROSS_NEAR_SHARE) * room) * lean;
+    },
+
+    // How ill at ease it is where it is, 0 to 1: how much less of a run it waits to have
+    // back before it bolts again. far: level metres from under the rod tip.
+    uneasy(far) {
+      const near = Math.min(1, Math.max(0, (BANK_FAR - far) / (BANK_FAR - BANK_NEAR)));
+      return BANK_ALARMS * near * near * (3 - 2 * near);
     },
 
     // How fast it is rushing in at the rod right now, m/s. 0 when it is not.

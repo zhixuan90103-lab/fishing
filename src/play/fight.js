@@ -3,8 +3,8 @@
  *
  * Owns: the fish's runs and rests, its stamina, the force of each run, how fast it takes
  * line, and the aim of a fish on a line: out, in or held, how deep, how sharply.
- * Does not own: which way a run heads across the line (course.js): catch.js hands in the
- * sideways speed that comes to. Nor the line, its
+ * Does not own: which way a run heads across the line, or how the fish takes to where it
+ * is (course.js): catch.js hands in the sideways speed and the unease that come to. Nor the line, its
  * length or its tension (line.js, lineOut.js), how fast line comes in or when it runs
  * out (haul.js), how a fish swims (src/fish/swim.js), when the fish is hooked or landed
  * (catch.js).
@@ -72,14 +72,6 @@ const DRAWN_EASY = 2;
 const BURST_SPENT = 0.3;
 // Each rest it bolts a little sooner or later than its nature says: this much either way.
 const GO_VARIES = 0.1;
-// A fish wants deep water and room, away from the shore. Brought in close it will not
-// lie quiet: inside SHORE_NEAR, level metres from under the rod tip, it bolts again with
-// this much less of a run back, as a share, and not at all sooner beyond SHORE_FAR. This
-// is the run it makes at the bank, when it looked to be in the hand. Higher, and a fish
-// near the bank hardly rests at all.
-const SHORE_ALARMS = 0.45;
-const SHORE_NEAR = 3;
-const SHORE_FAR = 9;
 // A run keeps most of its force until the fish is nearly spent, then it goes quickly:
 // the force follows stamina to this power. 1 would fade evenly.
 const RUN_FADE = 0.6;
@@ -134,7 +126,7 @@ const SHALLOWEST = -0.25;
 // not at all inside DIVE_NEAR. Close in the line runs steeply down to it, and a dive
 // there is a straight pull on a short, stiff line.
 const DIVE_NEAR = 3;
-const DIVE_FAR = 13;
+const DIVE_FAR = 9;
 // How sharply it turns and speeds up, in a run and at rest, 1/s.
 const TURN_RUN = 7;
 const TURN_REST = 3.5;
@@ -196,11 +188,12 @@ export function createFight(random = Math.random) {
 
     /**
      * Once a frame: what its pull costs it, the run ending or the next beginning, and the
-     * pull following that. tension: how hard the line is pulling now, N. far: how far it
-     * is from under the rod tip, level metres: the nearer the bank, the sooner it bolts.
+     * pull following that. tension: how hard the line is pulling now, N. uneasy: how much
+     * less of a run it waits to have back before it bolts again, as a share, 0 to 1: its
+     * own unease at where it is (course.js), not anything this file knows about.
      * Returns true on the frame a run begins.
      */
-    step(dt, tension = 0, far = 99) {
+    step(dt, tension = 0, uneasy = 0) {
       if (!(dt > 0)) return false;
       // What it is putting out, against the most it ever can, and how much of that the
       // line is standing against.
@@ -224,8 +217,7 @@ export function createFight(random = Math.random) {
         // A worn fish gets it back more slowly as well as getting less of it back: it
         // rests longer between runs the longer the fight has gone on.
         fight.burst = Math.min(most, fight.burst + (dt / kind.recover) * most * Math.sqrt(most) * (kind.rest + DRAWN_EASY) / (Math.max(tension, kind.rest) + DRAWN_EASY));
-        const near = Math.min(1, Math.max(0, (SHORE_FAR - far) / (SHORE_FAR - SHORE_NEAR)));
-        if (fight.burst >= goAt * most * (1 - SHORE_ALARMS * near * near * (3 - 2 * near))) {
+        if (fight.burst >= goAt * most * (1 - uneasy)) {
           running = true;
           began = true;
         }

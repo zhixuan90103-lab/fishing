@@ -830,7 +830,7 @@ check("fight: where it runs is its own business, what comes of it is the line's,
   expect(headLeft < 0.92 && headRight > 0.08, 'more often, not always: where it goes is still its own', `${(100 * headLeft).toFixed(0)}% and ${(100 * headRight).toFixed(0)}%`);
   expect(Math.abs(ahead - 0.5) < 0.06 && sets(0.1) > ahead + 0.03 && sets(0.1) < headLeft - 0.1, 'head on to the rod it goes either way, and a head a little to one side leads it a little', `${(100 * ahead).toFixed(0)}% dead ahead, ${(100 * sets(0.1)).toFixed(0)}% a little to the left`);
   // And well round to one side of its own place, it heads back more often than on.
-  const back = (() => { const draws = seeded(32); let n = 0; for (let i = 0; i < 2000; i += 1) { const c = createCourse(draws); c.hooked(); c.keepInFront(30 * deg); c.begin(0, 0.5, 1); if (c.across(true, 1, 1, 99) < 0) n += 1; } return n / 2000; })();
+  const back = (() => { const draws = seeded(32); let n = 0; for (let i = 0; i < 2000; i += 1) { const c = createCourse(draws); c.hooked(); c.stands(30 * deg); c.begin(0, 0.5, 1); if (c.across(true, 1, 1, 99) < 0) n += 1; } return n / 2000; })();
   expect(back > 0.6 && back < 0.95, 'far round to the left it turns back right more often than not', `${(100 * back).toFixed(0)}%`);
 });
 

@@ -65,7 +65,7 @@ fishing.js update(dt, { finger, sensor, viewYaw, viewPitch, aimPitch })
            catch.come：到时间 school.take 最近的一条鱼，brain 是 visit.steerToLure；嘴碰到饵 → fight
   → fight：catch.fight
            钩住的那一下 fishKind.fishOf(品种, 这条鱼的体型, 它自己的底子) 取出它的数
-           fight.step(dt, 线的张力) 爆发力和气力，没有时钟（起了一冲就 course.begin 挑这一冲想往哪去）→ course.step 换不换边、朝钓手窜到哪了→ snap.step 手指叠多少力、线断不断 → thump.step 甩头把线顿多重
+           fight.step(dt, 线的张力, course.uneasy 它这时多待不住) 爆发力和气力，没有时钟（起了一冲就 course.begin 挑这一冲想往哪去）→ course.step 换不换边、朝钓手窜到哪了→ snap.step 手指叠多少力、线断不断 → thump.step 甩头把线顿多重
            → school.mouth 鱼嘴在哪 → churn.follow 近水面时搅水 → haul.step 按 line.tension 收多少线 → rod.reel.wind → 饵放到鱼嘴上
            haul.slip 过了出线点加叠的力让出多少线 → reelClick.step 咔不咔 → watch 慢慢跟着鱼
            鱼的 brain 是 catch.js 的 fightBrain：fight.bearing 鱼在竿尖的哪边 → course.across / toward / deep 这一冲横着多快、朝不朝钓手、扎多深 → fight.steer 写目标（线把它拉向竿尖，线拉住时贴着弧走，掉头划弧）

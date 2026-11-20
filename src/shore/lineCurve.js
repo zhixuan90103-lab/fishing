@@ -16,7 +16,9 @@
  *   landing    the lure stops dead and the line does not: a little more of it has come
  *              off than the straight way needs. That is all the slack there is, and the
  *              harder the lure hit, the more.
- *   sinking    nothing pulls on it, so the slack stays. The lure draws the line by it down.
+ *   sinking    nothing pulls on the line as a whole, so the slack stays. The lure draws
+ *              the wet line after it, and that small pull spreads the bend by the lure
+ *              back along the line: no corner at the surface, no drop from it.
  *   pulling    a fish, or the reel. A line under pull straightens itself: every bend in
  *              it is drawn flatter, the faster the harder the pull, against what it has
  *              to move through, the water more than the air. Coming tight is therefore
@@ -190,11 +192,12 @@ export function createLineCurve(count) {
   // of its two neighbours, by the pull over what holds it where it is: the bends flatten
   // and spread, as they do in a string under tension moving through something thick. It
   // is solved along the whole string at once, so no size of pull can make it overshoot.
-  // pull is on the whole line. wetPull is what the wet part carries when that is more: the
-  // far end drawing it through the water. The line in the air does not feel that one.
-  function straighten(pull, wetPull, h, spacing) {
+  // Every point is pulled by what the whole line carries, `felt`. A point in the water
+  // carries what the far end puts in by drawing the wet line after it as well, `drawn`,
+  // when that is more: the line in the air does not feel that one.
+  function straighten(h, spacing) {
     const by = h / (LINE_DRAG * spacing * spacing);
-    for (let i = 1; i < last; i += 1) stiff[i] = (y[i] < 0 ? Math.max(pull, wetPull) : pull) * by;
+    for (let i = 1; i < last; i += 1) stiff[i] = (y[i] < 0 ? Math.max(felt, drawn) : felt) * by;
     for (const p of [x, y, z]) {
       // (1 + 2k) p[i] - k p[i-1] - k p[i+1] = what it was. The ends are given.
       let was = p[0];
@@ -308,16 +311,16 @@ export function createLineCurve(count) {
           x[last] = ex;
           y[last] = ey;
           z[last] = ez;
-          if (felt > 0) {
-            // What the pull has straightened is slack used up. It does not come back.
-            // Only what brings it under its own length counts: a string lying too long for
-            // a moment, or one its slack has not reached yet, has used none.
+          if (felt > 0 || drawn > 0) {
+            // What a pull on the whole line has straightened is slack used up. It does not
+            // come back. Only what brings it under its own length counts: a string lying
+            // too long for a moment, or one its slack has not reached yet, has used none.
+            // A far end drawing the wet line after it uses none either: it is taking line,
+            // not taking slack up.
             const rest = between + real + over;
             const lay = Math.min(lies(), rest);
-            straighten(felt, drawn, h, Math.max(between / last, 1e-4));
-            over = Math.max(0, over - Math.max(0, lay - Math.min(lies(), rest)));
-          } else if (drawn > 0) {
-            straighten(0, drawn, h, Math.max(between / last, 1e-4));
+            straighten(h, Math.max(between / last, 1e-4));
+            if (felt > 0) over = Math.max(0, over - Math.max(0, lay - Math.min(lies(), rest)));
           }
           weigh();
           for (let n = 0; n < PASSES; n += 1) fit((between + real + over) / last, n % 2 === 0);
