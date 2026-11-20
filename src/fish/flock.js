@@ -14,7 +14,7 @@
  */
 
 import { createShoal, startPose, resetShoal, watchCamera, advanceShoal, CRUISE_SPEED } from './shoal.js';
-import { STATES, SCHOOL, HELD, HUNG, seedStraying, seedHabits, habits, regroup, sendHome } from './behaviors.js';
+import { STATES, FREE, HELD, HUNG, seedFlocking, seedHabits, habits, regroup, sendHome } from './behaviors.js';
 import { mouthOf, startHang, poseHung } from './hung.js';
 import {
   clamp, makeAim, makeCrowd, measureCrowd, swimFish, restBody, writePose,
@@ -58,7 +58,7 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
       fish.pace = 0.78 + Math.random() * 0.46;
       fish.speed = CRUISE_SPEED * fish.pace;
       fish.brain = null;
-      seedStraying(fish);
+      seedFlocking(fish);
       seedHabits(fish);
       restBody(fish);
       const range = Math.random() < BIG_SHARE ? BIG_SIZE : SMALL_SIZE;
@@ -104,14 +104,14 @@ export function createFlock(fishes, { roamers = 0, bodyLength = 0.45 } = {}) {
     shoal.z = env.cz;
   }
 
-  // Centre of the fish that are in the school. Strays and held fish do not count.
+  // Centre of the free fish. Held and hung fish do not count.
   function findCentre() {
     let cx = 0;
     let cz = 0;
     let cn = 0;
     for (let i = 0; i < fishes.length; i++) {
       const fish = fishes[i];
-      if (fish.state !== SCHOOL) continue;
+      if (fish.state !== FREE) continue;
       cx += fish.x;
       cz += fish.z;
       cn += 1;

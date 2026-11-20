@@ -170,7 +170,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     let best = null;
     let bestGap = Infinity;
     for (const fish of school.fishes) {
-      if (fish.state !== 'school' && fish.state !== 'stray') continue;
+      if (fish.state !== 'free') continue;
       const gap = Math.hypot(fish.x - move.x, fish.z - move.z);
       if (gap < bestGap) {
         best = fish;
