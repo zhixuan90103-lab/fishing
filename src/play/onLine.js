@@ -3,9 +3,9 @@
  *
  * Owns: the aim of a hooked fish every frame. How far out the line holds it, what of its
  * motion is the line hauling it and what is its own swimming, which way its head lies at
- * rest, the turn it makes to bolt, how deep it goes, how sharply it turns and stops.
+ * rest, the turn it makes to bolt, the depth it keeps, how sharply it turns and stops.
  * Does not own: how hard it pulls or whether it is running (fight.js hands those in);
- * which way a run heads across the line (course.js, handed in as `across` and `deep`);
+ * which way a run heads across the line (course.js, handed in as `across`);
  * moving the fish (src/fish/swim.js does that from the aim); the line or the reel.
  * No Three, no scene: it runs in Node. Design: docs/HOOKED-FISH.md sections 4 to 6.
  *
@@ -102,22 +102,22 @@ const SLOW = 8;
 
 // ---------------------------------------------------------------- how deep
 
-// The deepest a run takes it, the depth it rests at, and the shallowest it goes, m. How
-// deep a given run goes is the run's own (course.js).
-const RUN_DEPTH = -2.9;
-const REST_DEPTH = -0.5;
+// A hooked fish keeps to one depth, KEEPS_DEPTH, m, from the bite to the net: run or
+// rest, far off or by the boat. It gets away by going far, not by going down. The eye is
+// 1.7 m above the water, so depth reads as distance: a fish fifteen metres off that goes
+// two and a half metres down lands in the picture where one six metres off would be.
+// When it dived in a run and rose to rest, every run read as a lunge at the camera and
+// every rest, hauled nearer, as backing away; and rising shortened the way to the rod
+// tip, so the line fell slack at each rest. (Until 2026-11-24: to -2.9 in a run far off,
+// -0.5 at rest.)
+const KEEPS_DEPTH = -0.6;
+// The shallowest it may go, m.
 const SHALLOWEST = -0.25;
-// It only dives in a run when further than DIVE_FAR from under the tip, level metres, and
-// not at all inside DIVE_NEAR. Close in the line runs steeply down to it, and a dive
-// there is a straight pull on a short, stiff line.
-const DIVE_NEAR = 3;
-const DIVE_FAR = 9;
-// How fast it changes depth diving and coming back up, 1/s, and the steepest it dives,
-// as a share of the speed it is making: about 30 degrees down. A fish that has not got
-// going yet has not gone down yet either.
-const RISE_RUN = 2.2;
-const RISE_REST = 0.9;
-const DIVE_SLOPE = 0.6;
+// Hooked deeper than that, on a lure left to sink, it comes up to it once: this fast,
+// 1/s, and no steeper than this share of the speed it is making, so it swims up and is
+// not lifted.
+const RISE = 0.9;
+const RISE_SLOPE = 0.6;
 
 /** fight: the fish's pull (fight.js): force, stamina, running, effort, bolt(), draws(). */
 export function createOnLine(fight) {
@@ -156,10 +156,9 @@ export function createOnLine(fight) {
      * winding: how fast line is coming in, m/s. holds: the most tension the reel holds
      * before it gives line, N.
      * across: how fast it is swimming across the line, m/s, positive to the left of the
-     * line out to it: its own course. deep: how deep this run takes it, 0 to 1. dt: the
-     * frame, s.
+     * line out to it: its own course. dt: the frame, s.
      */
-    steer(fish, aim, to, stretch, stiffness, winding, holds, across, deep = 1, dt = 0) {
+    steer(fish, aim, to, stretch, stiffness, winding, holds, across, dt = 0) {
       const running = fight.running;
       const ox = to.x;
       const oz = to.z;
@@ -234,8 +233,7 @@ export function createOnLine(fight) {
       aim.speed = running
         ? speed * (C_KEEPS + (1 - C_KEEPS) * faced * faced * (3 - 2 * faced))
         : speed * (keeps + (1 - keeps) * facing);
-      const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
-      aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * deep * dive * dive * (3 - 2 * dive) : REST_DEPTH;
+      aim.y = KEEPS_DEPTH;
       aim.top = SHALLOWEST;
       // However hard it is being turned, it cannot come round tighter than its speed lets it.
       // Hauled by the mouth it is swung as fast as it is hauled.
@@ -248,10 +246,9 @@ export function createOnLine(fight) {
       aim.turn = running ? Math.min(TURN_RUN + HELD_TURNS * overheld, turning ? Math.max(tightest, C_TURN) : tightest) : Math.max(Math.min(TURN_REST, tightest), freed);
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
       aim.slow = SLOW + HELD_SLOWS * overheld;
-      // Diving, it swims down: no steeper than DIVE_SLOPE of the way it is making, so a
-      // fish that has not got going yet has not gone down yet either.
+      // Coming to its depth it swims there: no steeper than its speed allows.
       const drop = Number.isFinite(fish.y) ? Math.abs(aim.y - fish.y) : 0;
-      aim.rise = running ? Math.min(RISE_RUN, DIVE_SLOPE * (fish.speed || 0) / Math.max(drop, 0.05)) : RISE_REST;
+      aim.rise = Math.min(RISE, RISE_SLOPE * (fish.speed || 0) / Math.max(drop, 0.05));
       aim.effort = fight.effort;
     },
   };

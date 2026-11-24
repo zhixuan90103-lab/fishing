@@ -158,7 +158,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
     const own = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
-    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.deep, dt);
+    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.

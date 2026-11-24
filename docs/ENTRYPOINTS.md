@@ -67,7 +67,7 @@ fishing.js update(dt, { finger, sensor, viewYaw, viewPitch })
            fight.step(dt, 线的张力, course.uneasy 它这时多待不住) 爆发力和气力，没有时钟（起了一冲就 course.begin 挑这一冲想往哪去）→ course.step 换不换边→ snap.step 手指叠多少力、线断不断 → thump.step 甩头把线顿多重
            → school.mouth 鱼嘴在哪 → churn.follow 近水面时搅水 → haul.step 按 line.tension 收多少线 → rod.reel.wind → 饵放到鱼嘴上
            haul.slip 过了出线点加叠的力让出多少线 → reelClick.step 咔不咔 → watch 慢慢跟着鱼
-           鱼的 brain 是 catch.js 的 fightBrain：fight.bearing 鱼在竿尖的哪边 → course.across / toward / deep 这一冲横着多快、朝不朝钓手、扎多深 → fight.steer 写目标（线把它拉向竿尖，线拉住时贴着弧走，掉头划弧）
+           鱼的 brain 是 catch.js 的 fightBrain：onLine.bearing 鱼在竿尖的哪边 → course.across 这一冲横着多快 → onLine.steer 写目标（远了被线整条拖向竿尖，近了或线松了自己往外走；歇着头被线带过来，起冲先甩头；深度不变）
            没力出线、又到了身边 → landed
            线被带光 → school.giveBack，回到 water，线上是空的：lure.show(false)，没有鱼再来，收完 → ready
   → landed：catch.land
@@ -192,8 +192,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 每一档鱼冲多大力、多耐累、爆发力多少、缓多快、甩头多重、压竿多重；每条鱼自己的底子浮动多少；加一种鱼 | `src/play/fishKind.js` 的表和 `drawNature` |
 | 鱼群里小鱼大鱼各多大、各占多少 | `src/fish/flock.js` 的 `SMALL_SIZE`、`BIG_SIZE`、`BIG_SHARE` |
 | 钩住的鱼一冲花多少爆发力、歇着缓多快、顶住它多费它的劲 | `src/play/fight.js` 的 `WORN_OUT`、`FREE_COSTS`、`DRAWN_EASY`；一场几轮看 `fishKind.js` 表里的"累得多快" |
-| 一冲想往哪去：偏多少、多常顺着鱼头、多久换边、扎多深、边界 | `src/play/course.js` |
-| 线把鱼拖过来多快、歇着头朝哪、要拖多远头才转过来、起冲甩头、扎多深 | `src/play/onLine.js` 的 `LED_MAX`、`REST_SLANT`、`ROUND_IN`、`C_TURN`、`RUN_DEPTH` |
+| 一冲想往哪去：偏多少、多常顺着鱼头、多久换边、边界 | `src/play/course.js` |
+| 线把鱼拖过来多快、歇着头朝哪、要拖多远头才转过来、起冲甩头、待在多深 | `src/play/onLine.js` 的 `LED_MAX`、`REST_SLANT`、`ROUND_IN`、`C_TURN`、`KEEPS_DEPTH` |
 | 它累多快、歇着顶多大劲 | `src/play/fight.js` 的 `TIRE_FLAT_OUT`、`HANGS_BACK` |
 | 不用手机能跑的检查、整理前后的录数对比 | `checks/check.mjs`、`checks/record.mjs`，共用 `checks/rig.mjs`。`npm run check`、`npm run record` |
 | 冲的时候按住能叠多少力 | `src/play/lean.js` |

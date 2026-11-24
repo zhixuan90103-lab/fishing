@@ -1,8 +1,8 @@
 /**
  * Where a hooked fish means to go in a run.
  *
- * Owns: what the fish wants. Which side it tears off to and how far across, how deep it
- * dives, when it cuts to the other side, how ill at ease it is near the bank, and keeping
+ * Owns: what the fish wants. Which side it tears off to and how far across, when it cuts
+ * to the other side, how ill at ease it is near the bank, and keeping
  * it in the water in front of the angler. It never means to come at the angler: until
  * 2026-11-24 one run in fifteen did, the first after the bite included, and the line fell
  * slack by a metre or two for no reason anyone could see.
@@ -26,7 +26,8 @@
  * The rest is its own. It has a place it would be, drawn when it is hooked, and heads
  * back there the likelier the further off it is. And in the middle of a run it may cut
  * across to the other side.
- * It wants deep water and room. Brought in close to the bank it will not lie quiet, and
+ * It wants room, which here is being far off: hooked, it keeps to one depth (onLine.js).
+ * Brought in close to the bank it will not lie quiet, and
  * bolts again with less of a run back: uneasy(). When that run comes is fight.js's.
  * It used to pick a side by where the rod was, away from it seven times in ten: a rod
  * left to one side sent it the same way run after run, and bringing its head round
@@ -65,8 +66,6 @@ const DART_EVERY = [0.9, 2.6];
 const DASH_SPENT = 0.6;
 const ACROSS_FAR = 7;
 const ACROSS_NEAR_SHARE = 0.45;
-// How deep a run takes it, as a share of the deepest: drawn between these each run.
-const DEEP = [0.5, 1];
 // It stays within this angle of the cast's direction, radians, seen from the rod tip.
 // Past it, it swims back across. This keeps it in the water in front of the angler.
 const KEEP_WITHIN = 36 * Math.PI / 180;
@@ -82,11 +81,10 @@ const BANK_FAR = 9;
 /** random: 0 to 1, for everything a run draws. */
 export function createCourse(random = Math.random) {
   // How far to one side this run leans, and which side that is, 1 or -1. Seconds until
-  // it may cut to the other side. How deep it goes.
+  // it may cut to the other side.
   let lean = 0;
   let side = 1;
   let dartIn = 0;
-  let deep = 1;
   // Where it would be, and where it is as stands() was last told: radians round from the
   // cast's direction, positive to the left.
   let haunt = 0;
@@ -100,10 +98,6 @@ export function createCourse(random = Math.random) {
   }
 
   return {
-    // How deep this run takes it, 0 to 1.
-    get deep() {
-      return deep;
-    },
 
     // Just hooked: it draws the place it would be.
     hooked() {
@@ -111,14 +105,13 @@ export function createCourse(random = Math.random) {
       round = 0;
     },
 
-    // A run begins: it picks a side, how far to lean and how deep to go. head: how far to the left its head points, -1 to 1: 1 is
+    // A run begins: it picks a side and how far to lean. head: how far to the left its head points, -1 to 1: 1 is
     // square to the left of the cast's direction, 0 dead ahead or dead astern.
     // bold: the fish's own, 0 to 1.
     begin(head = 0, bold = 0.5) {
       side = pick(0.5 + (HEAD_LEADS - 0.5) * Math.max(-1, Math.min(1, head / HEAD_CLEAR)));
       lean = side * between(random, LEAN);
       dartIn = between(random, DART_EVERY) * (1.3 - 0.6 * bold);
-      deep = between(random, DEEP);
     },
 
     // Once a frame. running: the fish is in a run.
