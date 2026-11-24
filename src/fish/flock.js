@@ -17,11 +17,16 @@
  *
  * A fish someone has hung on a line is not swum at all: it is posed from its mouth
  * (hung.js) until it is kept, and then it is free again.
+ *
+ * The last few fish may be spares: not in the water until someone outside brings one in
+ * (bring), somewhere it cannot be seen, and out of it again when it is sent away
+ * (dismiss), likewise unseen. A spare never joins the school: whoever brought it writes
+ * its aim for as long as it is in the water.
  */
 
 import { createHomeWater, START_DEPTH } from './homeWater.js';
 import { makeSense, senseNeighbours } from './neighbours.js';
-import { FREE, HELD, HUNG } from './states.js';
+import { AWAY, FREE, HELD, HUNG } from './states.js';
 import { CRUISE_LENGTHS, seedNature, setFree, free } from './behaviors.js';
 import { mouthOf, startHang, poseHung } from './hung.js';
 import {
@@ -39,8 +44,9 @@ const SMALL_SIZE = [0.78, 0.95];
 const BIG_SIZE = [1.2, 1.4];
 const BIG_SHARE = 0.5;
 
-// bodyLength: nose to tail of a fish at scale 1, metres. random: 0 to 1.
-export function createFlock(fishes, { bodyLength = 0.45, random = Math.random } = {}) {
+// bodyLength: nose to tail of a fish at scale 1, metres. random: 0 to 1. spare: how many
+// of the fish, the last ones, start out of the water.
+export function createFlock(fishes, { bodyLength = 0.45, random = Math.random, spare = 0 } = {}) {
   const water = createHomeWater();
   const crowd = makeCrowd(fishes.length);
   const sense = makeSense(fishes.length);
@@ -77,7 +83,15 @@ export function createFlock(fishes, { bodyLength = 0.45, random = Math.random } 
       const clip = fish.action.getClip();
       fish.action.time = (i / fishes.length) * (clip.duration || 1);
       writePose(fish);
+      // The spares have a size and a nature like any fish, and are not in the water.
+      if (i >= fishes.length - spare) putAway(fish);
     }
+  }
+
+  function putAway(fish) {
+    fish.state = AWAY;
+    fish.brain = null;
+    fish.holder.visible = false;
   }
 
   function step(dt, rate, rocks = [], cam = null) {
@@ -87,7 +101,7 @@ export function createFlock(fishes, { bodyLength = 0.45, random = Math.random } 
     for (let i = 0; i < fishes.length; i++) {
       const fish = fishes[i];
       // On a line out of the water it is posed by hang(), not swum.
-      if (fish.state === HUNG) continue;
+      if (fish.state === HUNG || fish.state === AWAY) continue;
       // Left to itself a fish carries on as it is. Whoever writes its aim changes that.
       aim.cruise = cruiseOf(fish) * rate;
       aim.speed = aim.cruise;
@@ -121,6 +135,32 @@ export function createFlock(fishes, { bodyLength = 0.45, random = Math.random } 
     take(fish, brain) {
       fish.state = HELD;
       fish.brain = brain;
+    },
+    /**
+     * Bring a spare fish into the water at x, y, z, heading yaw, with brain writing its
+     * aim from now on. Call only for a place that cannot be seen: it is put there in one
+     * step. Returns the fish, or null when every spare is already in the water.
+     */
+    bring(x, y, z, yaw, brain) {
+      const fish = fishes.find((f) => f.state === AWAY);
+      if (!fish) return null;
+      fish.x = x;
+      fish.y = clamp(y, DEPTH_MIN, -0.3);
+      fish.z = z;
+      fish.yaw = yaw;
+      fish.speed = cruiseOf(fish);
+      setFree(fish);
+      restBody(fish);
+      fish.state = HELD;
+      fish.brain = brain;
+      fish.holder.visible = true;
+      writePose(fish);
+      return fish;
+    },
+    // Take a fish out of the water for good, until it is brought in again. Call only
+    // when it cannot be seen: it is gone in one step.
+    dismiss(fish) {
+      putAway(fish);
     },
     // Let it go. It is a free fish again wherever it is: out of its water it wants back
     // in, and seeing the others it closes on them. Nothing fetches it.

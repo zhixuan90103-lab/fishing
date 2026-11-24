@@ -2,15 +2,19 @@
  * The fish's half of a cast: one comes to the lure, takes it, is fought, lifted out and
  * netted.
  *
- * Owns: which fish comes and when, when it is hooked, what a fight does to the line each
- * frame, when it counts as landed or lost, the lift, calling the net, and telling the
+ * Owns: reading the strike, hooking the fish the bite gives it, what a fight does to
+ * the line each frame, when it counts as landed or lost, the lift, calling the net, and
+ * telling the
  * materials: the school which fish is taken, hung and kept, the reel what was wound, the
  * lure what hangs on the hook with it, the rod how hard the hand is working, the net
  * where it is, the splash and the haptics.
  * Does not own: the stage of the cast or what the finger means before a fish is on
- * (fishing.js), the lure's own motion and the line's length (it is handed both), or any
- * of the sums: what a fish of a kind and size is like (fishKind.js), how it comes
- * (visit.js), pulls (fight.js), which way its runs head (course.js), how it shakes its
+ * (fishing.js), the lure's own motion and the line's length (it is handed both), the
+ * fish round the lure before one is hooked: which notice it, come, bite and bolt
+ * (suitors.js, which hands this file the fish that is hooked), or any
+ * of the sums: what a fish of a kind and size is like (fishKind.js), whether the hand
+ * struck (strike.js), whether slack line lets it throw the hook (shed.js), how it
+ * pulls (fight.js), which way its runs head (course.js), how it shakes its
  * head (thump.js) and kicks (kick.js), how line comes in
  * and runs out (haul.js), how hard a held finger leans on a run (lean.js), the reel's clicks (reelClick.js),
  * the hand's effort (strain.js), the weight on the tip (tipWeight.js), the net's path
@@ -18,12 +22,9 @@
  * No Three: like fishing.js it only joins those to the materials' openings.
  * Rules: docs/FISHING-REQUIREMENTS.md sections 8 to 13. Design: docs/PLAY.md.
  *
- * Stand-in: every fish that reaches the lure is hooked at once. The kinds of bite and
- * the strike are not made yet.
- *
  * fishing.js drives it: arm() when the lure lands, then one of come(), fight() or land()
- * each frame, by stage. come() and land() return true on the frame their part is over,
- * fight() says how it ended.
+ * each frame, by stage. come() says when a bite begins and when the fish is hooked,
+ * fight() says how it ended, land() returns true on the frame the net has gone.
  */
 
 import { createCourse } from './course.js';
@@ -32,24 +33,27 @@ import { createOnLine } from './onLine.js';
 import { drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
-import { between, toward } from './maths.js';
+import { toward } from './maths.js';
 import { createReelClick } from './reelClick.js';
 import { createScoop } from './scoop.js';
+import { createShed } from './shed.js';
+import { createSideStrain } from './sideStrain.js';
+import { createStrike } from './strike.js';
+import { createSuitors } from './suitors.js';
 import { createLean } from './lean.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { LURE_KG } from '../shore/lureMove.js';
 import { DRY_BY, DRY_FROM, LIMP_SHARE, dryness } from './tipWeight.js';
-import { steerToLure, touching } from './visit.js';
 
 // What this file reports about the fish, for tuning against a real hand: the names of
 // the read-only values on the object createCatch returns. fishing.js passes them on.
-export const FISH_READOUT = ['fish', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
+export const FISH_READOUT = ['fish', 'held', 'around', 'bite', 'hookIn', 'hunger', 'interest', 'fright', 'hookLoose', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
 // The one species in the water. Its numbers by size are in fishKind.js.
 const SPECIES = 'dorade';
 
-// A fish sets off for the lure between these many seconds after it lands.
-const COME_AFTER = [1.5, 4];
+// After this many casts in a row with nothing landed, the next cast's fish are hungry ones.
+const DRY_CASTS = 3;
 // The line the reel holds, m, unless told otherwise. With this much out it gives no more.
 const SPOOL = 70;
 // A fish pulling near the top churns the water where it is: all of what its speed makes
@@ -103,6 +107,13 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const scoop = createScoop();
   const click = createReelClick();
   const kick = createKick(random);
+  const strike = createStrike();
+  const shed = createShed(random);
+  const sideStrain = createSideStrain();
+  // Which side the run under way heads, 1 left, -1 right, 0 with none: for side strain.
+  let runSide = 0;
+  // The fish round the lure before one is hooked. Without a school there are none.
+  const suitors = school ? createSuitors({ school, line, move, out, haptics, random }) : null;
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
@@ -115,16 +126,16 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // The level direction the cast went, for keeping a hooked fish in front.
   let homeX = 0;
   let homeZ = 1;
-  // Seconds until a fish sets off, the fish on its way, and the fish on the line. Never
-  // both of the last two.
-  let comeIn = 0;
-  let visitor = null;
+  // The fish on the line.
   let hooked = null;
+  // Casts in a row with nothing landed, and the count landed when the last one began.
+  let dry = 0;
+  let landedBefore = 0;
+  let cast = false;
   // The hooked fish hangs on the line, out of the fight.
   let hung = false;
-  // The mouth of that fish this frame, and for its brain, which runs at another time.
+  // The mouth of that fish this frame.
   const mouth = { x: 0, y: 0, z: 0 };
-  const brainMouth = { x: 0, y: 0, z: 0 };
   // Fighting: the line's pull, N, as the line reported it this frame, and how much
   // further the hook is from the tip than there is line out, m.
   let tension = 0;
@@ -144,11 +155,6 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // Fish landed since the start.
   let landed = 0;
 
-  // The fish on its way reads the lure, the hooked one the line. Both only write an aim.
-  const comeBrain = (fish, aim) => {
-    school.mouth(fish, brainMouth);
-    steerToLure(fish, aim, brainMouth, move, Math.hypot(move.vx, move.vz));
-  };
   // The hooked fish's aim is put together from two answers: how its pull sets it against
   // the line (fight.js), and where this run means to go (course.js). The rod has its say
   // only through the line: where its tip is, and which way that has brought its head.
@@ -157,30 +163,27 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     course.stands(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
-    const own = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
+    const wants = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
+    // A rod carried against the way this run heads takes some of that off (sideStrain.js).
+    // It is counted from where the tip was as the run set off this way.
+    const side = wants > 0 ? 1 : wants < 0 ? -1 : 0;
+    if (side !== runSide) {
+      runSide = side;
+      if (side) sideStrain.begin(line.tip, -bearing.z * side, bearing.x * side);
+      else sideStrain.end();
+    }
+    const own = wants * sideStrain.step(dt, line.tip, bearing.far);
     onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt);
   };
 
-  // The fish in the school nearest the lure. Fish someone has taken are left alone.
-  function nearestFish() {
-    let best = null;
-    let bestGap = Infinity;
-    for (const fish of school.fishes) {
-      if (fish.state !== 'free') continue;
-      const gap = Math.hypot(fish.x - move.x, fish.z - move.z);
-      if (gap < bestGap) {
-        best = fish;
-        bestGap = gap;
-      }
-    }
-    return best;
-  }
-
-  // The fish that came has the hook. Stand-in: always, and without a strike. It runs at
-  // once and the weight comes onto the rod. A finger already down is winding against it.
-  function hook() {
-    hooked = visitor;
-    visitor = null;
+  // The fish that came has the hook: struck while it was in its mouth, or scraped home
+  // in a dead bite. It runs at once and the weight comes onto the rod. A finger already
+  // down is winding against it.
+  function hook(fish) {
+    hooked = fish;
+    shed.begin();
+    runSide = 0;
+    sideStrain.end();
     hung = false;
     tension = 0;
     stretch = 0;
@@ -202,9 +205,25 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     haptics?.impact(takesLine ? 'heavy' : 'medium');
   }
 
+  // The hooked fish has shaken the hook out on a slack line. It bolts for good; the lure
+  // is left in the water where its mouth was, and another fish may come to it.
+  function throwHook() {
+    const fish = hooked;
+    hooked = null;
+    kind = null;
+    hung = false;
+    tension = 0;
+    running = 0;
+    thump.end();
+    haul.reset();
+    strike.reset();
+    suitors.loose(fish, true);
+    haptics?.impact('light');
+  }
+
   // The fish has taken all the line. It swims off, the lure with it. What is left is bare line, and fishing.js has it wound back in.
   function lose() {
-    school.giveBack(hooked);
+    suitors.loose(hooked, false);
     hooked = null;
     kind = null;
     hung = false;
@@ -236,7 +255,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
 
   // The net has carried the fish out of the picture. It goes back to the school unseen.
   function giveUp() {
-    school.keep(hooked);
+    suitors.netted(hooked);
     hooked = null;
     kind = null;
     hung = false;
@@ -289,10 +308,48 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   }
 
   return {
-    // 'none', 'coming' while one swims to the lure, 'on' while one is hooked, 'landed'
-    // while it hangs on the line or lies in the net.
+    // 'none', 'coming' while one swims to the lure or stays by it between bites, 'biting',
+    // 'fleeing' while it bolts frightened, 'on' while one is hooked, 'landed' while it
+    // hangs on the line or lies in the net.
     get fish() {
-      return hooked ? (hung ? 'landed' : 'on') : visitor ? 'coming' : 'none';
+      return hooked ? (hung ? 'landed' : 'on') : suitors ? suitors.doing : 'none';
+    },
+    // How many fish are round the lure or making off from it, spares and the school's.
+    get around() {
+      return suitors ? suitors.around : 0;
+    },
+    // The bite under way: '' for none, 'light', 'medium', 'heavy' or 'dead'. And whether
+    // the hook is in the fish's mouth this frame: the lure rides there, not on the line.
+    get bite() {
+      return suitors ? suitors.bite : '';
+    },
+    get hookIn() {
+      return suitors ? suitors.hookIn : false;
+    },
+    // The fish that matters most at the lure, the one biting or else the keenest: how
+    // hungry, how interested in the lure and how frightened, each 0 to 1.
+    get hunger() {
+      return (!hooked && suitors?.lead?.hunger) || 0;
+    },
+    get interest() {
+      return (!hooked && suitors?.lead?.interest) || 0;
+    },
+    get fright() {
+      const lead = !hooked && suitors?.lead;
+      return lead ? (lead.state === 'fleeing' ? lead.flee.fright : lead.fright) : 0;
+    },
+    // Every fish with a mind about the lure (suitors.js), for tuning and the checks.
+    get minds() {
+      return suitors ? suitors.minds : [];
+    },
+    // The share of its speed across the line a running fish has lost to a rod carried
+    // against it, 0 to 1.
+    get held() {
+      return hooked && !hung ? sideStrain.share : 0;
+    },
+    // How near the hooked fish is to throwing the hook, 0 to 1.
+    get hookLoose() {
+      return hooked && !hung ? shed.loose : 0;
     },
     // 'run' while a hooked fish is bolting, 'rest' while it sulks, '' otherwise.
     get mood() {
@@ -334,54 +391,58 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       return strain.effort;
     },
     // How much shorter the line is drawn tight for this frame than what is out, m: a
-    // shake of the fish's head snatching it.
+    // shake of a hooked fish's head snatching it, or a biting fish plucking it.
     get snatch() {
-      return hooked && !hung ? thump.pull / line.stiffness : 0;
+      if (hooked) return hung ? 0 : thump.pull / line.stiffness;
+      return suitors ? suitors.pull / line.stiffness : 0;
     },
 
-    // The lure has landed, having gone the level direction (dirX, dirZ). A fish will set
-    // off for it after a while.
+    // The lure has landed, having gone the level direction (dirX, dirZ). From now on
+    // the fish near it may notice it.
     arm(dirX, dirZ) {
       homeX = dirX;
       homeZ = dirZ;
-      comeIn = between(random, COME_AFTER);
+      strike.reset();
+      // A cast that began after one with nothing landed is one more dry cast.
+      dry = cast && landed === landedBefore ? dry + 1 : 0;
+      landedBefore = landed;
+      cast = true;
+      suitors?.arm(dirX, dirZ, dry >= DRY_CASTS);
     },
 
-    // The lure is out of the water: a fish still on its way goes home.
+    // The lure is out of the water: every fish round it goes.
     sendAway() {
-      if (!visitor) return;
-      school.giveBack(visitor);
-      visitor = null;
+      suitors?.scatter();
     },
 
-    // Once a frame with the lure in the water and no fish on. After a while the nearest
-    // fish sets off for the lure. Returns true on the frame its mouth is on the hook.
-    come(dt) {
-      if (!school) return false;
-      if (!visitor) {
-        comeIn -= dt;
-        if (comeIn > 0) return false;
-        visitor = nearestFish();
-        if (!visitor) return false;
-        school.take(visitor, comeBrain);
-      }
-      school.mouth(visitor, mouth);
-      if (!touching(mouth, move)) return false;
-      hook();
-      return true;
+    /**
+     * Once a frame with the lure in the water and no fish on: the fish round the lure
+     * make up their own minds (suitors.js), and the hand may strike. taken: line wound
+     * in this frame, m. input.raised: how far up the hand has tipped the rod, degrees,
+     * or null; input.lift: the desktop stand-in for a strike.
+     * Returns 'bite' on the frame a bite begins, 'hooked' on the frame a fish is on,
+     * '' otherwise. While hookIn is true the lure is in a fish's mouth.
+     */
+    come(dt, input, tip, taken) {
+      const struck = strike.step(dt, input.raised, input.lift);
+      if (!suitors) return '';
+      const what = suitors.step(dt, tip, taken, struck, input.viewYaw);
+      if (what === 'hooked') hook(suitors.caught);
+      return what;
     },
 
     /**
      * Once a frame with a fish on. The lure rides in its mouth, line comes in or runs
      * out, and spot, the point the view watches, drifts after it.
      * Returns how it ended, on the frame it does: 'landed', in close and no longer taking
-     * line, or 'spooled', the fish has taken all the line.
+     * line, 'spooled', the fish has taken all the line, or 'shed', it has thrown the hook
+     * on a slack line and the lure is left in the water.
      * '' while it goes on.
      */
     fight(dt, input, tip, spot) {
       // Its runs and rests, by what its pull is costing it against the line as it was a
       // frame ago, and where a run that has just begun means to go.
-      if (fight.step(dt, tension, course.uneasy(bearing.far))) course.begin(head, kind.bold);
+      if (fight.step(dt, tension, course.uneasy(bearing.far), sideStrain.share)) course.begin(head, kind.bold);
       course.step(dt, fight.running, kind.bold);
       // A finger held down on a fish that is taking line leans on it.
       lean.step(dt, input.finger, fight.force > RUN_OUT_AT);
@@ -420,6 +481,11 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
         out.pay(-haul.takeBack(gap - out.length, line.stiffness, lean.press));
       }
       running = given / dt;
+      // On a slack line it shakes the hook, and may throw it.
+      if (shed.step(dt, out.length - gap, fight.stamina)) {
+        throwHook();
+        return 'shed';
+      }
       // What the fish is up against is all of it: the stretch in the line and what the
       // tackle has given under it.
       stretch = gap - out.length + haul.lent;
@@ -476,7 +542,9 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     // Once a frame, whatever the stage, after the stage's own call: how hard the hand is
     // working follows what it holds, and that is the line's pull on the rod, fish or no
     // fish, in the water or hanging from the tip.
-    carry(dt) {
+    carry(dt, input, tip) {
+      // Fish bolting from the lure or leaving it go on doing so, whatever the stage.
+      suitors?.tend(dt, input.viewYaw, tip);
       // With no fish being fought there is nothing to churn the water.
       if (churn && !(hooked && !hung)) churn.lift(dt);
       strain.step(dt, line.tension);

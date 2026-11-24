@@ -1,20 +1,22 @@
 /**
  * The player's one finger, and its desktop stand-ins.
  *
- * Owns: whether a pointer is down on the view, whether the space bar is down, and
- * reporting how far a pressed pointer has dragged.
+ * Owns: whether a pointer is down on the view, whether the space bar is down, whether
+ * the up arrow or W is down, and reporting how far a pressed pointer has dragged.
  * Does not own: what a press means, which of the two counts as the finger, or what a
  * drag does. startShore.js decides those: a drag turns the view only without a phone.
  * Design: docs/PLAY.md section 11.
  *
  * On a phone the finger is the touch. On a desktop a press on the view is how the view
- * is turned, so it cannot also be the finger: the space bar is.
+ * is turned, so it cannot also be the finger: the space bar is. A desktop cannot be
+ * tipped up either: the up arrow, or W, stands in for snapping the rod up.
  */
 
 /** element: what is pressed, the visible canvas. */
 export function createFinger(element) {
   let touching = false;
   let key = false;
+  let lift = false;
   let dragged = null;
 
   const onDown = (e) => {
@@ -28,8 +30,9 @@ export function createFinger(element) {
     if (touching && dragged) dragged(e.movementX, e.movementY);
   };
   const onKey = (e) => {
-    if (e.code !== 'Space') return;
-    key = e.type === 'keydown';
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') lift = e.type === 'keydown';
+    else if (e.code === 'Space') key = e.type === 'keydown';
+    else return;
     e.preventDefault();
   };
   element.addEventListener('pointerdown', onDown);
@@ -47,6 +50,10 @@ export function createFinger(element) {
     // The space bar is down.
     get key() {
       return key;
+    },
+    // The up arrow or W is down.
+    get lift() {
+      return lift;
     },
     // Call fn(dx, dy), CSS pixels, each time a pressed pointer moves.
     onDrag(fn) {

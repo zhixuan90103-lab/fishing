@@ -9,8 +9,9 @@
  *
  * Holding the finger down while a fish takes line adds the hand's pull to the fish's.
  * That is worth something: the reel holds that much more, so the fish gets less line, or
- * none. It costs the hand and bends the rod deeper. It does not break the line: whether
- * a line can break is not decided, and nothing here wears or parts (docs/PLAY.md section 14).
+ * none. It costs the hand and bends the rod deeper. It does not break the line: a line
+ * does not break in this game, and nothing here wears or parts. What loses a fish is
+ * the opposite, a slack line (shed.js).
  *
  * Units: seconds, newtons.
  */

@@ -2,8 +2,8 @@
  * The dorade school on the shore: the real fish for the flock simulation, plus their
  * body animation. Design and rules: docs/FISH-SCHOOL.md
  *
- * Owns: taking forty fish from the pool into the scene, handing the flock's ports on,
- * and each frame playing the tail clip and laying the spine wave on it.
+ * Owns: taking forty fish and ten spares from the pool into the scene, handing the
+ * flock's ports on, and each frame playing the tail clip and laying the spine wave on it.
  * Does not own: anything a fish does (flock.js and below), or the model (dorade.js).
  *
  *   dorade.js     model, pool, spine pose
@@ -18,6 +18,8 @@ import { loadDorade, createDoradePool, poseSpine } from './dorade.js';
 import { createFlock } from './flock.js';
 
 const COUNT = 40;
+// Fish beyond the school, out of the water until someone brings one in (flock.js).
+const SPARE = 10;
 // The tail clip plays TAIL_RATE times as fast as it was made for each TAIL_SPEED m/s the
 // fish covers.
 const TAIL_SPEED = 0.351;
@@ -29,19 +31,21 @@ export async function createShoreSchool(scene) {
   scene.traverse((o) => { if (o.name === 'dorade') stale.push(o); });
   for (const o of stale) o.removeFromParent();
   const template = await loadDorade(BODY_LENGTH);
-  const pool = createDoradePool(template, COUNT);
+  const pool = createDoradePool(template, COUNT + SPARE);
   const fishes = [];
-  for (let i = 0; i < COUNT; i++) {
+  for (let i = 0; i < COUNT + SPARE; i++) {
     const fish = pool.acquire();
     scene.add(fish.holder);
     fishes.push(fish);
   }
-  const flock = createFlock(fishes, { bodyLength: BODY_LENGTH });
+  const flock = createFlock(fishes, { bodyLength: BODY_LENGTH, spare: SPARE });
   return {
     fishes,
     place: flock.place,
     take: flock.take,
     giveBack: flock.giveBack,
+    bring: flock.bring,
+    dismiss: flock.dismiss,
     mouth: flock.mouth,
     hang: flock.hang,
     keep: flock.keep,
@@ -51,6 +55,7 @@ export async function createShoreSchool(scene) {
       // that is more (swim.js), then the spine wave goes on top.
       const tail = (rate * TAIL_RATE) / TAIL_SPEED;
       for (const fish of fishes) {
+        if (!fish.holder.visible) continue;
         fish.action.setEffectiveTimeScale(tail * fish.stroke);
         fish.mixer.update(dt);
         poseSpine(fish, fish.drive, fish.bend);

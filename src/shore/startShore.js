@@ -271,7 +271,7 @@ export async function startShore(container, hooks = {}) {
   const READOUT_EVERY = 6;
   let readoutIn = 0;
   // How the cast last reported its fish lost, to say so once when the line breaks.
-  const fishingInput = { finger: false, sensor: false, viewYaw: 0, viewPitch: 0 };
+  const fishingInput = { finger: false, sensor: false, viewYaw: 0, viewPitch: 0, raised: null, lift: false };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -374,6 +374,10 @@ export async function startShore(container, hooks = {}) {
       fishingInput.finger = phone.active ? finger.touching : finger.key;
       fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
       fishingInput.viewPitch = aim.viewPitch;
+      // The strike is the hand's: how far up the phone itself is tipped. Without a phone
+      // a key stands in.
+      fishingInput.raised = phone.active ? phone.look().pitch : null;
+      fishingInput.lift = finger.lift;
       fishing.update(dt, fishingInput);
     }
     applyPhone(dt);

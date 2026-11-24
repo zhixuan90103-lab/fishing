@@ -6,7 +6,7 @@
  * about how something looks can be looked at. docs/CONVENTIONS.md section 7.
  *
  *   npm run shot                      one picture of the view at rest
- *   npm run shot fight                cast, wait for a bite, photograph the fight
+ *   npm run shot fight                cast, strike at the first bite that has the hook in, photograph the fight
  *   npm run shot fight rests 60       ...winding only while the fish rests, 60 pictures
  *
  * How the finger behaves in a fight: `able` (wind whenever line is not running out, the
@@ -48,6 +48,8 @@ try {
   const send = (method, params = {}) => new Promise((r) => { id += 1; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
   const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, returnByValue: true })).result?.result?.value;
   const key = (type) => send('Input.dispatchKeyEvent', { type, code: 'Space', key: ' ', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+  // The desktop stand-in for snapping the rod up.
+  const strike = async () => { for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, code: 'ArrowUp', key: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 }); };
   const shoot = async (name) => { const s = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${dir}/${name}.png`, Buffer.from(s.result.data, 'base64')); };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
@@ -75,7 +77,9 @@ try {
       const running = Number(/出线 ([\d.]+)/.exec(text)?.[1] || 0);
       if (!on && stage === 'fight') on = true;
       if (on && stage !== 'fight' && stage !== 'landed') break;
-      if (!on && (Date.now() - t0) / 1000 > 90) break;
+      if (!on && (Date.now() - t0) / 1000 > 180) break;
+      // A bite with the hook in its mouth: strike. The pictures start once it is on.
+      if (!on && text.includes('钩在嘴里')) await strike();
       if (!on) continue;
       const want = stage === 'landed' || policy === 'always' ? true : policy === 'never' ? false : policy === 'rests' ? mood === 'rest' : !(running > 0.05);
       if (want !== down) { await key(want ? 'keyDown' : 'keyUp'); down = want; }

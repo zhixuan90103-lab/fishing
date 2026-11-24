@@ -53,7 +53,7 @@ school.js update
 玩法一帧（`fishing.update` 在鱼群之后、手机和竿之前，`fishing.follow` 在 `line.update` 之后。第一帧的 `line.update` 之后先调一次 `fishing.begin`）：
 
 ```
-fishing.js update(dt, { finger, sensor, viewYaw, viewPitch })
+fishing.js update(dt, { finger, sensor, viewYaw, viewPitch, raised, lift })
   → 读上一帧线画出来的竿尖 line.tip
   → ready：手指按下那一刻记下镜头看的方向和俯仰；swing.step 量竿尖带着饵走多快
            松手以后饵等竿尖不再加速才走；够快 → 按记下的方向和仰角 lureMove.launch，从这一帧起 watch 是落点
@@ -61,21 +61,27 @@ fishing.js update(dt, { finger, sensor, viewYaw, viewPitch })
   → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → splash.burst，落点换成真正的位置，lineOut.land，catch.arm（线拉不拉竿在 fishing.js 的 show 里一处说：空杆和飞行不拉）
   → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
            靠近竿尖 → 饵成了挂在线上的重物（line.carry），watch 变空，catch.sendAway；线收完 → ready
-           catch.come：到时间 school.take 最近的一条鱼，brain 是 visit.steerToLure；嘴碰到饵 → fight
+           catch.come：strike.step 读手机往上倾得多快 → suitors.step
+             suitors：allure.step 饵这一刻招不招鱼；离饵 7 米内的鱼群的鱼各自有了想法，allure.warm 涨落它的兴趣
+                      不够数 → 在看不见的地方 school.bring 补备用的鱼；兴趣够了的鱼 school.take，绕着饵等（visit.steerAbout）
+                      最想吃的一条朝饵去（visit.steerToLure）；嘴碰到饵 → bite.begin 判这一口；bite.step 每帧：拽线多重、钩在不在嘴里
+                      钩在嘴里：饵放到鱼嘴上、线跟着它（visit.steerWithLure）；这时抬杆或者咬死 → 交给 catch → fight，其余的鱼散开
+                      别的抬杆 → 饵边的鱼各加惊吓，过了它受得住的量就跑（flee.steer），平静以后回来或者离开；一口自己过去 → 退回去等
   → fight：catch.fight
            钩住的那一下 fishKind.fishOf(品种, 这条鱼的体型, 它自己的底子) 取出它的数
-           fight.step(dt, 线的张力, course.uneasy 它这时多待不住) 爆发力和气力，没有时钟（起了一冲就 course.begin 挑这一冲想往哪去）→ course.step 换不换边→ snap.step 手指叠多少力、线断不断 → thump.step 甩头把线顿多重
+           fight.step(dt, 线的张力, course.uneasy 它这时多待不住) 爆发力和气力，没有时钟（起了一冲就 course.begin 挑这一冲想往哪去）→ course.step 换不换边→ lean.step 手指叠多少力 → thump.step 甩头把线顿多重
            → school.mouth 鱼嘴在哪 → churn.follow 近水面时搅水 → haul.step 按 line.tension 收多少线 → rod.reel.wind → 饵放到鱼嘴上
-           haul.slip 过了出线点加叠的力让出多少线 → reelClick.step 咔不咔 → watch 慢慢跟着鱼
-           鱼的 brain 是 catch.js 的 fightBrain：onLine.bearing 鱼在竿尖的哪边 → course.across 这一冲横着多快 → onLine.steer 写目标（远了被线整条拖向竿尖，近了或线松了自己往外走；歇着头被线带过来，起冲先甩头；深度不变）
+           haul.slip 过了出线点加叠的力让出多少线 → shed.step 线松着钩甩掉没有 → reelClick.step 咔不咔 → watch 慢慢跟着鱼
+           鱼的 brain 是 catch.js 的 fightBrain：onLine.bearing 鱼在竿尖的哪边 → course.across 这一冲横着多快 → sideStrain.step 竿逆着它带了多少、打个折 → onLine.steer 写目标（远了被线整条拖向竿尖，近了或线松了自己往外走；歇着头被线带过来，起冲先甩头；深度不变）
            没力出线、又到了身边 → landed
            线被带光 → school.giveBack，回到 water，线上是空的：lure.show(false)，没有鱼再来，收完 → ready
+           钩被甩掉 → 鱼的 brain 换成 flee.steer，回到 water，饵还在水里，过一会儿另一条鱼来
   → landed：catch.land
            haul.step 提线 → lureMove.weigh 说钩上多重（tipWeight 出了多少水）→ 饵和鱼是线头上的重物，由竿在细步长里带着走（line.carry）→ kick 甩多用力
            镜头看的点跟着钩上的鱼，竿留在画面里
            提到头吊一小会儿 → scoop.begin；scoop.step 圈在哪、鱼落到哪 → net.place
            网出画面 → school.keep，net.hide → water（饵已出水，线自己收完）
-  → catch.carry：strain.step 按线的张力算手多吃力 → rod.setStrain
+  → catch.carry：suitors.tend 跑开的鱼平静了没有、离开的备用鱼出了画面就 school.dismiss（哪一段都调）→ strain.step 按线的张力算手多吃力 → rod.setStrain
   → line.setEnd 或 line.carry / setLength（遛鱼时减去甩头顿的那一点）/ setTied，lureMove.point
 fishing.js follow()
   → 把饵摆到这一帧的位置上（空杆时是 line.end，鼻尖朝上；挂着时是竿带着走到的地方），catch.follow 把出了水的鱼挂在饵上
@@ -187,8 +193,14 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 线落水时多出多少、被拉直多快、沉多快 | `src/shore/lineCurve.js` 顶部的常量 |
 | 线多硬 | `src/shore/line.js` 的 `STRETCH_FORCE`、`STIFFEST` |
 | 饵收在竿尖时怎么跟着摆、下沉时怎么晃、鼻尖转多快 | `src/shore/lurePose.js` 的 `SWAY_*`、`SINK_DIP`、`SINK_ROCK`、`NOSE_RATE` |
-| 鱼多久来、来哪条、多近算到身边、提多高、吊多久叫网、网从哪边来 | `src/play/catch.js` 顶部的常量和 `nearestFish` |
-| 鱼游向饵的快慢、多近算碰钩 | `src/play/visit.js` |
+| 一竿几条鱼、多近注意到饵、补的鱼放哪、一次几条上 | `src/play/suitors.js` 顶部的常量 |
+| 饵怎么动招鱼、快收多快鱼就不追 | `src/play/allure.js` |
+| 多近算到身边、提多高、吊多久叫网、网从哪边来 | `src/play/catch.js` 顶部的常量 |
+| 鱼游向饵的快慢、多近算碰钩、叼着饵走多快 | `src/play/visit.js` |
+| 三种口各占多少、含多久、拽多重、收多少线脱口 | `src/play/bite.js`；一口过去多久再咬在 `src/play/catch.js` 顶部 |
+| 手机往上倾多快算抬杆 | `src/play/strike.js` |
+| 抬杆把鱼吓多少、鱼受得住多少、跑多快多远、回不回来 | `src/play/flee.js` |
+| 线多松、松多久鱼把钩甩掉 | `src/play/shed.js` |
 | 每一档鱼冲多大力、多耐累、爆发力多少、缓多快、甩头多重、压竿多重；每条鱼自己的底子浮动多少；加一种鱼 | `src/play/fishKind.js` 的表和 `drawNature` |
 | 鱼群里小鱼大鱼各多大、各占多少 | `src/fish/flock.js` 的 `SMALL_SIZE`、`BIG_SIZE`、`BIG_SHARE` |
 | 钩住的鱼一冲花多少爆发力、歇着缓多快、顶住它多费它的劲 | `src/play/fight.js` 的 `WORN_OUT`、`FREE_COSTS`、`DRAWN_EASY`；一场几轮看 `fishKind.js` 表里的"累得多快" |
@@ -215,7 +227,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 饵怎么飞、怎么荡、在水里怎么跟线、鼻尖怎么转 | [LURE.md](./LURE.md)，`src/shore/lureMove.js` |
 | 饵的外形 | `src/shore/lure.js` |
 | 渔轮收线时怎么转 | `src/shore/reel.js` 的 `wind` 和顶部常量 |
-| 桌面用什么代替手指 | `src/shore/finger.js` 的空格键，取哪一个在 `src/shore/startShore.js` |
+| 桌面用什么代替手指和抬杆 | `src/shore/finger.js` 的空格键、方向键上或 W，取哪一个在 `src/shore/startShore.js` |
 | 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
 | 鱼线：外观、软硬、接到竿上 | `src/shore/line.js` |
 | 线在竿上走哪些点 | `src/shore/rod.js` 的 `linePath` 和导环表 |

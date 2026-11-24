@@ -23,11 +23,14 @@
  *           in, once the finger has been up since landing. Finger up, the lure sinks
  *           straight down and line follows it.
  *           With all the line back in, the cast is over and the stage is ready again.
- *           Meanwhile a fish may come: when it takes the hook the stage is fight.
+ *           Meanwhile a fish may come and bite. While the hook is in its mouth the lure
+ *           rides there, and winding draws it out again. Struck then, or in a dead bite,
+ *           the fish is on and the stage is fight.
  *   fight   a fish is on. All of it is catch.js. When the fish is landed the stage is
  *           landed. When the fish takes all the line, the stage is water
  *           again with a bare line: no lure on it, no fish comes to it, and winding it
- *           all back in ends the cast.
+ *           all back in ends the cast. When it throws the hook the stage is water again
+ *           with the lure still on, and another fish may come.
  *   landed  the fish is lifted and netted. All of it is catch.js. When the net has gone
  *           the stage is water again with the lure out of the water, and the rest of the
  *           line winds itself in.
@@ -107,7 +110,7 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
   let winding = false;
   // water: the line is bare. The fish took all of it, and the lure went too.
   let bare = false;
-  // How the last fish was lost in this cast: '' or 'spooled'.
+  // How the last fish was lost in this cast: '', 'spooled' or 'shed'.
   let lost = '';
   // The fish's half of the cast. It is handed the lure's motion and the line out.
   const fish = createCatch({ rod, line, splash, churn, school, net, haptics, random, move, out, spool });
@@ -161,7 +164,23 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
   // A fish has the hook. The empty retrieve stops: from here winding is against the fish.
   function toFight() {
     stage = 'fight';
+    lost = '';
     retrieve.reset();
+  }
+
+  // The fish has thrown the hook. The lure is in the water where its mouth was, and the
+  // cast goes on: another fish may come. A finger that was down when it went is not a
+  // retrieve.
+  function toShed(input, tip) {
+    stage = 'water';
+    lost = 'shed';
+    lifted = false;
+    armed = !input.finger;
+    winding = false;
+    retrieve.reset();
+    out.ease(move.gap(tip));
+    spot.x = move.x;
+    spot.z = move.z;
   }
 
   // The fish is gone and the lure with it. What is out is bare line, lying where the fish
@@ -253,7 +272,11 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     const taken = Math.min(retrieve.step(dt, reeling), out.room);
     rod.reel.wind(taken);
     const pulled = out.wind(dt, taken, move.gap(tip));
-    if (!lifted) {
+    // With the hook in a fish's mouth the lure is where the mouth is, not where the line
+    // would tow it, and the line is held against the fish.
+    const mouthed = !lifted && !bare && fish.hookIn;
+    if (mouthed) loose.takenUp(dt);
+    else if (!lifted) {
       // Finger up, the bail is open and the line is loose: only winding would bring the
       // lure in. A jerk of the rod is taken up by the line, and what reaches the lure is
       // a dart and a shiver. Then line follows the lure down and it sinks where it is.
@@ -275,7 +298,11 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
       toReady();
       return;
     }
-    if (!lifted && !bare && fish.come(dt)) toFight();
+    if (lifted || bare) return;
+    const came = fish.come(dt, input, tip, taken);
+    if (came === 'hooked') toFight();
+    // At the touch the empty retrieve stops. A finger still down takes it up again from slow.
+    else if (came === 'bite') retrieve.reset();
   }
 
   // The lure is out of the water, hanging on the line: lifted out, or with a landed fish on it.
@@ -304,7 +331,7 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     // In the water with the finger up, a rod drawn away finds the line giving: it lies
     // that much longer for the moment.
     line.setLength(stage === 'fight' ? out.length - fish.snatch
-      : stage === 'water' ? out.length + loose.give : out.length);
+      : stage === 'water' ? out.length + loose.give - fish.snatch : out.length);
     move.point(dt, tip, stage === 'water' && !lifted);
     lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
   }
@@ -364,10 +391,16 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     get watchRod() {
       return stage === 'fight' || stage === 'landed';
     },
-    // How this cast lost its fish, until the line is back in: '' not at all, 'spooled' the
-    // fish took all of it.
+    // How this cast last lost a fish, until the line is back in or another is hooked: ''
+    // not at all, 'spooled' the fish took all the line, 'shed' it threw the hook.
     get lost() {
       return lost;
+    },
+
+    // Every fish with a mind about the lure (suitors.js): what it is doing, how hungry,
+    // how interested, how frightened. For tuning and the checks. Read only.
+    get minds() {
+      return fish.minds;
     },
 
     // Once, after the line's first update: the lure at the tip, line in.
@@ -389,6 +422,8 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
      * input.viewPitch: how high it looks, degrees, positive upward.
+     * input.raised: how far up the hand has tipped the rod, degrees, or null with no
+     * sensor. input.lift: the desktop stand-in for a strike is down.
      */
     update(dt, input) {
       if (!(dt > 0)) return;
@@ -399,17 +434,18 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
       else if (stage === 'fight') {
         const ended = fish.fight(dt, input, tip, spot);
         if (ended === 'landed') stage = 'landed';
+        else if (ended === 'shed') toShed(input, tip);
         else if (ended) toBare(ended, input, tip);
       } else if (fish.land(dt, input, tip, spot)) toNetted(tip);
-      fish.carry(dt);
+      fish.carry(dt, input, tip);
       show(dt, tip);
     },
 
     // Once a frame, after the line's update.
     follow,
   };
-  // The fish, exactly as catch.js reports it: fish, mood, size, big, tension, pull, press,
-  // effort, running, stamina and landed. Their meanings are written there, once.
+  // The fish, exactly as catch.js reports it: the names in FISH_READOUT. Their meanings
+  // are written there, once.
   for (const name of FISH_READOUT) Object.defineProperty(cast, name, { get: () => fish[name], enumerable: true });
   return cast;
 }

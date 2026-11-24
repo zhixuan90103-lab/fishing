@@ -45,20 +45,22 @@ export function seeded(seed) {
  * lift: degrees the rod is raised. sizes(i, size): the body scale of fish i, to make
  * every fish one size. noSchool: no fish at all. random: the play layer's draws, to
  * force one. sensor: the cast reads the rod's swing, as on a phone, and not how long the
- * finger was held.
+ * finger was held. strikes: what the hand does at a bite: true, it strikes the moment
+ * the hook is in a mouth; false, it never strikes.
  */
-export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null, sensor = false, spool }) {
+export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null, sensor = false, spool, strikes = true }) {
   const random = forced || seeded(seed);
   Math.random = seeded(seed * 7919 + 13);
   const tune = { x: 0, y: 1.7, z: 2, yaw: 100, pitch: -10 };
   const fishes = [];
-  for (let i = 0; i < 40; i += 1) {
+  // Forty of the school and ten spares, as school.js has them.
+  for (let i = 0; i < 50; i += 1) {
     fishes.push({ holder: { position: { set() {} }, rotation: {}, scale: { setScalar() {} } }, action: { getClip: () => ({ duration: 4 }), time: 0 } });
   }
-  const flock = createFlock(fishes, { bodyLength: 0.45 });
+  const flock = createFlock(fishes, { bodyLength: 0.45, spare: 10 });
   flock.place(tune);
   if (sizes) fishes.forEach((f, i) => { f.size = sizes(i, f.size); });
-  const school = { fishes, take: flock.take, giveBack: flock.giveBack, mouth: flock.mouth, hang: flock.hang, keep: flock.keep };
+  const school = { fishes, take: flock.take, giveBack: flock.giveBack, bring: flock.bring, dismiss: flock.dismiss, mouth: flock.mouth, hang: flock.hang, keep: flock.keep };
 
   // The rod: grip fixed in front of the eye, turned to wherever the view looks.
   const flex = createRodFlex({ length: 2.13, nodes: NODES, rigidBelow: 0.34 });
@@ -182,7 +184,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   // The real reading of a fish churning the water; only the drawing is left out.
   const churn = createWakeTrack(48, seeded(seed + 77));
   const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random, spool });
-  const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch };
+  const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, raised: null, lift: false };
   let time = 0;
   let frame = 0;
   let begun = false;
@@ -220,7 +222,13 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
       if (press === 'runs') return fishing.mood === 'run';
       return false;
     },
+    // The fish on the line and still in the water: taken, and not one of those round the lure.
+    hooked() { const round = new Set([...fishing.minds].map((m) => m.fish)); return fishes.find((x) => x.state === 'held' && !round.has(x)); },
     windWater: false,
+    // The stand-in for snapping the rod up. Replace to script it.
+    lift() { return strikes && fishing.hookIn; },
+    // How far up the hand has tipped the rod, degrees, as a phone would say. null: no phone.
+    raised: null,
     rodStays: false,
     get viewYaw() { return viewYaw; },
     // The tip against a straight rod: metres to the rod's right (seen from behind it), and metres down.
@@ -230,6 +238,8 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     step() {
       flock.step(dt, 1, ROCKS, cam);
       input.finger = rig.finger();
+      input.lift = rig.lift();
+      input.raised = rig.raised;
       input.viewYaw = viewYaw;
       // How high the view is said to look, for where a cast is thrown. The rig's own
       // camera stays as it is.

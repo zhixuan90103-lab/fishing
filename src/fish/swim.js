@@ -18,6 +18,8 @@
  * Head is +Z of the holder, yaw is about +Y, positive yaw turns toward +X (the fish's left).
  */
 
+import { AWAY } from './states.js';
+
 export const DEPTH_MIN = -3.75;
 export const DEPTH_MAX = -1.75;
 
@@ -84,8 +86,11 @@ export function measureCrowd(fishes, crowd) {
   crowd.z.fill(0);
   for (let i = 0; i < n; i++) {
     const a = fishes[i];
+    // A fish that is not in the water crowds nobody.
+    if (a.state === AWAY) continue;
     for (let j = i + 1; j < n; j++) {
       const b = fishes[j];
+      if (b.state === AWAY) continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dz = b.z - a.z;
