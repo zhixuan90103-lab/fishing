@@ -2,7 +2,8 @@
  * A hand working against a pull: what it does to the rod it holds. Three is used for its
  * maths only: no scene, no model.
  *
- * Owns: how far a working hand is drawn toward the pull, how it shakes, and how the rod
+ * Owns: how far a working hand gives toward the pull (a shift of a few centimetres, not
+ * a turn: the rod is never swung round to face the fish), how it shakes, and how the rod
  * rolls over when it is carried to one side of the pull.
  * Does not own: how hard the hand is working (gameplay says, and eases it:
  * src/play/strain.js), where the pull comes from or where the rod sits (rodHold.js hands

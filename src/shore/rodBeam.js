@@ -17,7 +17,7 @@ const FREE_HZ = 2.8;
 // blank. It sets how hard a pull bends the rod, not how the rod swings: the blank's mass
 // follows from this and FREE_HZ, so the modes keep their frequencies. Softer, and a
 // resting fish already bends it as far as a running one.
-const TIP_STIFFNESS = 9.3;
+const TIP_STIFFNESS = 55.8;
 // Relative bending stiffness along the blank: [fraction of length, stiffness]. Butt is 1.
 // Hand-matched to the blank's radius^4 in rod.js, then left as its own table. Steeper
 // falloff means a faster, tippier action. Change this table to retune the rod; do not

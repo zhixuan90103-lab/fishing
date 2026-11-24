@@ -15,7 +15,8 @@
  *      not caught up yet: everything ahead of the handle hangs back, the hand stays put.
  *
  * The phone's aim comes in through setAim and is added on top of the trail, untouched:
- * startShore.js works out how much of the phone's turn the view has not taken.
+ * aim.js works out how much of the phone's turn the view has not taken, and
+ * startShore.js hands that in.
  *
  * A hand holding against a fish is not a clamp: it gives, shakes and lays the rod over.
  * What that comes to is rodHand.js. It is laid on last, about the hand like the rest, so
@@ -209,8 +210,8 @@ export function createRodHold(root, handAt) {
       working.setStrain(value);
     },
 
-    // Where that pull comes from, world space: the far end of a taut line. null when
-    // nothing pulls. The last direction is kept, for the effort to ease off along.
+    // Where that pull comes from, world space: the far end of the line, whenever the line
+    // is tied to the tip, taut or not (rod.js). null when nothing is tied on. The last direction is kept, for the effort to ease off along.
     setPull(point) {
       pulled = !!point;
       if (point) pullAt.copy(point);

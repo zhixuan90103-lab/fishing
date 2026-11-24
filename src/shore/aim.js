@@ -90,8 +90,16 @@ export const VIEW_OWES = 0.5;
 
 const DEG = 180 / Math.PI;
 
-function clampPitch(deg) {
-  return Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, deg));
+// The pitch the view is asked for, eased in to the limit: untouched up to PITCH_EASES,
+// then closing on PITCH_LIMIT ever more slowly and never reaching it. A phone tipped
+// past the limit used to bring the view up against it dead. What the view does not take
+// the rod does, as with any of the aim the view is short of.
+const PITCH_EASES = 55;
+function easedPitch(deg) {
+  const over = Math.abs(deg) - PITCH_EASES;
+  if (over <= 0) return deg;
+  const room = PITCH_LIMIT - PITCH_EASES;
+  return Math.sign(deg) * (PITCH_LIMIT - room * Math.exp(-over / room));
 }
 
 // The same direction as `deg`, written as the angle nearest to `near`.
@@ -255,7 +263,7 @@ export function createAim(yaw, pitch) {
       lastWatchPitch = toPitch;
     }
     aim.viewYaw = chaseAngle(aim.viewYaw, toYaw, nearest(lastWatchYaw, aim.viewYaw), rate, dt);
-    aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, toPitch, lastWatchPitch, rate, dt));
+    aim.viewPitch = chaseAngle(aim.viewPitch, easedPitch(toPitch), easedPitch(lastWatchPitch), rate, dt);
     lastWatchYaw = toYaw;
     lastWatchPitch = toPitch;
   }
@@ -263,7 +271,7 @@ export function createAim(yaw, pitch) {
   // The view chases the aim, at the usual rate or on its way back up to it.
   function followAim(aimYaw, aimPitch, dt) {
     aim.viewYaw = chaseAngle(aim.viewYaw, aimYaw, lastYaw, follow, dt);
-    aim.viewPitch = clampPitch(chaseAngle(aim.viewPitch, aimPitch, lastPitch, follow, dt));
+    aim.viewPitch = chaseAngle(aim.viewPitch, easedPitch(aimPitch), easedPitch(lastPitch), follow, dt);
     follow += (LOOK_RATE - follow) * (1 - Math.exp(-RETURN_RECOVER * dt));
   }
 

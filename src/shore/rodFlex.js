@@ -4,8 +4,9 @@
  * Owns: how the blank lags the grip and springs back, frame by frame, and the curve it
  * has right now.
  * Does not own: the blank's make-up (rodBeam.js), where the grip is (rodHold.js), the
- * model and bones (rod.js), the line, or any fishing rule. Gameplay only gets setTipLoad
- * and setTipForce.
+ * model and bones (rod.js), the line, or any fishing rule. Gameplay calls nothing here:
+ * what hangs on the line reaches the blank through the tether (line.js). setTipLoad is
+ * left for the settings panel's trial slider, and nothing calls setTipForce.
  *
  * Each vibration mode of the beam is one point with inertia in world space, pulled to
  * where a rigid rod would put it. Nothing is differentiated twice, so a jumpy grip is safe.
@@ -319,8 +320,9 @@ export function createRodFlex({ length, nodes, rigidBelow = 0 }) {
       return modes.map((m) => m.omega / (Math.PI * 2));
     },
 
-    // Extra mass riding on the tip, kg: the lure while it hangs there, or a fish lifted
-    // out of the water. Slows every mode and sags the blank. The blank keeps the bend and
+    // Extra mass riding on the tip itself, kg. Slows every mode and sags the blank. Not
+    // how a lure or a fish weighs on the rod: those hang on the line and come through the
+    // tether. Only the settings panel's trial slider uses this. The blank keeps the bend and
     // the motion it has and takes up the new weight from there, so put a heavy weight on
     // in small steps, not all at once.
     setTipLoad(kg) {

@@ -164,7 +164,8 @@ export function createSpinningRod() {
     setStrain(effort) {
       hold.setStrain(effort);
     },
-    // Extra mass on the tip, kg: the lure while it hangs there.
+    // Extra mass on the tip itself, kg. Trial only: the settings panel's slider. A lure or
+    // a fish hanging on the line weighs on the rod through the line, not through this.
     setTipLoad(kg) {
       flex.setTipLoad(kg);
     },

@@ -25,7 +25,7 @@
 
 // The pull at which the hand is as hard pressed as it gets, N. The same number the hand's
 // effort is measured against (src/play/strain.js).
-const FULL_AT = 9;
+const FULL_AT = 54;
 // How much harder the pull is than the hand at that: against a pull of FULL_AT the hand
 // makes 1 part in (1 + this) of a turn away from it, at half of FULL_AT about 6 in 10
 // Higher and a fish holds the rod harder.

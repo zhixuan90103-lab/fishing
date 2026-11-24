@@ -23,7 +23,7 @@ import { PITCH_LIMIT, createAim, directionTo } from './aim.js';
 import { createFinger } from './finger.js';
 import { haptics } from '../utils/haptics';
 import { mountTunePanel } from './tunePanel.js';
-import { mountNotice } from './notice.js';
+import { mountPhoneAsk } from './phoneAsk.js';
 import { makeParticles } from './minamo/scene/particles.js';
 import { Post } from './minamo/post/post.js';
 import { LensDrops } from './minamo/post/lensDrops.js';
@@ -31,7 +31,6 @@ import { LensDrops } from './minamo/post/lensDrops.js';
 // Degrees the view turns per CSS pixel dragged, without a phone.
 const DRAG_DEG_PER_PIXEL = 0.17;
 // What is said when the line breaks. The only words the game says to the player.
-const LINE_BROKE = '线断了';
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -170,7 +169,6 @@ export async function startShore(container, hooks = {}) {
   // only places the camera and hands the rod its part. docs/PHONE-LOOK.md.
   const phone = createPhoneLook();
   const aim = createAim(tune.yaw, tune.pitch);
-  let phoneAsked = false;
   let phonePrimed = false;
   // Without a phone the aim never turns: it stays on the panel's camera.
   const NOT_TURNED = { yaw: 0, pitch: 0, roll: 0 };
@@ -214,7 +212,7 @@ export async function startShore(container, hooks = {}) {
     if (phone.active && !phonePrimed) {
       recenter();
       phonePrimed = true;
-      if (phoneHint) phoneHint.remove();
+      phoneAsk.done();
     }
     if (phone.active) phone.advance(dt);
     const watch = fishingBegun && fishing.watch;
@@ -273,8 +271,7 @@ export async function startShore(container, hooks = {}) {
   const READOUT_EVERY = 6;
   let readoutIn = 0;
   // How the cast last reported its fish lost, to say so once when the line breaks.
-  let lostSeen = '';
-  const fishingInput = { finger: false, sensor: false, viewYaw: 0, viewPitch: 0, aimPitch: 0 };
+  const fishingInput = { finger: false, sensor: false, viewYaw: 0, viewPitch: 0 };
   const post = new Post(device, ocean, format);
   const drops = new LensDrops();
 
@@ -308,29 +305,13 @@ export async function startShore(container, hooks = {}) {
   }
 
   const finger = createFinger(canvas);
-  const yawInput = { el: null };
-  const pitchInput = { el: null };
-  const phoneHint = document.createElement('button');
-  phoneHint.type = 'button';
-  phoneHint.textContent = '允许手机转动';
-  phoneHint.style.cssText = 'position:absolute;left:50%;top:16px;transform:translateX(-50%);margin:0;padding:10px 16px;border:0;border-radius:999px;background:rgba(0,0,0,0.55);color:#fff;font:15px/1.2 sans-serif;pointer-events:auto;z-index:3;';
-  ui?.appendChild(phoneHint);
-  phoneHint.addEventListener('click', () => {
-    if (phoneAsked) return;
-    phoneAsked = true;
-    phone.enable().then((ok) => {
-      if (!phoneHint) return;
-      if (ok) phoneHint.remove();
-      else phoneHint.textContent = '没有转动权限，仍用拖动看画面';
-    });
-  });
+  const phoneAsk = mountPhoneAsk(ui, () => phone.enable());
   // Without a phone a drag turns the view, except while the view is watching the cast.
   finger.onDrag((dx, dy) => {
     if (phone.active || fishing.watch) return;
     tune.yaw -= dx * DRAG_DEG_PER_PIXEL;
     tune.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, tune.pitch - dy * DRAG_DEG_PER_PIXEL));
-    if (yawInput.el) yawInput.el.value = String(Math.round(tune.yaw));
-    if (pitchInput.el) pitchInput.el.value = String(Math.round(tune.pitch));
+    tuneUi.showView();
     applyCamera();
   });
 
@@ -338,18 +319,23 @@ export async function startShore(container, hooks = {}) {
   let running = true;
   let waveDirty = false;
 
+  // Per-frame scratch: made once, rewritten every frame.
+  const fwd = new THREE.Vector3();
+  const focus = new THREE.Vector3();
+  const sunState = { dir: sun.dir, color: sunLight.color, ambient: sun.ambient };
+  const schoolView = { x: 0, z: 0, yaw: 0, fov: 0, aspect: 1 };
+
   function frame(dt) {
     time += dt;
     camera.updateMatrixWorld();
     sunLight.color.copy(sun.color).multiplyScalar(params.sunScale);
     sunLight.intensity = 1;
-    const fwd = camera.getWorldDirection(new THREE.Vector3());
-    const focus = camera.position.clone().addScaledVector(fwd, 25);
+    camera.getWorldDirection(fwd);
+    focus.copy(camera.position).addScaledVector(fwd, 25);
     sunLight.target.position.copy(focus);
     sunLight.position.copy(focus).addScaledVector(sun.dir, 150);
     sunLight.target.updateMatrixWorld();
 
-    const sunState = { dir: sun.dir, color: sunLight.color, ambient: sun.ambient };
     updateOceanUniforms(O, params, sunState);
     O.U.camXZ.value.set(camera.position.x, camera.position.z);
     O.U.camFwd.value.copy(fwd);
@@ -375,13 +361,12 @@ export async function startShore(container, hooks = {}) {
     }
     particles.update(camera, time);
     // The fish first: a lure in a fish's mouth is put where the mouth is this frame.
-    shoreSchool.update(dt, tune.swimRate, world.rocks, {
-      x: tune.x,
-      z: tune.z,
-      yaw: (tune.yaw * Math.PI) / 180,
-      fov: camera.fov,
-      aspect: camera.aspect,
-    });
+    schoolView.x = tune.x;
+    schoolView.z = tune.z;
+    schoolView.yaw = (tune.yaw * Math.PI) / 180;
+    schoolView.fov = camera.fov;
+    schoolView.aspect = camera.aspect;
+    shoreSchool.update(dt, tune.swimRate, world.rocks, schoolView);
     if (fishingBegun) {
       fishingInput.sensor = phone.active;
       // With a phone the touch is the finger. Without one a touch turns the view, so the
@@ -389,7 +374,6 @@ export async function startShore(container, hooks = {}) {
       fishingInput.finger = phone.active ? finger.touching : finger.key;
       fishingInput.viewYaw = aim.viewYaw * Math.PI / 180;
       fishingInput.viewPitch = aim.viewPitch;
-      fishingInput.aimPitch = aim.viewPitch + aim.rodPitch;
       fishing.update(dt, fishingInput);
     }
     applyPhone(dt);
@@ -405,17 +389,10 @@ export async function startShore(container, hooks = {}) {
     fishWake.update();
     if (fishingBegun) {
       fishing.follow();
-      if (fishing.lost !== lostSeen) {
-        lostSeen = fishing.lost;
-        if (lostSeen === 'broke') notice.say(LINE_BROKE);
-      }
       readoutIn -= 1;
       if (tuneUi.open && readoutIn <= 0) {
         readoutIn = READOUT_EVERY;
-        tuneUi.setCast(
-          `${fishing.stage} · 线 ${fishing.lineOut.toFixed(1)} 米 · 竿尖 ${fishing.swing.toFixed(1)} 米/秒 · 上次松手 ${fishing.lastRelease.toFixed(1)} 米/秒 仰角 ${Math.round(fishing.lastAngle)}°`
-            + ` · 鱼 ${fishing.fish} ${fishing.mood}${fishing.size ? ` ${fishing.big ? '大' : '小'} ${fishing.size.toFixed(2)}` : ''} · 张力 ${fishing.tension.toFixed(1)} 牛 · 鱼的力 ${fishing.pull.toFixed(1)} 牛 · 硬顶 ${fishing.press.toFixed(1)} 牛 · 手上 ${Math.round(fishing.effort * 100)} · 出线 ${fishing.running.toFixed(1)} 米/秒 · 气力 ${Math.round(fishing.stamina * 100)} · 钓到 ${fishing.landed}${fishing.lost ? ` · ${fishing.lost}` : ''}`,
-        );
+        tuneUi.showCast(fishing);
       }
     } else {
       fishing.begin();
@@ -466,14 +443,11 @@ export async function startShore(container, hooks = {}) {
   }
   requestAnimationFrame(loop);
 
-  const notice = mountNotice(container);
   const tuneUi = mountTunePanel(container, tune, {
     onWave() { waveDirty = true; },
     onCamera() { applyCamera(); },
     onRod() { applyRod(); },
     onRecenter() { applyCamera(); },
-    yawInput,
-    pitchInput,
   });
 
   return {
@@ -484,7 +458,7 @@ export async function startShore(container, hooks = {}) {
     dispose() {
       running = false;
       tuneUi.remove();
-      notice.remove();
+      phoneAsk.remove();
       finger.dispose();
       splash.dispose();
       lineWake.dispose();

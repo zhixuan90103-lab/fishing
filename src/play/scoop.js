@@ -3,7 +3,7 @@
  *
  * Owns: where the net's hoop is over time, the moment the fish comes off the hook, its
  * fall into the bag, how the net gives under it, and carrying it away.
- * Does not own: the net's model (src/shore/net.js), how a fish thrashes (src/fish/flock.js),
+ * Does not own: the net's model (src/shore/net.js), how a fish thrashes (src/fish/hung.js),
  * the lure or the line, when the net is called for, or what its leaving means (catch.js).
  * No Three, no scene: it runs in Node. Design: docs/NET.md.
  *

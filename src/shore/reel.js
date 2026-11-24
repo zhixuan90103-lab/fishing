@@ -1,6 +1,11 @@
 /**
  * Spinning reel, about a 2500 size.
  *
+ * Owns: the reel's model, built in code, its four moving parts, and wind(): turning them
+ * by a length of line taken in.
+ * Does not own: when line comes in or how much (gameplay calls wind through rod.reel),
+ * where the reel sits on the rod (rod.js), or the line. Design: docs/ROD.md section 7.
+ *
  * Reel space: origin where the foot meets the seat. +Y points to the rod tip, +Z hangs
  * away from the rod, +X is the angler's left, where the handle is. The main shaft is
  * parallel to the rod at z = SHAFT_DROP.

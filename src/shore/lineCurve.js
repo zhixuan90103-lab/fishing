@@ -99,6 +99,7 @@ export function createLineCurve(count) {
   const x = new Float64Array(count);
   const y = new Float64Array(count);
   const z = new Float64Array(count);
+  const axes = [x, y, z];
   const wasX = new Float64Array(count);
   const wasY = new Float64Array(count);
   const wasZ = new Float64Array(count);
@@ -198,7 +199,8 @@ export function createLineCurve(count) {
   function straighten(h, spacing) {
     const by = h / (LINE_DRAG * spacing * spacing);
     for (let i = 1; i < last; i += 1) stiff[i] = (y[i] < 0 ? Math.max(felt, drawn) : felt) * by;
-    for (const p of [x, y, z]) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const p = axes[axis];
       // (1 + 2k) p[i] - k p[i-1] - k p[i+1] = what it was. The ends are given.
       let was = p[0];
       lower[0] = 0;

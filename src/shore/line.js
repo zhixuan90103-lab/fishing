@@ -54,12 +54,13 @@ const OPACITY = 0.6;
 // third of its strength. A line as bright below the surface as above it reads as lying
 // on the water, and a lure sinking on it looks as if it were sliding in toward the rod.
 const FADE_DEPTH = 0.45;
-// How hard the line resists stretching: newtons to stretch it by its own length. About
-// right for 0.25 mm nylon. A longer line is softer end to end, as a real one is.
-export const STRETCH_FORCE = 540;
+// How hard the line resists stretching: newtons to stretch it by its own length. Stiff
+// on purpose: thin nylon would be about 120, and at that the line gave as much as the
+// rod did (docs/LINE.md section 4). A longer line is softer end to end, as a real one is.
+export const STRETCH_FORCE = 3240;
 // The line is not allowed stiffer than this end to end, N/m. Short lines would otherwise
 // be far stiffer than the rod, which is the soft part anyway.
-export const STIFFEST = 60;
+export const STIFFEST = 360;
 
 export function createFishingLine(rod) {
   // The strand: `stops` points along the rod, then HANG_POINTS more out to the far end.

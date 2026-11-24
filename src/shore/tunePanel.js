@@ -14,8 +14,8 @@
  * container: the stage, holding #ui-root. tune: the values, read for the starting
  * positions and written on every slide.
  * hooks: onWave, onCamera, onRod, onRecenter are called after the matching values change.
- * hooks.yawInput.el and hooks.pitchInput.el are set to the camera's two sliders, so a
- * drag on the view can move them.
+ * Returns showView(), which moves the camera's two sliders to what `tune` holds now (a
+ * drag on the view changes it), and showCast(fishing), which writes the cast's readouts.
  */
 export function mountTunePanel(container, tune, hooks) {
   const root = container.querySelector('#ui-root') || container;
@@ -26,6 +26,8 @@ export function mountTunePanel(container, tune, hooks) {
   const panel = document.createElement('section');
   panel.className = 'tune-panel';
   panel.hidden = true;
+  let yawInput = null;
+  let pitchInput = null;
   const fields = [
     ['雾', [
       ['起始', 'fogNear', 0, 80, 1],
@@ -52,7 +54,7 @@ export function mountTunePanel(container, tune, hooks) {
       ['抬起', 'rodAimUp', -30, 70, 0.5],
       ['侧偏', 'rodAimSide', -45, 45, 0.5],
       ['滚转', 'rodRoll', -180, 180, 1],
-      ['竿尖负重 g', 'rodLoad', 0, 400, 5],
+      ['竿尖负重 g', 'rodLoad', 0, 2400, 30],
     ]],
     ['摄像机', [
       ['位置 X', 'x', -30, 30, 0.1],
@@ -82,8 +84,8 @@ export function mountTunePanel(container, tune, hooks) {
       input.max = String(max);
       input.step = String(step);
       input.value = String(tune[key]);
-      if (key === 'yaw') hooks.yawInput.el = input;
-      if (key === 'pitch') hooks.pitchInput.el = input;
+      if (key === 'yaw') yawInput = input;
+      if (key === 'pitch') pitchInput = input;
       input.addEventListener('input', () => {
         tune[key] = Number(input.value);
         value.textContent = formatTune(tune[key]);
@@ -115,7 +117,15 @@ export function mountTunePanel(container, tune, hooks) {
   root.append(toggle, panel);
   return {
     get open() { return !panel.hidden; },
-    setCast(text) { castText.textContent = text; },
+    showView() {
+      if (yawInput) yawInput.value = String(Math.round(tune.yaw));
+      if (pitchInput) pitchInput.value = String(Math.round(tune.pitch));
+    },
+    // fishing: the cast's read-only numbers (src/play/fishing.js).
+    showCast(f) {
+      castText.textContent = `${f.stage} · 线 ${f.lineOut.toFixed(1)} 米 · 竿尖 ${f.swing.toFixed(1)} 米/秒 · 上次松手 ${f.lastRelease.toFixed(1)} 米/秒 仰角 ${Math.round(f.lastAngle)}°`
+        + ` · 鱼 ${f.fish} ${f.mood}${f.size ? ` ${f.big ? '大' : '小'} ${f.size.toFixed(2)}` : ''} · 张力 ${f.tension.toFixed(1)} 牛 · 鱼的力 ${f.pull.toFixed(1)} 牛 · 硬顶 ${f.press.toFixed(1)} 牛 · 手上 ${Math.round(f.effort * 100)} · 出线 ${f.running.toFixed(1)} 米/秒 · 气力 ${Math.round(f.stamina * 100)} · 钓到 ${f.landed}${f.lost ? ` · ${f.lost}` : ''}`;
+    },
     remove() { toggle.remove(); panel.remove(); },
   };
 }

@@ -35,20 +35,20 @@
  * No two fish of a size are alike. Each has a nature, drawn once (drawNature) and its own
  * from then on: how strong, how fast, how lasting, how quick to recover, and how bold.
  * fishOf() lays it over the table. Nothing in a nature can carry a small fish over the
- * point where the reel gives line, or any fish over the line's breaking point.
+ * point where the reel gives line.
  *
  * The first two rows are the small fish: runFresh stays below the point where the reel
  * gives line (haul.js), so they never take any. The last two are the big ones: fresh,
- * they pull harder than the reel holds, and less than breaks the line (snap.js).
+ * they pull harder than the reel holds.
  */
 import { SUNK_SHARE } from './tipWeight.js';
 
 const KINDS = {
   dorade: [
-    { size: 0.78, runFresh: 2.8, runSpent: 1.3, tire: 0.42, burst: 4, recover: 2.6, dash: 3.6, thump: 0.9, beat: [0.1, 0.16], load: 0.11 },
-    { size: 0.95, runFresh: 3.8, runSpent: 1.6, tire: 0.38, burst: 4.5, recover: 2.8, dash: 4.2, thump: 1.2, beat: [0.11, 0.18], load: 0.17 },
-    { size: 1.2, runFresh: 8, runSpent: 2.4, tire: 0.5, burst: 5.5, recover: 3.2, dash: 5.2, thump: 2, beat: [0.15, 0.24], load: 0.28 },
-    { size: 1.4, runFresh: 9.8, runSpent: 2.8, tire: 0.44, burst: 6, recover: 3.4, dash: 6, thump: 2.6, beat: [0.17, 0.28], load: 0.36 },
+    { size: 0.78, runFresh: 16.8, runSpent: 7.8, tire: 0.3, burst: 4, recover: 2.6, dash: 3.6, thump: 5.4, beat: [0.1, 0.16], load: 0.66 },
+    { size: 0.95, runFresh: 22.8, runSpent: 9.6, tire: 0.26, burst: 4.5, recover: 2.8, dash: 4.2, thump: 7.2, beat: [0.11, 0.18], load: 1.02 },
+    { size: 1.2, runFresh: 48, runSpent: 14.4, tire: 0.26, burst: 5.5, recover: 3.2, dash: 5.2, thump: 12, beat: [0.15, 0.24], load: 1.68 },
+    { size: 1.4, runFresh: 58.8, runSpent: 16.8, tire: 0.22, burst: 6, recover: 3.4, dash: 6, thump: 15.6, beat: [0.17, 0.28], load: 2.16 },
   ],
 };
 
@@ -79,10 +79,10 @@ const mix = (a, b, t) => a + (b - a) * t;
 /**
  * The fish of this species and body size, with this nature (drawNature) or none. Sizes
  * off either end of the table read as the end row. Returns a new object with the columns
- * above, plus kind, size, rest, goAt, and comfortDepth.
- * random: for drawing comfortDepth variation (0 to 1).
+ * above, plus kind, size, rest, and goAt: the share of a run it has to have back before
+ * it bolts again.
  */
-export function fishOf(kind, size, nature = PLAIN, random = Math.random) {
+export function fishOf(kind, size, nature = PLAIN) {
   const rows = KINDS[kind];
   if (!rows) throw new Error(`No such fish: ${kind}`);
   let i = 1;
@@ -91,8 +91,6 @@ export function fishOf(kind, size, nature = PLAIN, random = Math.random) {
   const b = rows[i];
   const t = Math.min(1, Math.max(0, (size - a.size) / (b.size - a.size)));
   const load = mix(a.load, b.load, t);
-  // Comfort depth: bigger fish go deeper. Range -1.5 to -3.5 m.
-  const comfortDepth = -(1.2 + size * 1.8 + random() * 0.6);
   return {
     kind,
     size,
@@ -108,9 +106,8 @@ export function fishOf(kind, size, nature = PLAIN, random = Math.random) {
     thump: mix(a.thump, b.thump, t) * nature.strength,
     beat: [mix(a.beat[0], b.beat[0], t), mix(a.beat[1], b.beat[1], t)],
     load,
-    comfortDepth,
   };
 }
 
-// The hardest any fish of any kind pulls, N. The line's breaking point has to stay above it.
+// The hardest any fish of any kind pulls, N.
 export const HARDEST_RUN = Math.max(...Object.values(KINDS).flat().map((row) => row.runFresh)) * (1 + VARIES);

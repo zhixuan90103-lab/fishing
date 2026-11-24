@@ -2,7 +2,7 @@
  * A fish coming to the lure: how it swims there, and when it has reached the hook.
  *
  * Owns: the aim of a fish on its way to the lure, and the distance that counts as touching.
- * Does not own: which fish comes or when (fishing.js), how a fish swims (src/fish/swim.js),
+ * Does not own: which fish comes or when (catch.js), how a fish swims (src/fish/swim.js),
  * what the touch turns into, or the lure.
  * No Three, no scene: it runs in Node. Rule: docs/FISHING-REQUIREMENTS.md section 6.
  * Design: docs/PLAY.md section 7.

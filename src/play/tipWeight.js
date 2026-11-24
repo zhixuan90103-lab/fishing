@@ -16,9 +16,10 @@
  */
 
 // Still in the water a fish puts this share of its weight on the line: what the water
-// does not carry, and its hanging back. The same number is what it pulls with when it
-// is doing nothing at all in a fight (fishKind.js).
-export const SUNK_SHARE = 0.45;
+// does not carry. Next to nothing: a fish all but floats. The same number is what it
+// pulls with when it is doing nothing at all in a fight (fishKind.js). It was 0.45 until
+// 2026-11-24, which had the biggest fish hanging a kilo on the line as it rested.
+export const SUNK_SHARE = 0.05;
 // The weight comes on as the hook rises between these, metres: the fish has some length
 // and leaves the water bit by bit.
 export const DRY_FROM = -0.3;

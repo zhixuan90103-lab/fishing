@@ -1,5 +1,7 @@
 # 鱼群行为与搏斗系统重构总结
 
+> **历史记录，不是现在的设计。** 2026-11-24 注。这份是 11-20 那次改动的总结，和代码对不上的有：第 1 节写的 `phase`、`phaseSpeed`、`PHASE_VARIES`、`PHASE_SLOW`、`SCHOOL_*` 改名 `FLOCK_*`、`align` / `cohere` / `separate` 乘权重、`const flocking = 1 - stray`，这些名字在那次的代码里没有出现过；第 2 节的尾巴摆幅封顶实际不生效，依据里的 Videler 1993、Wardle 1975 不在 [FISH-SWIM-RESEARCH.md](./FISH-SWIM-RESEARCH.md) 的来源表里；第 3 节的舒适深度表（0.78 → −1.8，1.4 → −2.9）和公式算出来的不一样（那时公式给的是 −2.6 到 −4.3）。鱼群 11-24 重写，四个阶段和舒适深度 11-24 拿掉。现在的设计在 [FISH-SCHOOL.md](./FISH-SCHOOL.md) 和 [PLAY.md](./PLAY.md) 第 8 节。
+
 2026-11-20
 
 ## 概述

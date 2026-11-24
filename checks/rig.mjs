@@ -45,7 +45,7 @@ export function seeded(seed) {
  * force one. sensor: the cast reads the rod's swing, as on a phone, and not how long the
  * finger was held.
  */
-export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null, sensor = false }) {
+export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, lift = 20, sizes = null, noSchool = false, random: forced = null, sensor = false, spool }) {
   const random = forced || seeded(seed);
   Math.random = seeded(seed * 7919 + 13);
   const tune = { x: 0, y: 1.7, z: 2, yaw: 100, pitch: -10 };
@@ -53,7 +53,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   for (let i = 0; i < 40; i += 1) {
     fishes.push({ holder: { position: { set() {} }, rotation: {}, scale: { setScalar() {} } }, action: { getClip: () => ({ duration: 4 }), time: 0 } });
   }
-  const flock = createFlock(fishes, { roamers: 20, bodyLength: 0.45 });
+  const flock = createFlock(fishes, { bodyLength: 0.45 });
   flock.place(tune);
   if (sizes) fishes.forEach((f, i) => { f.size = sizes(i, f.size); });
   const school = { fishes, take: flock.take, giveBack: flock.giveBack, mouth: flock.mouth, hang: flock.hang, keep: flock.keep };
@@ -179,8 +179,8 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   };
   // The real reading of a fish churning the water; only the drawing is left out.
   const churn = createWakeTrack(48, seeded(seed + 77));
-  const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random });
-  const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, aimPitch: lift - 30 };
+  const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random, spool });
+  const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch };
   let time = 0;
   let frame = 0;
   let begun = false;
@@ -192,7 +192,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   const rig = {
     fishing, flock, fishes, rod, line, churn, events, rodState, lureSeen, dt,
     // The rod raised d degrees: the phone aims it 30 below that, as ROD_POSE mounts it.
-    setLift(d) { grip.setAim(d - 20, 0, 0); input.aimPitch = d - 30; },
+    setLift(d) { grip.setAim(d - 20, 0, 0); },
     get time() { return time; },
     get strain() { return strain; },
     get tipTurn() { return rod.tipTurn; },

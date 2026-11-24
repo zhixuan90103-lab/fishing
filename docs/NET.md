@@ -75,7 +75,7 @@
 |---|---|
 | `createNet()` 上的 `object` | 加在场景根上 |
 | `place(x, y, z, hx, hz, stretch, rock)`、`hide()` | 见第 4 节 |
-| `depth` | 网兜多深 |
+| `depth` | 网兜多深。现在没有人读它：`scoop.js` 用的是自己的常量 |
 | `createScoop()` 上的 `begin`、`step`、`stop` | 见第 3 节 |
 | `x, y, z`、`phase`、`handleX`、`handleZ` | 读。圈的中心、走到哪一段、柄朝哪 |
 | `dropped`、`fishX, fishY, fishZ`、`landing`、`landedSpeed`、`caught` | 读。鱼脱钩了没有、它的嘴在哪、是不是这一帧落网、落网多快、是不是已经在网里 |

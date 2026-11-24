@@ -1,10 +1,19 @@
 /**
  * How one fish gets where it wants to go.
  *
+ * Owns: turning an aim into motion (swimFish), giving way to fish that are too close
+ * (measureCrowd), steering round rocks, the body's bend, bank and tail effort, and the
+ * depths the water has.
+ * Does not own: what a fish wants (behaviors.js, or the brain of whoever took it), what
+ * it can tell of its neighbours (neighbours.js), or a fish out of the water (hung.js).
+ * No Three, no scene: it runs in Node. Design: docs/FISH-SCHOOL.md sections 2 and 5.
+ *
  * Everything above this file only fills an aim: a heading, a speed and a depth.
  * swimFish turns that aim into motion. Rule that must hold for every caller:
- * in the horizontal plane a fish only moves along its own nose. Neighbours, rocks
- * and the school can change the aim. They never move the fish.
+ * in the horizontal plane a fish only moves along its own nose. Neighbours and rocks
+ * change the aim. They do not move the fish, with one exception: a fish that has got
+ * inside a rock all the same is pushed out to its face (pushOutOfRocks), and its nose is
+ * swung onto the way it actually went.
  *
  * Head is +Z of the holder, yaw is about +Y, positive yaw turns toward +X (the fish's left).
  */
@@ -23,6 +32,8 @@ export const ACCEL_DART = 2.6;
 export const COAST = 0.22;
 // How fast a fish closes on the depth it wants, 1/s.
 export const DEPTH_RATE = 0.45;
+// How fast a haul on a hooked fish comes on and goes off, 1/s.
+const TOW_RATE = 8;
 // The tail effort of a fish said to be doing nothing (aim.effort 0) and working flat out
 // (1). Cruising is 0.55, so a fish hanging on a line beats less than one in the school.
 const DRIVE_IDLE = 0.12;
@@ -30,9 +41,13 @@ const DRIVE_FLAT_OUT = 1.3;
 // Working flat out its tail beats at least as fast as it would swimming this fast, m/s,
 // however slowly it is really going: a fish straining against a line that holds it.
 const STROKE_FLAT_OUT = 1.4;
-// Tail amplitude caps at high speed (research: ~0.2 BL at ~5 beats/s). Below STROKE_LOW
-// amplitude follows effort; above STROKE_HIGH it's capped at DRIVE_CAP; smoothly between.
-// STROKE_LOW and STROKE_HIGH are in m/s, treating stroke as speed-equivalent.
+// Tail amplitude is meant to cap at high speed (research: ~0.2 BL at ~5 beats/s): below
+// STROKE_LOW it follows effort, above STROKE_HIGH it is held to DRIVE_CAP, in between
+// the cap slides. STROKE_LOW and STROKE_HIGH are in m/s, treating stroke as speed.
+// As written this cap never binds, noted 2026-11-24 and left as it is: the branch it is
+// on only sees a drive of 0.71 or less, and the cap is never below DRIVE_CAP. And the
+// two thresholds in swimFish (want over 0.1, effort over 0.5) are steps in the target,
+// not smooth: fish.drive eases over them in a fifth of a second.
 const STROKE_LOW = 0.4;   // Below this, amplitude unlimited
 const STROKE_HIGH = 2.0;  // Above this, amplitude capped
 const DRIVE_CAP = 0.85;   // High-speed amplitude cap (less than DRIVE_FLAT_OUT)
@@ -52,7 +67,7 @@ export function wrapPi(a) {
 export function makeAim() {
   return {
     yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE,
-    slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX, effort: null,
+    slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX, effort: null, towX: 0, towZ: 0,
   };
 }
 
@@ -146,6 +161,8 @@ export function restBody(fish) {
   fish.roll = 0;
   fish.yawRate = 0;
   fish.stroke = 0;
+  fish.towX = 0;
+  fish.towZ = 0;
 }
 
 export function writePose(fish) {
@@ -224,13 +241,18 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   fish.bend = clamp(fish.yawRate * 0.55, -0.6, 0.6);
   fish.roll += (clamp(-fish.yawRate * 0.3, -0.3, 0.3) - fish.roll) * (1 - Math.exp(-3 * dt));
 
-  // The only horizontal motion is along the nose.
+  // Its own horizontal motion is along the nose and nothing else. A fish someone has on
+  // a line may be hauled bodily as well, whichever way it faces: that is the line's doing
+  // (aim.towX, aim.towZ, m/s), and it comes on and goes off over a moment, never at once.
   const faceX = Math.sin(fish.yaw);
   const faceZ = Math.cos(fish.yaw);
   const x0 = fish.x;
   const z0 = fish.z;
-  fish.x += faceX * fish.speed * dt;
-  fish.z += faceZ * fish.speed * dt;
+  const towK = 1 - Math.exp(-TOW_RATE * dt);
+  fish.towX = (fish.towX || 0) + (aim.towX - (fish.towX || 0)) * towK;
+  fish.towZ = (fish.towZ || 0) + (aim.towZ - (fish.towZ || 0)) * towK;
+  fish.x += (faceX * fish.speed + fish.towX) * dt;
+  fish.z += (faceZ * fish.speed + fish.towZ) * dt;
   // Last resort when steering was not enough. The rock slides the fish along its face,
   // so the nose is swung onto the path it actually took.
   if (pushOutOfRocks(fish, rocks)) {

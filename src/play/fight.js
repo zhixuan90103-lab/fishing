@@ -15,12 +15,19 @@
  *
  * Nothing here runs on a clock. A fish has two stores. Its burst is what one run spends:
  * a run ends when it is gone, and the next begins when enough of it is back. Its stamina
- * is the whole fight's: it only goes down, and with it go the force of a run and how much
- * burst can come back. What spends both is the pull the fish itself puts out, and more of
- * it the more the line stands against that pull: held hard, a run is over sooner, takes
- * less line and costs the fish more, and let run on a free reel it goes on and on. That is
- * all the reward there is for holding a fish, and all the reason there is to.
+ * is the whole fight's: it only goes down, and with it goes the force of a run. What
+ * spends both is the pull the fish itself puts out, and more of it the more the line
+ * stands against that pull: held hard, a run is over sooner and takes less line, and let
+ * run on a free reel it goes on and on. Either way the run costs it the same. That is all
+ * the reward there is for holding a fish, and all the reason there is to.
  * Resting, its burst comes back, slower while the line is drawing it along.
+ *
+ * A fight is a handful of rounds, each weaker than the last, and nothing counts them.
+ * Every run spends a run's worth of burst and the same cost comes off its stamina, so
+ * each run takes it down a step. Its pull follows its stamina evenly. And the more worn
+ * it is the sooner the same effort empties it, so each run is shorter than the last and
+ * the line it takes less, until it cannot take line at all; worn right out it only kicks.
+ * docs/PLAY.md section 8.
  *
  * The two halves must look different on the fish itself, before any haptics. A run is a
  * bolt for its life: it comes on at once, fast, out and away and diving. A rest is a
@@ -61,20 +68,27 @@ import { between, toward } from './maths.js';
 // that share of it. And what a second of not pulling at all would give back.
 const TIRE_FLAT_OUT = 0.2;
 const RECOVER = 0.012;
+// Hauled through the water by a line pulling harder than it is, it loses this much
+// stamina a second for each newton the line has over its own pull, times its `tire`.
+// With RECOVER this is what makes a rest that is wound through cost it a little, where a
+// rest left alone gives a little back.
+const HAUL_COSTS = 0.0015;
 // Pulling against nothing, on a free reel or a slack line, costs it this share of what
 // pulling against a line that holds it does. Lower and a fish let run tires less.
 const FREE_COSTS = 0.35;
 // Drawn along by the line it gets its burst back more slowly: by as much as the line's
 // pull, with this many newtons added, is more than its own resting pull with the same
 // added. Lower and winding a resting fish in holds off its next run for longer.
-const DRAWN_EASY = 2;
-// The most of a run's burst it can get back, worn right out, as a share: fresh, all of it.
-const BURST_SPENT = 0.3;
+const DRAWN_EASY = 12;
+// How much of its fresh self a fish worn right out still is, as a share. It is what a
+// run lasts by and what a rest is slowed by, see step().
+const WORN_OUT = 0.3;
 // Each rest it bolts a little sooner or later than its nature says: this much either way.
 const GO_VARIES = 0.1;
-// A run keeps most of its force until the fish is nearly spent, then it goes quickly:
-// the force follows stamina to this power. 1 would fade evenly.
-const RUN_FADE = 0.6;
+// The force of a run follows stamina to this power. 1 fades evenly: every round pulls
+// less than the last by about the same. Below 1 it would keep most of its force until
+// nearly spent and then lose it all at once.
+const RUN_FADE = 1;
 // How fast the pull comes on at the start of a run, 1/s. A snatch: the rod goes into its
 // deep bend at once.
 const FORCE_ON = 14;
@@ -86,10 +100,10 @@ const GIVE_UP = 16;
 const FORCE_OFF = 2.5;
 // The pull it takes to move the fish through the water, N per m/s. Winding it in, or
 // swinging the rod away from it, costs this much tension per m/s.
-const BODY_DRAG = 1.5;
+const BODY_DRAG = 9;
 // Bolting, it is swimming, not being dragged: line runs out at what its pull has over the
 // reel's hold, divided by this, N per m/s. Lower and a run takes line faster.
-const BOLT_DRAG = 3;
+const BOLT_DRAG = 18;
 // How soon it is where the line holds it, s. Lower follows the line more tightly and
 // overshoots more at low frame rates. Higher, it gives way later to a rod swung against it.
 const SETTLE_IN = 0.4;
@@ -107,6 +121,22 @@ const LED_MAX = 1.6;
 // by the head. Being led round it swings on the rod's side, by this much, m/s. Bolting,
 // it swings round on the far side, away from what pulls it.
 const ARC_KEEPS = 0.6;
+// The start of a run with its head the wrong way is a turn on the spot, the C-start a
+// startled fish makes: the body bends into a C and the head comes round inside half a
+// length (Domenici and Blake 1991, in docs/FISH-SWIM-RESEARCH.md). Until it faces within
+// about 45 degrees of where it means to go (the cosine C_FACING) it keeps only this
+// share of the speed it wants, and may turn this sharply, 1/s, however slowly it is
+// going. Before, it put on its whole speed facing wherever the line had left it, which
+// was at the angler, and came half a metre and more at the camera before it was round.
+// Resting, its head points this far off straight away from the rod, rad, and this much
+// further worn right out: about 30 degrees fresh, 75 spent, when it is all but broadside
+// to the pull. Before, the line led it in head first and it swam the whole way to the
+// angler: it read as a fish coming over of its own accord, not one being wound in.
+const REST_SLANT = 0.5;
+const REST_SLANT_SPENT = 0.8;
+const C_FACING = 0.7;
+const C_KEEPS = 0.15;
+const C_TURN = 5;
 const TURN_INSIDE = 0.3;
 // The tightest it can swing round at speed, m: about a body's length. Its turning is
 // held to what that allows at the speed it is going, plus this much, rad/s, that a fish
@@ -117,12 +147,11 @@ const ARC_RADIUS = 0.45;
 const TURN_SWINGS = 1.2;
 const PIVOT = 0.8;
 
-// Depth targets for different fighting stages, m.
-const BURST_DEPTH = -0.3;      // Initial burst: shallow, may jump
-const TIRED_DEPTH = -0.8;      // Tired: rises toward surface
-const SHALLOWEST = -0.25;      // Shallowest it may go
-// Depth during deep_fight is fish's comfort depth (from fishKind.js).
-// Depth during last_surge ignores depth (panicked).
+// The deepest a run takes it, the depth it rests at, and the shallowest it goes, m. How
+// deep a given run goes is the run's own (course.js).
+const RUN_DEPTH = -2.9;
+const REST_DEPTH = -0.5;
+const SHALLOWEST = -0.25;
 // It only dives in a run when further than DIVE_FAR from under the tip, level metres, and
 // not at all inside DIVE_NEAR. Close in the line runs steeply down to it, and a dive
 // there is a straight pull on a short, stiff line.
@@ -130,17 +159,21 @@ const DIVE_NEAR = 3;
 const DIVE_FAR = 9;
 // How sharply it turns and speeds up, in a run and at rest, 1/s.
 const TURN_RUN = 7;
-const TURN_REST = 3.5;
-const ACCEL_RUN = 14;
+const TURN_REST = 2.5;
+const ACCEL_RUN = 8;
 const ACCEL_REST = 5;
 // A line holding it harder than it is pulling stops it and swings its head round: for
 // each newton the line has over its pull, it slows and turns this much faster, 1/s. This
 // is what lets the rod ease the moment a run ends, and not half a second later.
-const HELD_SLOWS = 5;
-const HELD_TURNS = 2.5;
+const HELD_SLOWS = 5 / 6;
+const HELD_TURNS = 2.5 / 6;
 // How fast the line stops it, and how fast it changes depth diving and coming back up, 1/s.
 const SLOW = 8;
 const RISE_RUN = 2.2;
+// The steepest it dives, as a share of the speed it is making: about 30 degrees down.
+// Without it a run began by dropping half a metre in a quarter of a second, and seen
+// from the bank, low over the water, a drop reads as a leap toward the eye.
+const DIVE_SLOPE = 0.6;
 const RISE_REST = 0.9;
 // Looks only: resting, it gives a flick of its body every so often, between these, s,
 // this long, s, and this hard, as a tail effort. Nothing of it reaches the line.
@@ -150,7 +183,7 @@ const FLICK = 0.6;
 
 export function createFight(random = Math.random) {
   // The fish on the line: see fishKind.js for the fields.
-  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, burst: 1, recover: 1, goAt: 0.6, comfortDepth: -2.5 };
+  let kind = { runFresh: 0, runSpent: 0, rest: 0, tire: 1, burst: 1, recover: 1, goAt: 0.6 };
   // What the pull has over the resting pull, in two parts: one goes at once when a run
   // ends, the other eases off.
   let quick = 0;
@@ -158,13 +191,11 @@ export function createFight(random = Math.random) {
   let running = false;
   // How much of a run it has to have back before it bolts again, this rest.
   let goAt = 1;
+  // Which side its head hangs off to this rest, 1 left, -1 right, 0 not picked yet.
+  let restSide = 0;
   // Looks only: seconds until its next flick, and seconds of this one left.
   let flickIn = 0;
   let flicking = 0;
-  // Fighting stage and time in current stage.
-  let stage = 'burst';  // 'burst' | 'deep_fight' | 'tired' | 'last_surge'
-  let timeInStage = 0;
-  let hadLastSurge = false;  // Prevent last_surge from triggering repeatedly
 
   const fight = {
     // How hard the fish is pulling right now, N.
@@ -176,14 +207,6 @@ export function createFight(random = Math.random) {
     // Whether it is in a run.
     get running() {
       return running;
-    },
-    // Current fighting stage.
-    get stage() {
-      return stage;
-    },
-    // This fish's comfort depth (passed from fishKind).
-    get comfortDepth() {
-      return kind.comfortDepth;
     },
 
     // Just hooked: it runs at once. fish: its numbers, from fishOf() in fishKind.js.
@@ -197,10 +220,6 @@ export function createFight(random = Math.random) {
       running = true;
       flickIn = between(random, FLICK_EVERY);
       flicking = 0;
-      // Initial stage: burst (shallow, explosive)
-      stage = 'burst';
-      timeInStage = 0;
-      hadLastSurge = false;  // Reset for new fish
     },
 
     /**
@@ -212,41 +231,25 @@ export function createFight(random = Math.random) {
      */
     step(dt, tension = 0, uneasy = 0) {
       if (!(dt > 0)) return false;
-
-      // Advance fighting stage
-      timeInStage += dt;
-      switch (stage) {
-        case 'burst':
-          // 2-5 seconds after hooking → deep_fight
-          if (timeInStage > 2 + random() * 3) {
-            stage = 'deep_fight';
-            timeInStage = 0;
-          }
-          break;
-        case 'deep_fight':
-          // stamina < 0.4 → tired
-          if (fight.stamina < 0.4) {
-            stage = 'tired';
-            timeInStage = 0;
-          }
-          break;
-        case 'tired':
-          // tired → last_surge is handled in steer() (needs distance)
-          break;
-        case 'last_surge':
-          // last_surge → tired when run ends
-          if (!running) {
-            stage = 'tired';
-            timeInStage = 0;
-          }
-          break;
-      }
-      // What it is putting out, against the most it ever can, and how much of that the
+      // What it can pull now, worn as it is, and how much of that it is putting out: a
+      // run is all it has, whatever that has come down to. And how much of its pull the
       // line is standing against.
-      const exert = kind.runFresh > 0 ? Math.min(1, fight.force / kind.runFresh) : 0;
+      // Hanging on the line it puts out nothing: what is on the line then is its weight
+      // in the water, not its effort.
+      const able = kind.runSpent + (kind.runFresh - kind.runSpent) * fight.stamina ** RUN_FADE;
+      const exert = able > kind.rest ? Math.min(1, Math.max(0, fight.force - kind.rest) / (able - kind.rest)) : 0;
       const met = fight.force > 1e-6 ? Math.min(1, Math.max(0, tension) / fight.force) : 0;
-      const cost = exert * (FREE_COSTS + (1 - FREE_COSTS) * met);
-      fight.stamina += (RECOVER * (1 - exert) - TIRE_FLAT_OUT * kind.tire * cost) * dt;
+      // What a second of this takes out of it. The more worn it is the more that is: the
+      // same effort empties a tired fish sooner.
+      const worn = WORN_OUT + (1 - WORN_OUT) * fight.stamina;
+      const cost = exert * (FREE_COSTS + (1 - FREE_COSTS) * met) / worn;
+      // Three ways it goes with its stamina. Running, it loses it. Resting on a line
+      // that only holds it, it gets a little back. Resting and drawn along, the line is
+      // pulling harder than it is: it gets less back, and being hauled through the water
+      // costs it, so wound in as it rests it goes on losing a little.
+      const drawn = (kind.rest + DRAWN_EASY) / (Math.max(tension, kind.rest) + DRAWN_EASY);
+      const hauled = running ? 0 : Math.max(0, tension - fight.force);
+      fight.stamina += (RECOVER * (1 - exert) * drawn - kind.tire * (TIRE_FLAT_OUT * cost + HAUL_COSTS * hauled / worn)) * dt;
       fight.stamina = Math.min(1, Math.max(0, fight.stamina));
       let began = false;
       if (running) {
@@ -258,19 +261,17 @@ export function createFight(random = Math.random) {
         }
       } else {
         // It gets its burst back hanging on the line, slower while the line draws it
-        // along, and only as much of it as the fight has left it.
-        const most = BURST_SPENT + (1 - BURST_SPENT) * fight.stamina;
-        // A worn fish gets it back more slowly as well as getting less of it back: it
-        // rests longer between runs the longer the fight has gone on.
-        fight.burst = Math.min(most, fight.burst + (dt / kind.recover) * most * Math.sqrt(most) * (kind.rest + DRAWN_EASY) / (Math.max(tension, kind.rest) + DRAWN_EASY));
-        if (fight.burst >= goAt * most * (1 - uneasy)) {
+        // along, and slower the more worn it is: it rests longer between runs the longer
+        // the fight has gone on.
+        fight.burst = Math.min(1, fight.burst + (dt / kind.recover) * Math.sqrt(worn) * drawn);
+        if (fight.burst >= goAt * (1 - uneasy)) {
           running = true;
           began = true;
         }
       }
       // What a run has over the resting pull, split into the part that goes at once when
       // the fish gives up and the part that eases off.
-      const over = running ? Math.max(0, kind.runSpent + (kind.runFresh - kind.runSpent) * fight.stamina ** RUN_FADE - kind.rest) : 0;
+      const over = running ? Math.max(0, able - kind.rest) : 0;
       const quickTo = over * GIVE_SHARE;
       const slowTo = over - quickTo;
       quick = toward(quick, quickTo, quickTo > quick ? FORCE_ON : GIVE_UP, dt);
@@ -337,18 +338,6 @@ export function createFight(random = Math.random) {
     steer(fish, aim, to, stretch, stiffness, winding, holds, across, toward = 0, deep = 1) {
       const ox = to.x;
       const oz = to.z;
-
-      // Stage transition: tired → last_surge when pulled close (< 3m), only once
-      // Distance is less than landing distance (2.2m) + small margin to allow landing after surge
-      if (stage === 'tired' && to.far < 3 && !hadLastSurge) {
-        stage = 'last_surge';
-        timeInStage = 0;
-        hadLastSurge = true;
-        // Trigger a last surge
-        running = true;
-        fight.burst = 0.4;  // Shorter surge, less than a full run
-      }
-
       // The stretch that holds it: its own pull, plus what it takes to drag it in as fast
       // as the line is coming. It swims to there, and comes in with the line meanwhile.
       const held = fight.draws(winding) / stiffness;
@@ -370,45 +359,61 @@ export function createFight(random = Math.random) {
         if (running && !(toward > 0)) away += TURN_INSIDE;
         else away -= TURN_INSIDE * Math.min(1, Math.max(0, stretch) / Math.max(held, 1e-6));
       }
-      const vx = ox * away - oz * across;
-      const vz = oz * away + ox * across;
+      // Coming nearer the rod is the line's doing, not the fish's: it is hauled, bodily,
+      // straight toward the tip, and does not turn its head that way to swim in. What it
+      // swims is the rest: out, and across. Only a rush at the angler is its own.
+      const rushing = toward > 0;
+      const hauled = rushing ? 0 : Math.min(0, away);
+      const out = rushing ? away : Math.max(0, away);
+      aim.towX = ox * hauled;
+      aim.towZ = oz * hauled;
+      if (running) restSide = 0;
+      let vx = ox * out - oz * across;
+      let vz = oz * out + ox * across;
+      if (!running && !rushing) {
+        // Resting it hangs back against the pull: head away from the rod and off to the
+        // side it is already on, more nearly broadside the more worn it is. Going out to
+        // where the line holds it, it swims the way it faces, so it slides off to that side.
+        // The side is picked once a rest, as its head lies when the run ends.
+        if (!restSide) restSide = ox * nz - oz * nx >= 0 ? 1 : -1;
+        const side = restSide;
+        const slant = REST_SLANT + REST_SLANT_SPENT * (1 - fight.stamina);
+        const hx = ox * Math.cos(slant) - oz * Math.sin(slant) * side;
+        const hz = oz * Math.cos(slant) + ox * Math.sin(slant) * side;
+        const swims = out / Math.cos(slant);
+        vx = hx * swims;
+        vz = hz * swims;
+        aim.yaw = Math.atan2(hx, hz);
+      } else if (vx * vx + vz * vz > 0.0025) aim.yaw = Math.atan2(vx, vz);
+      else aim.yaw = Math.atan2(ox, oz);
       const speed = Math.hypot(vx, vz);
       const facing = speed > 1e-6 ? Math.max(0, (vx * nx + vz * nz) / speed) : 1;
-      aim.yaw = Math.atan2(vx, vz);
       // What the line's pull has over its own.
       const overheld = Math.max(0, stiffness * stretch - fight.force);
       const keeps = ARC_KEEPS * fight.force / (fight.force + overheld + 1e-9);
-      aim.speed = speed * (keeps + (1 - keeps) * facing);
-
-      // Depth based on fighting stage, not distance to rod
-      let targetDepth;
-      switch (stage) {
-        case 'burst':
-          targetDepth = BURST_DEPTH;  // -0.3m, shallow
-          break;
-        case 'deep_fight':
-          // Return to comfort depth, modulated by distance (dive factor)
-          const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
-          targetDepth = running
-            ? kind.comfortDepth * deep * dive
-            : kind.comfortDepth * 0.7;  // Resting slightly shallower
-          break;
-        case 'tired':
-          targetDepth = TIRED_DEPTH;  // -0.8m, rising
-          break;
-        case 'last_surge':
-          // Panicked, any depth
-          targetDepth = kind.comfortDepth * 0.5;
-          break;
-      }
-      aim.y = targetDepth;
+      // Bolting with its head the wrong way it does not charge off the way it faces and
+      // come round in a sweep. It throws its head round first, hardly moving, and goes
+      // when it is pointing where it means to go.
+      const turning = running && !(toward > 0) && facing < C_FACING;
+      const faced = Math.min(1, facing / C_FACING);
+      aim.speed = running && !(toward > 0)
+        ? speed * (C_KEEPS + (1 - C_KEEPS) * faced * faced * (3 - 2 * faced))
+        : speed * (keeps + (1 - keeps) * facing);
+      const dive = Math.min(1, Math.max(0, (to.far - DIVE_NEAR) / (DIVE_FAR - DIVE_NEAR)));
+      aim.y = running ? REST_DEPTH + (RUN_DEPTH - REST_DEPTH) * deep * dive * dive * (3 - 2 * dive) : REST_DEPTH;
       aim.top = SHALLOWEST;
       // However hard it is being turned, it cannot come round tighter than its speed lets it.
-      const tightest = ((fish.speed || 0) / ARC_RADIUS + PIVOT) / TURN_SWINGS;
-      aim.turn = Math.min((running ? TURN_RUN : TURN_REST) + HELD_TURNS * overheld, tightest);
+      // Hauled by the mouth it is swung as fast as it is hauled.
+      const tightest = (Math.max(fish.speed || 0, -hauled) / ARC_RADIUS + PIVOT) / TURN_SWINGS;
+      // Resting it comes round to hang back unhurriedly. Only a running fish is swung
+      // harder the harder the line holds it.
+      aim.turn = running ? Math.min(TURN_RUN + HELD_TURNS * overheld, turning ? Math.max(tightest, C_TURN) : tightest) : Math.min(TURN_REST, tightest);
       aim.accel = running ? ACCEL_RUN : ACCEL_REST;
       aim.slow = SLOW + HELD_SLOWS * overheld;
-      aim.rise = running ? RISE_RUN : RISE_REST;
+      // Diving, it swims down: no steeper than DIVE_SLOPE of the way it is making, so a
+      // fish that has not got going yet has not gone down yet either.
+      const drop = Number.isFinite(fish.y) ? Math.abs(aim.y - fish.y) : 0;
+      aim.rise = running ? Math.min(RISE_RUN, DIVE_SLOPE * (fish.speed || 0) / Math.max(drop, 0.05)) : RISE_REST;
       // How hard it is working is its pull against the most it has: a fresh run is flat
       // out whatever speed the line lets it make, a rest is next to nothing.
       aim.effort = Math.max(kind.runFresh > 0 ? Math.min(1, fight.force / kind.runFresh) : 0, flicking > 0 ? FLICK * Math.sin(Math.PI * flicking / FLICK_FOR) : 0);

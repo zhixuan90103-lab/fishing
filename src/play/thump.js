@@ -34,7 +34,7 @@ const SNATCH_FOR = 0.11;
 // FULL_AT newtons, and how dull.
 const SOFT = 0.3;
 const MORE = 0.6;
-const FULL_AT = 2.6;
+const FULL_AT = 15.6;
 const SHARPNESS = 0.45;
 
 // A snatch rises to 1 and falls back over SNATCH_FOR. This is how much of it, in

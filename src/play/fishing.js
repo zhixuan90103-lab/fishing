@@ -25,7 +25,7 @@
  *           With all the line back in, the cast is over and the stage is ready again.
  *           Meanwhile a fish may come: when it takes the hook the stage is fight.
  *   fight   a fish is on. All of it is catch.js. When the fish is landed the stage is
- *           landed. When the line breaks, or the fish takes all of it, the stage is water
+ *           landed. When the fish takes all the line, the stage is water
  *           again with a bare line: no lure on it, no fish comes to it, and winding it
  *           all back in ends the cast.
  *   landed  the fish is lifted and netted. All of it is catch.js. When the net has gone
@@ -59,11 +59,12 @@ const DESK_FULL_HOLD = 1;
  * rod, line, lure, splash: the materials. school: the fish, with fishes, take, giveBack,
  * mouth, hang and keep. Without one no fish ever comes. net: the landing net, with place
  * and hide, optional. haptics: impact, notification and playTransient, optional.
- * random: 0 to 1, for the times that are drawn.
+ * random: 0 to 1, for the times that are drawn. spool: the line the reel holds, m;
+ * left out, catch.js has the number.
  * Call begin() once after the line's first update. Then every frame, after the school has
  * moved: update() before the phone and the rod, and follow() after the line's update.
  */
-export function createFishing({ rod, line, lure, splash, churn = null, school = null, net = null, haptics = null, random = Math.random }) {
+export function createFishing({ rod, line, lure, splash, churn = null, school = null, net = null, haptics = null, random = Math.random, spool }) {
   const move = createLureMove();
   const out = createLineOut();
   const retrieve = createRetrieve();
@@ -104,12 +105,12 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
   let homeZ = 1;
   // water: the cast is over and the line winds itself in.
   let winding = false;
-  // water: the line is bare. The fish broke it or took all of it, and the lure went too.
+  // water: the line is bare. The fish took all of it, and the lure went too.
   let bare = false;
-  // How the last fish was lost in this cast: '', 'broke' or 'spooled'.
+  // How the last fish was lost in this cast: '' or 'spooled'.
   let lost = '';
   // The fish's half of the cast. It is handed the lure's motion and the line out.
-  const fish = createCatch({ rod, line, splash, churn, school, net, haptics, random, move, out });
+  const fish = createCatch({ rod, line, splash, churn, school, net, haptics, random, move, out, spool });
 
   function toReady() {
     stage = 'ready';
@@ -363,8 +364,8 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     get watchRod() {
       return stage === 'fight' || stage === 'landed';
     },
-    // How this cast lost its fish, until the line is back in: '' not at all, 'broke' the
-    // line parted, 'spooled' the fish took all of it.
+    // How this cast lost its fish, until the line is back in: '' not at all, 'spooled' the
+    // fish took all of it.
     get lost() {
       return lost;
     },
@@ -388,7 +389,6 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
      * input.finger: the finger is down. input.sensor: the phone's motion is being read.
      * input.viewYaw: where the view looks, radians, positive to the left.
      * input.viewPitch: how high it looks, degrees, positive upward.
-     * input.aimPitch: how high the phone aims the rod, degrees, positive upward.
      */
     update(dt, input) {
       if (!(dt > 0)) return;

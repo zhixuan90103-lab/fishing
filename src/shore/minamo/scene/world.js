@@ -89,12 +89,18 @@ export async function loadSky(name) {
 }
 
 // ---------------------------------------------------------------- terrain
+// Fishing changed this (2026-11-24): the water the angler fishes, about z = -8 to 8, was
+// 3.3 to 4.6 m deep and the school's deepest layer lay under the floor over most of it.
+// It is SEA_DEPTH now. The floor still comes up to the same shoreline, and by the hero
+// boulders (z about 22) it is where it was: SHELF_RISE bends the slope to do that.
+const SEA_DEPTH = 5.5;
+const SHELF_RISE = 0.7;
 export function terrainHeight(x, z) {
-  // shore runs along x; land toward +z. Origin sits over ~3.5 m of water.
+  // shore runs along x; land toward +z. Origin sits over SEA_DEPTH of water.
   let h;
   if (z > 46) h = Math.min((z - 46) * 0.11, 3.2) + Math.max(0, z - 75) * 0.25;
-  else if (z > 0) h = -3.6 + 3.6 * smooth(0, 46, z) ** 1.3;
-  else h = -3.6 + z * 0.09 - Math.max(0, -z - 40) * 0.12;
+  else if (z > 0) h = -SEA_DEPTH + SEA_DEPTH * smooth(0, 46, z) ** SHELF_RISE;
+  else h = -SEA_DEPTH + z * 0.09 - Math.max(0, -z - 40) * 0.12;
   h = Math.max(h, -28);
   // dunes / sand bars and a lumpy reef shelf
   const n = fbm(x * 0.045, z * 0.045) * 0.9 + fbm(x * 0.18 + 7, z * 0.18 - 3) * 0.18;

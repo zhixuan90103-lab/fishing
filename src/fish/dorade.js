@@ -1,3 +1,13 @@
+/**
+ * The dorade: its model, a pool of copies, and the pose of its spine.
+ *
+ * Owns: loading the model once and mending its materials, cloning fish from it without
+ * loading again, and poseSpine: the wave down the back and the bend into a turn.
+ * Does not own: where a fish is or how hard it is working (src/fish/swim.js says, the
+ * caller passes it in), or which fish are in the scene (school.js, preview.js).
+ * Design: docs/FISH-SCHOOL.md sections 5 and 8.
+ */
+
 // Bream Fish (Dorade Royale) by BlueMesh, CC BY.
 // https://sketchfab.com/3d-models/bream-fish-dorade-royale-a3d0e1a597794a9bb74739a13cfc8b77
 //

@@ -19,7 +19,7 @@
 import { toward } from './maths.js';
 
 // The pull at which the hand is working as hard as it can show, N.
-const FULL_AT = 9;
+const FULL_AT = 54;
 // How fast the effort comes on and lets go, 1/s.
 const TAKE_UP = 9;
 const LET_GO = 4.5;
