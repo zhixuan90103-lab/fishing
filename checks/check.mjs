@@ -321,7 +321,7 @@ check('fight: it tears about, both ways and of its own accord, and from a big on
     expect(Math.min(left, right) / (left + right) > 0.25, `${name}: with the rod never moved it still goes both ways`, `${(100 * left / (left + right)).toFixed(0)}% one way`);
     expect(turns / fights >= 2, `${name}: turning of its own accord, more than once a fight`, `${(turns / fights).toFixed(1)} turns a fight`);
     expect(flips > same, `${name}: brought round by the line, its next run goes to the other side more often than the same`, `${flips} to the other side, ${same} to the same`);
-    // Only of a fish that can take line. A small one pulls less than the reel holds, run or rest, and comes in either way: docs/NOTED.md.
+    // Only of a fish that can take line. A small one pulls less than the reel holds, run or rest, and comes in either way: docs/PLAY.md section 14.
     if (size > 1) expect(wonRest / tRest > 0.4 && wonRun / tRun < 0.1, `${name}: line is won while it rests and none while it runs`, `${(wonRest / tRest).toFixed(2)} m/s resting, ${(wonRun / tRun).toFixed(2)} m/s running`);
   }
 });
@@ -1008,7 +1008,7 @@ check("fight: where it runs is its own business, what comes of it is the line's,
   const taking = travel({ press: 'never', size: 1.4, seconds: 40 }, 0, true), heldIn = travel({ press: 'rests', size: 0.85 });
   // It used to go mostly out. It takes line more slowly now and tears about across it as well.
   // 0.07, from 0.1. Its pull now falls evenly from the first run on, so less of the time line runs fast
-  // is spent early in a run, heading out. That it hardly gets away is known and open: docs/NOTED.md section 4.
+  // is spent early in a run, heading out. That it hardly gets away is known and open: docs/PLAY.md section 14.
   expect(taking.out > 0.07 && taking.across > 0.3, 'taking line, it goes out and away as well as across', `${(100 * taking.out).toFixed(0)}% out, ${(100 * taking.across).toFixed(0)}% across`);
   // It used to be held to a third of its speed across whenever the line would not give.
   expect(heldIn.across > 0.6, 'held by a line that will not give, it goes round the arc the line allows', `${(100 * heldIn.across).toFixed(0)}% across`);

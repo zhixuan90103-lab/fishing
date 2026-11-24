@@ -7,7 +7,7 @@
  * Does not own: how hard it pulls or whether it is running (fight.js hands those in);
  * which way a run heads across the line (course.js, handed in as `across`);
  * moving the fish (src/fish/swim.js does that from the aim); the line or the reel.
- * No Three, no scene: it runs in Node. Design: docs/HOOKED-FISH.md sections 4 to 6.
+ * No Three, no scene: it runs in Node. Design: docs/PLAY.md section 8.
  *
  * The line can pull and cannot push. Where it holds a fish is the distance at which it
  * pulls as hard as the fish does. Further out than that the fish is hauled in, bodily,

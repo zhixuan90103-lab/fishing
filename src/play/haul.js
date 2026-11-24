@@ -7,7 +7,7 @@
  * Does not own: the line's length (catch.js applies what this returns), the tension
  * (line.js reports it), the fish (fight.js), or the empty retrieve (retrieve.js).
  * No Three, no scene: it runs in Node. Rule: docs/FISHING-REQUIREMENTS.md section 11.
- * Design: docs/PLAY.md section 9, docs/HOOKED-FISH.md section 7.
+ * Design: docs/PLAY.md section 9.
  *
  * Not the empty retrieve's slow-then-steady. The weight comes onto the rod first, and the
  * line then comes in at one speed, less the nearer the tension is to the point where

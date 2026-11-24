@@ -10,7 +10,7 @@
  * it is hooked or landed (catch.js). Every number that differs from fish to fish is
  * handed in (fishKind.js).
  * No Three, no scene: it runs in Node. Rule: docs/FISHING-REQUIREMENTS.md sections 10, 11.
- * Design: docs/HOOKED-FISH.md sections 2 and 3.
+ * Design: docs/PLAY.md section 8.
  *
  * Nothing here runs on a clock, and nothing counts rounds.
  *
