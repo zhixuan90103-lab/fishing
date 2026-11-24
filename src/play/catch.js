@@ -38,7 +38,7 @@ import { createLean } from './lean.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { LURE_KG } from '../shore/lureMove.js';
-import { DRY_BY, DRY_FROM, SUNK_SHARE, dryness } from './tipWeight.js';
+import { DRY_BY, DRY_FROM, LIMP_SHARE, dryness } from './tipWeight.js';
 import { steerToLure, touching } from './visit.js';
 
 // What this file reports about the fish, for tuning against a real hand: the names of
@@ -133,10 +133,8 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   let running = 0;
   // Fighting, as its brain last saw it: where it is from the rod tip.
   const bearing = { x: 0, z: 1, far: 0 };
-  // How far to the left of the cast's direction the fish's head points, -1 to 1, and how
-  // far it was from under the tip a frame ago.
+  // How far to the left of the cast's direction the fish's head points, -1 to 1.
   let head = 0;
-  let farWas = 0;
   // Lifting: seconds the fish has still to hang before the net comes, and the frame's
   // length and the kick it is hung with, for follow().
   let showLeft = 0;
@@ -154,13 +152,13 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // The hooked fish's aim is put together from two answers: how its pull sets it against
   // the line (fight.js), and where this run means to go (course.js). The rod has its say
   // only through the line: where its tip is, and which way that has brought its head.
-  const fightBrain = (fish, aim) => {
+  const fightBrain = (fish, aim, env, dt) => {
     fight.bearing(fish, line.tip, homeX, homeZ, bearing);
     course.stands(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
     const own = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
-    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.toward(kind.dash), course.deep);
+    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.deep, dt);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.
@@ -195,9 +193,8 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     fight.begin(kind);
     // Its first run sets off the way its head points too: it came at the lure from somewhere.
     head = Math.cos(hooked.yaw) * homeX - Math.sin(hooked.yaw) * homeZ;
-    farWas = 0;
     course.hooked();
-    course.begin(head, kind.bold, 1);
+    course.begin(head, kind.bold);
     thump.begin(kind);
     lean.begin();
     haul.reset();
@@ -231,8 +228,9 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     haul.reset();
     thump.end();
     // From here it is a weight on the hook: under water a share of what it weighs, all
-    // of it once it is clear. The line carries it, and brings it onto the rod tip.
-    move.weigh(kind.load, SUNK_SHARE, DRY_FROM, DRY_BY);
+    // of it once it is clear. The line carries it, and brings it onto the rod tip. It
+    // does not swim again: lowered back into the water it sinks on the line.
+    move.weigh(kind.load, LIMP_SHARE, DRY_FROM, DRY_BY);
     tearing = kind.load;
     haptics?.notification('success');
   }
@@ -384,9 +382,8 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     fight(dt, input, tip, spot) {
       // Its runs and rests, by what its pull is costing it against the line as it was a
       // frame ago, and where a run that has just begun means to go.
-      if (fight.step(dt, tension, course.uneasy(bearing.far))) course.begin(head, kind.bold, fight.stamina);
-      course.step(dt, fight.running, kind.bold, farWas - bearing.far, bearing.far);
-      farWas = bearing.far;
+      if (fight.step(dt, tension, course.uneasy(bearing.far))) course.begin(head, kind.bold);
+      course.step(dt, fight.running, kind.bold);
       // A finger held down on a fish that is taking line leans on it.
       lean.step(dt, input.finger, fight.force > RUN_OUT_AT);
       // Its head shakes: a snatch on the line and in the hand.

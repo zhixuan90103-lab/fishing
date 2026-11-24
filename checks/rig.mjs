@@ -20,7 +20,9 @@ const THREE = await import('three/webgpu');
 // The line's stiffness, as line.js has it. An older copy of src/ does not say: its numbers.
 const { STRETCH_FORCE = 120, STIFFEST = 60 } = await import(`${SRC}/shore/line.js`);
 
-const ROCKS = [[2.6, 22.5, 2.3], [-4.6, 25, 1.7], [4.5, 15.5, 1.3], [-5.5, 12, 1.5], [8, 6, 1.8], [-9, 19, 1.4], [-1.8, 17.5, 1.1], [2.2, 13, 1.3], [6, 19.5, 1.5], [-3.5, 8, 1.4], [0.4, 15.2, 1.6]].map(([x, z, s]) => ({ x, z, r: s * 0.72 }));
+// x, z, scale and how high each stands (world y of its top), as the page has them: the
+// tops were read off the running scene on 2026-11-24, with the sea 5.5 m deep.
+const ROCKS = [[2.6, 22.5, 2.3, 0.75], [-4.6, 25, 1.7, 0.41], [4.5, 15.5, 1.3, -2.97], [-5.5, 12, 1.5, -3.07], [8, 6, 1.8, -3.92], [-9, 19, 1.4, -1.81], [-1.8, 17.5, 1.1, -2.62], [2.2, 13, 1.3, -3.33], [6, 19.5, 1.5, -2.19], [-3.5, 8, 1.4, -4.24], [0.4, 15.2, 1.6, -3.09]].map(([x, z, s, top]) => ({ x, z, r: s * 0.72, top }));
 const deg = Math.PI / 180;
 const NODES = 18;
 

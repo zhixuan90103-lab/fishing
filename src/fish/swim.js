@@ -105,12 +105,26 @@ export function measureCrowd(fishes, crowd) {
   }
 }
 
-// Rocks are upright cylinders. The heading is bent onto the tangent on the side the
-// fish is already on: fully by 0.6 m from the skin, then leaning away from the rock.
-function steerAroundRocks(x, z, yaw, rocks) {
+// How much a rock is in a fish's way, 0 to 1, by how high the fish is. A rock stands
+// from the sea floor up to its `top`, world y, and a fish ROCK_CLEAR or more above that
+// swims over it. A rock with no top given reaches the surface. Before 2026-11-24 every
+// rock did: once the sea was deepened fish were turned aside by rocks three metres under
+// them.
+const ROCK_CLEAR = 0.4;
+function inTheWay(rock, y) {
+  if (rock.top === undefined) return 1;
+  return clamp((rock.top + ROCK_CLEAR - y) / ROCK_CLEAR, 0, 1);
+}
+
+// Rocks are upright cylinders as high as their top. The heading is bent onto the tangent
+// on the side the fish is already on: fully by 0.6 m from the skin, then leaning away
+// from the rock.
+function steerAroundRocks(x, y, z, yaw, rocks) {
   let out = yaw;
   for (let i = 0; i < rocks.length; i++) {
     const rock = rocks[i];
+    const way = inTheWay(rock, y);
+    if (way <= 0) continue;
     const dx = x - rock.x;
     const dz = z - rock.z;
     const d = Math.hypot(dx, dz) || 1e-4;
@@ -128,7 +142,7 @@ function steerAroundRocks(x, z, yaw, rocks) {
       tx = -tx;
       tz = -tz;
     }
-    const w = clamp((reach - d) / 0.9, 0, 1);
+    const w = clamp((reach - d) / 0.9, 0, 1) * way;
     const lean = clamp((rock.r + 0.75 - d) / 0.4, 0, 1) * 0.8;
     out = wrapPi(out + wrapPi(Math.atan2(tx + nx * lean, tz + nz * lean) - out) * w);
   }
@@ -140,6 +154,8 @@ function pushOutOfRocks(fish, rocks) {
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 0; i < rocks.length; i++) {
       const rock = rocks[i];
+      // Only a fish down among the rock, not one passing over it.
+      if (rock.top !== undefined && fish.y > rock.top) continue;
       const dx = fish.x - rock.x;
       const dz = fish.z - rock.z;
       const d = Math.hypot(dx, dz) || 1e-4;
@@ -195,7 +211,7 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   aim.yaw += clamp(crowdSide * 1.8, -0.9, 0.9);
   aim.speed *= 1 + clamp(crowdAhead * 0.9, -0.5, 0.5);
   aim.y += clamp(crowdY * 0.5, -0.3, 0.3);
-  aim.yaw = steerAroundRocks(fish.x, fish.z, wrapPi(aim.yaw), rocks);
+  aim.yaw = steerAroundRocks(fish.x, fish.y, fish.z, wrapPi(aim.yaw), rocks);
 
   // Tail effort follows how hard the fish is trying to speed up. Coasting is nearly stiff.
   // A fish whose effort is given beats by that alone: a run does not go slack in the tail

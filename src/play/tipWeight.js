@@ -20,6 +20,12 @@
 // pulls with when it is doing nothing at all in a fight (fishKind.js). It was 0.45 until
 // 2026-11-24, which had the biggest fish hanging a kilo on the line as it rested.
 export const SUNK_SHARE = 0.05;
+// A fish that has been brought to hand no longer holds itself up: it is a weight on the
+// hook. Let back into the water it sinks, slowly, and takes the line down with it: it
+// weighs this share of itself there. With the water's hold on a weight in lureMove.js
+// that is about a quarter of a metre a second. At SUNK_SHARE it sank at seven centimetres
+// a second: put back, it lay at the top with the line in a loop beside it.
+export const LIMP_SHARE = 0.18;
 // The weight comes on as the hook rises between these, metres: the fish has some length
 // and leaves the water bit by bit.
 export const DRY_FROM = -0.3;

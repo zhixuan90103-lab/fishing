@@ -254,7 +254,11 @@ export async function buildWorld(scene, O, sky, params) {
       o.scale.set(sx, sy, sz);
       scene.add(o);
     }
-    if (z < 40) rocks.push({ x, z, r: Math.max(sx, sz) * 0.72 });
+    // top: how high the rock stands, world y. Fish above it are not in its way (src/fish/swim.js).
+    if (z < 40) {
+      lod.updateMatrixWorld(true);
+      rocks.push({ x, z, r: Math.max(sx, sz) * 0.72, top: new THREE.Box3().setFromObject(lod).max.y });
+    }
     return lod;
   };
   const [boulder, smallRocks, shelf1, shelf2, cliff, shell] = await Promise.all(

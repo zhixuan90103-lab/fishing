@@ -150,11 +150,11 @@ check('fight: no clock. A run ends when its burst is spent, sooner the harder it
   // the fish is, which changes as the run goes: a coarse step lags that by a frame.
   for (const fps of [20, 120]) expect(Math.abs(run(1, fps).lasted - held.lasted) < 0.11, `${fps} fps: the same`, run(1, fps).lasted.toFixed(2));
   // The rest: how long until it bolts again, hanging on the line or being drawn along.
-  // pull: what the line is pulling with, N. It was given as so many times the fish's resting pull until
-  // that pull became next to nothing (a fish weighs almost nothing in water): 9 N is a fish being wound in.
+  // pull: what the line is pulling with, N. A fresh fish hangs back with about 9 N of its own as it
+  // rests, so 25 N is one being wound in hard and nothing is one the line has let go of.
   const rest = (pull, fish = big) => { const { f } = run(1, 60, fish); let t = 0; while (!f.running && t < 60) { f.step(1 / 60, pull); t += 1 / 60; } return t; };
   expect(rest(0) > 1 && rest(0) < 6, 'hanging on the line it has its burst back in a few seconds', `${rest(0).toFixed(1)} s`);
-  expect(rest(9) > rest(0) * 1.4, 'drawn along by the line it takes a good deal longer', `${rest(9).toFixed(1)} s against ${rest(0).toFixed(1)} s`);
+  expect(rest(25) > rest(0) * 1.4, 'drawn along by the line it takes a good deal longer', `${rest(25).toFixed(1)} s against ${rest(0).toFixed(1)} s`);
   // Worn down, a run is weaker and shorter-lived, and it never stops trying. Round by round is its own check below.
   const f = createFight(() => 0.5); f.begin(big); let runs = 0, first = 0, lastForce = 0, t = 0, peak = 0;
   while (t < 200 && runs < 12) { const was = f.running; f.step(1 / 60, f.force); t += 1 / 60; if (f.running) peak = Math.max(peak, f.force); if (was && !f.running) { runs += 1; if (runs === 1) first = peak; lastForce = peak; peak = 0; } }
@@ -201,22 +201,31 @@ check('fight: round by round it is weaker, a fight is a handful of rounds, and w
   }
 });
 
-check('fight: it is hauled in, not swum in. Its head is turned from the angler, and all that brings it nearer is the line', () => {
-  // The line used to lead it in head first, and it swam the whole way to the angler looking at him:
-  // a fish coming over of its own accord. Every run then began facing the camera.
+check('fight: wound in, the line brings its head round and it follows nose first; left alone it keeps its back to the rod', () => {
+  // The line used to lead it in head first from the moment it rested, and it swam the whole way to the
+  // angler: a fish coming over of its own accord. Then it was hauled bodily but kept its back to him,
+  // and slid in tail first for metres. Now a rest begins with its back to the rod, hauling brings its
+  // head round within a metre or two, and from there it comes nose first until it bolts again.
   for (const size of [0.85, 1.3]) {
-    let facingRest = 0, rest = 0, facingRun = 0, run = 0, hauledIn = 0, swumIn = 0, off = 0, moved = 0, stray = 0;
+    let begins = 0, backTo = 0, long = 0, noseFirst = 0, tailFirst = 0, hauledIn = 0, swumIn = 0, off = 0, moved = 0, stray = 0, fights = 0;
     for (const seed of [1, 2, 3, 4]) {
-      let px = null, pz = 0, ptx = 0, ptz = 0, tied = false;
+      let px = null, pz = 0, ptx = 0, ptz = 0, tied = false, was = '', since = 0, from = 0, pfar = 0;
       fightOne({ seed, fps: 60, press: 'always', size, each: (rig) => {
         const f = rig.fishing; const fish = rig.fishes.find((x) => x.state === 'held');
         if (f.stage !== 'fight' || !fish) { px = null; tied = false; return; }
-        if (!tied) { tied = true; const usual = rig.finger; rig.finger = () => (f.stage === 'fight' ? !(f.running > 0.05) : usual()); }
+        if (!tied) { tied = true; fights += 1; const usual = rig.finger; rig.finger = () => (f.stage === 'fight' ? !(f.running > 0.05) : usual()); }
         const nx = Math.sin(fish.yaw), nz = Math.cos(fish.yaw);
-        // To the eye, which is where the rig's view stands.
-        const ex = 0 - fish.x, ez = 2 - fish.z; const toEye = (nx * ex + nz * ez) / Math.hypot(ex, ez);
-        if (f.mood === 'rest') { rest += 1; if (toEye > 0) facingRest += 1; } else { run += 1; if (toEye > 0) facingRun += 1; }
         const tip = rig.line.tip; const ox = fish.x - tip.x, oz = fish.z - tip.z, far = Math.hypot(ox, oz);
+        // 1 with its nose at the rod tip, -1 with its back square to it.
+        const toRod = -(nx * ox + nz * oz) / far;
+        if (f.mood !== was) { since = 0; from = far; } since += rig.dt; was = f.mood;
+        if (f.mood === 'rest' && px !== null) {
+          // As a rest begins, before the line has moved it.
+          if (since < 0.4) { begins += 1; if (toRod < 0.3) backTo += 1; }
+          // Hauled two metres in this rest and still coming.
+          if (from - far > 2 && pfar - far > 0.003) { long += 1; if (toRod > 0.7) noseFirst += 1; }
+          if (toRod < -0.5) tailFirst += Math.max(0, pfar - far);
+        }
         if (px !== null) {
           // What moved it this frame, less what the line hauled it: the rest has to be along its nose.
           const mx = fish.x - px - fish.towX * rig.dt, mz = fish.z - pz - fish.towZ * rig.dt;
@@ -226,17 +235,27 @@ check('fight: it is hauled in, not swum in. Its head is turned from the angler, 
           if (tow > 0.2) stray = Math.max(stray, Math.abs(fish.towX * ptz - fish.towZ * ptx) / tow);
           if (f.mood === 'rest') { hauledIn += -(fish.towX * ox + fish.towZ * oz) / far * rig.dt; swumIn += -fish.speed * (nx * ox + nz * oz) / far * rig.dt; }
         }
-        px = fish.x; pz = fish.z; ptx = ox / far; ptz = oz / far;
+        px = fish.x; pz = fish.z; ptx = ox / far; ptz = oz / far; pfar = far;
       } });
     }
-    expect(facingRest / rest < 0.12, `size ${size}: resting, its head is turned from the angler`, `${(100 * facingRest / rest).toFixed(0)}% of the time it faces him`);
-    expect(facingRun / run < 0.3, `size ${size}: and running it mostly is too`, `${(100 * facingRun / run).toFixed(0)}%`);
+    expect(backTo / begins > 0.85, `size ${size}: a rest begins with its back or its side to the rod`, `${(100 * backTo / begins).toFixed(0)}% of those frames`);
+    expect(long > 20 && noseFirst / long > 0.9, `size ${size}: hauled two metres in a rest, it is coming nose first`, `${noseFirst} of ${long} frames`);
+    // The metre or so at the start of each rest, while its head is still coming round.
+    expect(tailFirst / fights < 2.5, `size ${size}: it is not hauled far tail first`, `${(tailFirst / fights).toFixed(1)} m a fight`);
     expect(hauledIn > 2 && swumIn < 0.15 * hauledIn, `size ${size}: wound in as it rests, it is the line that brings it`, `hauled ${hauledIn.toFixed(1)} m, swum ${swumIn.toFixed(1)} m`);
     // While it is swimming at all. Hauled against a rock it slides along the face, and that is the
     // school's own business; and so are the few frames a rock shoulders a swimming fish aside.
     expect(off / moved < 0.02, `size ${size}: what it swims is still along its nose`, `${off} frames of ${moved} off it`);
     expect(stray < 0.2, `size ${size}: and the haul is toward the rod tip`, stray.toFixed(3));
   }
+  // Nothing but being hauled turns it: a fish nobody winds keeps its back to the rod as it rests.
+  let rests = 0, turned = 0;
+  fightOne({ seed: 2, fps: 60, press: 'never', size: 1.3, seconds: 40, each: (rig) => {
+    const f = rig.fishing; const fish = rig.fishes.find((x) => x.state === 'held'); if (f.stage !== 'fight' || !fish || f.mood !== 'rest') return;
+    const tip = rig.line.tip; const ox = fish.x - tip.x, oz = fish.z - tip.z;
+    rests += 1; if (-(Math.sin(fish.yaw) * ox + Math.cos(fish.yaw) * oz) / Math.hypot(ox, oz) > 0.5) turned += 1;
+  } });
+  expect(rests > 100 && turned / rests < 0.1, 'left alone it does not come round to face the rod', `${turned} of ${rests} resting frames`);
 });
 
 check('fight: the line draws it toward the rod tip and nowhere else, and resting it is not spun where it hangs', () => {
@@ -547,7 +566,9 @@ check('line: a fish draws it straight in a moment, and with a fish on it stays s
       let turns = 0, side = 0;
       for (let i = 1; i < N - 1; i += 1) { const ay = out[i * 3 + 1] - out[i * 3 - 2], by = out[i * 3 + 4] - out[i * 3 + 1]; const k = by / Math.hypot(out[i * 3 + 3] - out[i * 3], by, out[i * 3 + 5] - out[i * 3 + 2]) - ay / Math.hypot(out[i * 3] - out[i * 3 - 3], ay, out[i * 3 + 2] - out[i * 3 - 1]); const sgn = Math.abs(k) > 0.004 ? Math.sign(k) : 0; if (sgn && side && sgn !== side) turns += 1; if (sgn) side = sgn; }
       saw = Math.max(saw, turns);
-      if (rig.time - hooked > 2) { frames += 1; if (far > 0.05) bent += 1; }
+      // While something is pulling: the fish has stamina to hang back with, or the finger is winding. A
+      // fish worn out and left alone lets the line go slack, and is meant to.
+      if (rig.time - hooked > 2 && (f.stamina > 0.3 || rig.finger())) { frames += 1; if (far > 0.05) bent += 1; }
     }
     const who = `size ${size}, finger ${press}, ${fps} fps`;
     expect(hooked >= 0, `${who}: a fish took it`);

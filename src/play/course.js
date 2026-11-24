@@ -2,9 +2,10 @@
  * Where a hooked fish means to go in a run.
  *
  * Owns: what the fish wants. Which side it tears off to and how far across, how deep it
- * dives, when it cuts to the other side, whether this run is one of the few that rush in
- * at the angler, how ill at ease it is near the bank, and keeping it in the water in
- * front of the angler.
+ * dives, when it cuts to the other side, how ill at ease it is near the bank, and keeping
+ * it in the water in front of the angler. It never means to come at the angler: until
+ * 2026-11-24 one run in fifteen did, the first after the bite included, and the line fell
+ * slack by a metre or two for no reason anyone could see.
  * Does not own: what comes of that. The line decides what it can actually do (fight.js):
  * out, if the reel gives line; round the arc the line allows, if it does not. Nor how
  * hard it pulls or when it runs and rests (fight.js), or the fish's swimming
@@ -77,25 +78,15 @@ const KEEP_WITHIN = 36 * Math.PI / 180;
 const BANK_ALARMS = 0.45;
 const BANK_NEAR = 3;
 const BANK_FAR = 9;
-// A run rushes in at the angler this often, and only with this much stamina left. Rare:
-// it is the moment a fish is lost, not the way a fish fights.
-const RUSH_OFTEN = 0.07;
-const RUSH_ABOVE = 0.45;
-// It comes this far, m, at this share of its `dash`, and no nearer than this to under
-// the tip, level metres. Then it turns and runs like any other.
-const RUSH_FOR = [2, 4.5];
-const RUSH_SPEED = 0.8;
-const RUSH_NO_NEARER = 4;
 
 /** random: 0 to 1, for everything a run draws. */
 export function createCourse(random = Math.random) {
   // How far to one side this run leans, and which side that is, 1 or -1. Seconds until
-  // it may cut to the other side. How deep it goes. And metres it has still to rush in.
+  // it may cut to the other side. How deep it goes.
   let lean = 0;
   let side = 1;
   let dartIn = 0;
   let deep = 1;
-  let rush = 0;
   // Where it would be, and where it is as stands() was last told: radians round from the
   // cast's direction, positive to the left.
   let haunt = 0;
@@ -113,10 +104,6 @@ export function createCourse(random = Math.random) {
     get deep() {
       return deep;
     },
-    // Whether it is rushing in at the angler.
-    get rushing() {
-      return rush > 0;
-    },
 
     // Just hooked: it draws the place it would be.
     hooked() {
@@ -124,26 +111,19 @@ export function createCourse(random = Math.random) {
       round = 0;
     },
 
-    // A run begins: it picks a side, how far to lean, how deep to go, and now and then
-    // to come at the angler. head: how far to the left its head points, -1 to 1: 1 is
+    // A run begins: it picks a side, how far to lean and how deep to go. head: how far to the left its head points, -1 to 1: 1 is
     // square to the left of the cast's direction, 0 dead ahead or dead astern.
-    // bold: the fish's own, 0 to 1. stamina: 1 fresh to 0.
-    begin(head = 0, bold = 0.5, stamina = 1) {
+    // bold: the fish's own, 0 to 1.
+    begin(head = 0, bold = 0.5) {
       side = pick(0.5 + (HEAD_LEADS - 0.5) * Math.max(-1, Math.min(1, head / HEAD_CLEAR)));
       lean = side * between(random, LEAN);
       dartIn = between(random, DART_EVERY) * (1.3 - 0.6 * bold);
       deep = between(random, DEEP);
-      rush = stamina > RUSH_ABOVE && random() < RUSH_OFTEN ? between(random, RUSH_FOR) : 0;
     },
 
-    // Once a frame. running: the fish is in a run. came: how many metres nearer the rod
-    // tip it got this frame. far: level metres from under the tip.
-    step(dt, running, bold = 0.5, came = 0, far = 99) {
-      if (!running) {
-        rush = 0;
-        return;
-      }
-      if (rush > 0) rush = far < RUSH_NO_NEARER ? 0 : Math.max(0, rush - Math.max(0, came));
+    // Once a frame. running: the fish is in a run.
+    step(dt, running, bold = 0.5) {
+      if (!running) return;
       dartIn -= dt;
       if (dartIn > 0) return;
       side = pick(0.5 + side * (KEEPS_ON - 0.5));
@@ -182,11 +162,6 @@ export function createCourse(random = Math.random) {
     uneasy(far) {
       const near = Math.min(1, Math.max(0, (BANK_FAR - far) / (BANK_FAR - BANK_NEAR)));
       return BANK_ALARMS * near * near * (3 - 2 * near);
-    },
-
-    // How fast it is rushing in at the rod right now, m/s. 0 when it is not.
-    toward(dash) {
-      return rush > 0 ? dash * RUSH_SPEED : 0;
     },
   };
 }
