@@ -193,7 +193,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼群里小鱼大鱼各多大、各占多少 | `src/fish/flock.js` 的 `SMALL_SIZE`、`BIG_SIZE`、`BIG_SHARE` |
 | 钩住的鱼一冲花多少爆发力、歇着缓多快、顶住它多费它的劲 | `src/play/fight.js` 的 `WORN_OUT`、`FREE_COSTS`、`DRAWN_EASY`；一场几轮看 `fishKind.js` 表里的"累得多快" |
 | 一冲想往哪去：偏多少、多常顺着鱼头、多久换边、扎多深、边界 | `src/play/course.js` |
-| 线把鱼带过来多快、掉头划多大的弧、它累多快 | `src/play/fight.js` 的 `LED_MAX`、`ARC_KEEPS`、`ARC_RADIUS`、`TIRE_FLAT_OUT` |
+| 线把鱼拖过来多快、歇着头朝哪、要拖多远头才转过来、起冲甩头、扎多深 | `src/play/onLine.js` 的 `LED_MAX`、`REST_SLANT`、`ROUND_IN`、`C_TURN`、`RUN_DEPTH` |
+| 它累多快、歇着顶多大劲 | `src/play/fight.js` 的 `TIRE_FLAT_OUT`、`HANGS_BACK` |
 | 不用手机能跑的检查、整理前后的录数对比 | `checks/check.mjs`、`checks/record.mjs`，共用 `checks/rig.mjs`。`npm run check`、`npm run record` |
 | 冲的时候按住能叠多少力 | `src/play/lean.js` |
 | 鱼甩头的疏密和轻重 | `src/play/thump.js` |

@@ -23,7 +23,7 @@
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js`，朝哪 `src/shore/lurePose.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
 | 水花和水纹 | `docs/SPLASH.md`。落水的水花：画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
-| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`visit`、`fight`、`course`、`haul`、`lean`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
+| 玩法 | `docs/PLAY.md`。接线的两个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/catch.js`（鱼这一半）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`visit`、`fight`、`course`、`onLine`、`haul`、`lean`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -36,6 +36,7 @@
 | 包名 | `capacitor.config.ts`：`com.wangzhixuan.fishing` |
 | 这一竿的规则 | `docs/FISHING-REQUIREMENTS.md` |
 | 因果链 | `docs/CHAIN.md`。力和运动从手经竿、轮、线到线头上的东西怎么传。五段都做过一遍，第 3、4 段只做了要紧的一半，没做的在它的第 5 节。由它来的规矩在 `docs/CONVENTIONS.md` 第 3 节开头 |
+| 钩住的鱼 | `docs/HOOKED-FISH.md`。2026-11-24 整理以后的设计：一场是几轮、歇着顶着的劲、线上的鱼怎么动、头朝哪、线给不给，这一天提的需求和遇到的问题、BUG，还没定的。代码是 `fight.js`（用多大力）和 `onLine.js`（怎么动） |
 | 鱼怎么跑 | `docs/FISH-RUN.md`。鱼往哪跑是它自己的事，我们只能牵制；它要深水，起冲顺着鱼头，鱼头是线带成的；线拉住时沿弧滑；牵制有回报；看得出它往哪去。规则在它的第 2 节，其中"和上面对不上、还没做的"是现在做不到的。现在怎么样在 `docs/PLAY.md` 第 8 节 |
 | 记下、还没改的手感 | `docs/NOTED.md`。2026-11-19 和 11-20 对过、还没改或还没定的那几条 |
 | 《荒野大镖客 2》和 GTA 6 的钓鱼 | `docs/ROCKSTAR-FISHING.md`。检索材料，不是规格 |
@@ -93,7 +94,7 @@ npm run ios           # sync 并打开 Xcode
 
 ## 还没做
 
-先看 `docs/NOTED.md` 最上面的"现在停在哪"：2026-11-24 遛鱼这一块改到一半停下了，有几样等定。
+先看 `docs/HOOKED-FISH.md` 第 14 节和 `docs/NOTED.md` 最上面的"现在停在哪"：2026-11-24 遛鱼这一块改了很多，有几样等定。
 
 - **遛鱼等定的三件**（`docs/NOTED.md`）：钩住的鱼冲和歇之间换深度，在画面上读成扑近和退远，深度差多少没定；咬钩后急转往远处逃，现在转到横着就跑、往外很慢，小鱼出不去；同一天后半段加的四样（起冲甩头、下沉放缓、带不动线的鱼让线再收回、被线拖过来）是主因没找到时加的，留不留没定。
 - 松着的线画出来有一串小折，要改 `lineCurve.js`。现在线很少松，检查过得了，毛病还在。

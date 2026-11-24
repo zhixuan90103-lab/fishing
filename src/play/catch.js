@@ -28,6 +28,7 @@
 
 import { createCourse } from './course.js';
 import { createFight } from './fight.js';
+import { createOnLine } from './onLine.js';
 import { drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
@@ -94,6 +95,7 @@ const NET_NEARER = 0.45;
 export function createCatch({ rod, line, splash, churn = null, school, net, haptics, random, move, out, spool = SPOOL }) {
   const haul = createHaul();
   const fight = createFight(random);
+  const onLine = createOnLine(fight);
   const course = createCourse(random);
   const thump = createThump(random);
   const lean = createLean();
@@ -127,9 +129,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // further the hook is from the tip than there is line out, m.
   let tension = 0;
   let stretch = 0;
-  // Fighting: how fast line is running out, m/s. And line the tackle has let go under a
-  // knock from a fish that cannot take any, m: lent, not given.
-  let lent = 0;
+  // Fighting: how fast line is running out, m/s.
   let running = 0;
   // Fighting, as its brain last saw it: where it is from the rod tip.
   const bearing = { x: 0, z: 1, far: 0 };
@@ -153,12 +153,12 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   // the line (fight.js), and where this run means to go (course.js). The rod has its say
   // only through the line: where its tip is, and which way that has brought its head.
   const fightBrain = (fish, aim, env, dt) => {
-    fight.bearing(fish, line.tip, homeX, homeZ, bearing);
+    onLine.bearing(fish, line.tip, homeX, homeZ, bearing);
     course.stands(Math.atan2(homeX * bearing.z - homeZ * bearing.x, homeX * bearing.x + homeZ * bearing.z));
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
     const own = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
-    fight.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.deep, dt);
+    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, course.deep, dt);
   };
 
   // The fish in the school nearest the lure. Fish someone has taken are left alone.
@@ -185,7 +185,6 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     tension = 0;
     stretch = 0;
     running = 0;
-    lent = 0;
     if (!natures.has(hooked)) natures.set(hooked, drawNature(random));
     kind = fishOf(SPECIES, hooked.size, natures.get(hooked));
     takesLine = kind.runFresh > RUN_OUT_AT;
@@ -404,31 +403,26 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       // left to take, it has it all and is gone. It goes by the fish's own pull and by
       // nothing else: a fish that cannot out-pull the reel gets no line, however hard it
       // fetches up against the end of it. What is wound in from such a fish stays in.
-      const holds = RUN_OUT_AT + lean.press;
       const slips = haul.slip(gap - out.length, line.stiffness, lean.press);
       let given = 0;
-      if (fight.force > holds) {
+      if (haul.gives(fight.force, lean.press)) {
         given = Math.min(slips, Math.max(0, spool - out.length));
         out.pay(given);
         if (slips > given) {
           lose();
           return 'spooled';
         }
-        // What it had only knocked out is its own now.
-        lent = 0;
+        haul.keeps();
       } else {
-        // It fetched up against the end of the line going fast. The tackle gives under
-        // the knock, and takes back every bit of it as the fish comes off the end.
+        // A knock, not line taken: lent, and wound back as the fish comes off the end.
         out.pay(slips);
-        lent += slips;
-        const back = Math.min(lent, Math.max(0, holds / line.stiffness - (gap - out.length)));
-        out.pay(-back);
-        lent -= back;
+        haul.lend(slips);
+        out.pay(-haul.takeBack(gap - out.length, line.stiffness, lean.press));
       }
       running = given / dt;
       // What the fish is up against is all of it: the stretch in the line and what the
       // tackle has given under it.
-      stretch = gap - out.length + lent;
+      stretch = gap - out.length + haul.lent;
       // The reel in the hand.
       const tick = click.step(given, taken, Math.min(1, tension / RUN_OUT_AT));
       if (tick) haptics?.playTransient(tick.intensity, tick.sharpness);
