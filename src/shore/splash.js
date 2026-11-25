@@ -18,7 +18,7 @@
  */
 
 import * as THREE from 'three/webgpu';
-import { createSprayMaterial } from './sprayMaterial.js';
+import { createSprayMaterial, placeDrop } from './sprayMaterial.js';
 import {
   DROPS, bigOf, columnAt, crownAt, dropAt, landsAt, lifeOf, makeDrops, sizeAt,
 } from './splashBurst.js';
@@ -34,11 +34,6 @@ const CROWN_DIP = 0.5;
 // The column is a round spike of this many sides, its top this share as wide as its foot.
 const COLUMN_SIDES = 10;
 const COLUMN_TOP = 0.25;
-// A drop is drawn long, along the way it is going: this many times as long as it is
-// wide standing still, and STREAKS more for each m/s it is making. A round drop with a
-// bright rim reads as a bubble.
-const DROP_LONG = 1.4;
-const STREAKS = 0.9;
 // How many splashes there can be at once. One more takes the place of the oldest.
 const AT_ONCE = 4;
 // A drop that falls back in hits the water this hard, for a splash of size 1, and as a
@@ -81,11 +76,6 @@ export function createSplash(landed = null) {
 
   const tables = { in: makeDrops('in'), out: makeDrops('out'), thrash: makeDrops('thrash') };
   const at = { x: 0, y: 0, z: 0, size: 0, vx: 0, vy: 0, vz: 0 };
-  const along = new THREE.Vector3();
-  const upright = new THREE.Vector3(0, 1, 0);
-  const turned = new THREE.Quaternion();
-  const where = new THREE.Vector3();
-  const sized = new THREE.Vector3();
   const sheet = { radius: 0, height: 0 };
   const matrix = new THREE.Matrix4();
   // Where it is seen from, to size a far splash up.
@@ -125,11 +115,7 @@ export function createSplash(landed = null) {
     const table = tables[one.kind];
     for (let i = 0; i < DROPS; i += 1) {
       dropAt(table[i], one.age, one.big, at);
-      // Drawn out along its way.
-      const speed = Math.hypot(at.vx, at.vy, at.vz);
-      if (speed > 1e-6) turned.setFromUnitVectors(upright, along.set(at.vx / speed, at.vy / speed, at.vz / speed));
-      else turned.identity();
-      matrix.compose(where.set(at.x, at.y, at.z), turned, sized.set(at.size, at.size * (DROP_LONG + STREAKS * speed), at.size));
+      placeDrop(matrix, at.x, at.y, at.z, at.vx, at.vy, at.vz, at.size);
       one.drops.setMatrixAt(i, matrix);
       // A drop that has fallen back in: say so, once, where it came down.
       if (!one.done[i] && one.age >= landsAt(table[i], one.big)) {

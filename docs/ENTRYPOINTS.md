@@ -27,8 +27,8 @@ index.html
             → 鱼竿 createSpinningRod，挂在镜头上（docs/ROD.md）
             → 鱼线 createFishingLine(rod)，加在场景根上（docs/LINE.md）
             → 饵 createLure，加在场景根上（docs/LURE.md）
-            → 水花 createSplash，加在水面之后画的场景 onWater 里（docs/SPLASH.md）
-            → 涟漪 createRipples，交给水面材质 makeWaterMaterial；玩法拿到的 surface 是 hitWater：burst 同时起水花和涟漪，stir 只起涟漪（docs/SPLASH.md 第 9 节）
+            → 水花 createSplash，加在水面之后画的场景 onWater 里；它的水珠落回水面时叫一下，接到涟漪上（docs/SPLASH.md 第 3 到 5 节）
+            → 涟漪 createRipples，交给水面材质 makeWaterMaterial；玩法拿到的 surface 是 hitWater：burst（砸进去）、breach（提出来）、thrash（鱼在水面扑腾）同时起水花和涟漪，stir（水下的一下）只起涟漪（docs/SPLASH.md 第 9.6 节）
             → 水纹 createWake 一个（近水面的鱼，画水珠），也在 onWater 里（docs/SPLASH.md 第 8 节）；它和两个不画的（线入水的那一点、水下拖着的饵）走着在水面上留尾迹（第 9 节）
             → 抄网 createNet，加在场景根上，平时藏着（docs/NET.md）
             → 玩法 createFishing({ rod, line, lure, surface, churn, school, net, haptics })（docs/PLAY.md），它再创建 createCatch
@@ -175,13 +175,14 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 手机瞄准：三个角怎么读、方向、平滑 | [PHONE-LOOK.md](./PHONE-LOOK.md)，`src/shore/phoneLook.js` |
 | 手机瞄准：灵敏度、镜头跟得多紧、镜头和竿怎么分、看饵时转多快 | `src/shore/aim.js` |
 | 甩出去以后镜头看着什么 | `src/play/fishing.js` 的 `watch` 和 `spot` |
-| 水花的大小、高度、持续多久 | [SPLASH.md](./SPLASH.md)，`src/shore/splashBurst.js` |
-| 水花的颜色和透明度 | `src/shore/splash.js` |
 | 涟漪多高、圈多宽、跑多快、多久消，水下的淡多少 | [SPLASH.md](./SPLASH.md) 第 9 节，`src/shore/rippleField.js` |
 | 线、鱼、饵各拖多大的尾迹 | [SPLASH.md](./SPLASH.md) 第 9.4 节，`src/shore/wakeMarks.js` |
 | 多近算在水面上（水珠有没有、尾迹加不加高） | `src/shore/waterTop.js` |
 | 竿抬多高把鱼带上来，鱼跟着竿的回弹上下多少 | [PLAY.md](./PLAY.md) 第 8 节，`src/play/highRod.js` |
-| 鱼在水面侧翻多少、落回去摆尾多猛、钩住以后尾巴多活 | [PLAY.md](./PLAY.md) 第 8 节，`src/play/onLine.js` 顶部的常量 |
+| 钩住的鱼待多深、被带上来多快、在水面侧翻多少、头抬多少、落回去摆尾多猛、尾巴多活 | [PLAY.md](./PLAY.md) 第 8 节，`src/play/posture.js` 顶部的常量 |
+| 遛鱼时鱼背破水、落回去算不算一下水花 | `src/play/surfacing.js` |
+| 水花多高、几种、水珠多少 | [SPLASH.md](./SPLASH.md) 第 3 节，`src/shore/splashBurst.js` |
+| 溅起来的水什么颜色、多透 | [SPLASH.md](./SPLASH.md) 第 4 节，`src/shore/sprayMaterial.js` |
 | 线切水、鱼近水面带起的水珠：多快才有、多密、多大 | [SPLASH.md](./SPLASH.md) 第 8 节，`src/shore/wakeTrack.js`、`src/shore/wake.js` |
 | 鱼多浅才搅水面 | `src/play/catch.js` 的 `CHURN_TOP`、`CHURN_DEEP` |
 | 水面之后再画一层的东西 | `src/shore/startShore.js` 的 `onWater` |

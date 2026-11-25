@@ -2,7 +2,8 @@
  * What thrown water looks like: the one material for the splash and for the spray of a
  * wake.
  *
- * Owns: the colour of water in the air and how much shows through it.
+ * Owns: the colour of water in the air, how much shows through it, and the shape a drop
+ * of it is drawn in.
  * Does not own: the shapes (splash.js, wake.js) or the sea's own look, which is not
  * touched.
  * Design: docs/SPLASH.md section 4.
@@ -36,6 +37,29 @@ const RIM = 1.6;
 // A drop is too small to show a rim round a clear middle, and drawn that way it is a
 // bubble. It is a speck of light: this much shows through its middle.
 const SPECK = 0.75;
+
+// A drop is drawn long, along the way it is going: this many times as long as it is
+// wide standing still, and STREAKS more for each m/s it is making. A round drop with a
+// bright edge reads as a bubble.
+const DROP_LONG = 1.4;
+const STREAKS = 0.9;
+
+const along = new THREE.Vector3();
+const upright = new THREE.Vector3(0, 1, 0);
+const turned = new THREE.Quaternion();
+const where = new THREE.Vector3();
+const sized = new THREE.Vector3();
+
+/**
+ * Write into `matrix` a drop of this radius at (x, y, z) going at (vx, vy, vz): a unit
+ * ball drawn out along its way. A radius of 0 is no drop.
+ */
+export function placeDrop(matrix, x, y, z, vx, vy, vz, radius) {
+  const speed = Math.hypot(vx, vy, vz);
+  if (speed > 1e-6) turned.setFromUnitVectors(upright, along.set(vx / speed, vy / speed, vz / speed));
+  else turned.identity();
+  return matrix.compose(where.set(x, y, z), turned, sized.set(radius, radius * (DROP_LONG + STREAKS * speed), radius));
+}
 
 /**
  * double: drawn from both sides, for a sheet. speck: a drop, bright right through.

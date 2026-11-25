@@ -18,7 +18,7 @@ const FISH = { none: 0, coming: 1, on: 2, landed: 3, near: 4, biting: 5, fleeing
 const BITE = { '': 0, light: 1, medium: 2, heavy: 3, dead: 4 };
 const STATE = { free: 0, held: 1, hung: 2, away: 3 };
 const MIND = { watching: 0, near: 1, coming: 2, biting: 3, fleeing: 4, leaving: 5 };
-function one({ seed, fps, press, hold, size, noSchool, rodStays, sway, seconds, strikes = true, lowers = false }) {
+function one({ seed, fps, press, hold, size, noSchool, rodStays, sway, seconds, strikes = true, lowers = false, raises = false }) {
   const rig = createRig({ seed, fps, press, hold, noSchool, sizes: size ? () => size : null, strikes });
   rig.rodStays = !!rodStays;
   // In the water the lure is left for the fish. It is wound in when the line is bare, or when nothing has taken it in a good while.
@@ -31,6 +31,8 @@ function one({ seed, fps, press, hold, size, noSchool, rodStays, sway, seconds, 
     if (sway) rig.rodTurn = sway * Math.sin(rig.time * 0.8);
     // The rod lowered while a fish runs and raised again as it rests.
     if (lowers) rig.setLift(rig.fishing.stage === 'fight' && rig.fishing.mood === 'run' ? -10 : 20);
+    // The rod raised from the moment the lure is in the water: a hooked fish is brought to the top, and now and then let down again.
+    if (raises) rig.setLift((rig.fishing.stage === 'water' || rig.fishing.stage === 'fight') && Math.floor(rig.time / 6) % 3 !== 2 ? 34 : 20);
     if (rig.fishing.stage === 'water') { if (waterAt < 0) waterAt = rig.time; rig.windWater = noSchool || rig.fishing.lost === 'spooled' || rig.time - waterAt > 40; } else { waterAt = -1; rig.windWater = false; }
     rig.step(); frames += 1;
     let k = 0;
@@ -53,6 +55,9 @@ for (const fps of [60, 20]) {
   // The biggest fish with the rod lowered in its runs, the finger down throughout and only while it rests.
   runs.push({ seed: 7, fps, press: 'always', hold: 0.7, size: 1.4, lowers: true, seconds: 150 });
   runs.push({ seed: 8, fps, press: 'rests', hold: 0.6, size: 1.3, lowers: true, rodStays: true, sway: 0.5, seconds: 150 });
+  // A small fish and a big one with the rod raised: brought to the top, riding the rod's spring, breaking the surface.
+  runs.push({ seed: 9, fps, press: 'rests', hold: 0.5, size: 0.85, raises: true, seconds: 150 });
+  runs.push({ seed: 10, fps, press: 'rests', hold: 0.5, size: 1.3, raises: true, seconds: 150 });
   // Short casts, far from the school: spares are brought. One with nobody striking, so bites pass and fish bolt.
   runs.push({ seed: 5, fps, press: 'rests', hold: 0.2, size: 0, seconds: 120 });
   runs.push({ seed: 6, fps, press: 'never', hold: 0.2, size: 0, seconds: 60, strikes: false });

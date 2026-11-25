@@ -44,10 +44,9 @@ const WEIGHT = 0.01;
 const BY_WEIGHT = 1 / 6;
 const BIG_MOST = 2.4;
 
-// Drops one splash can have in the air: the most any kind throws. The other kinds use
-// the first of them and leave the rest unthrown.
+// Drops one splash can have in the air: the most any kind throws (KINDS below). The
+// other kinds use the first of them and leave the rest unthrown.
 export const DROPS = 26;
-const THROWS = { in: 14, out: 14, thrash: 26 };
 // Of a splash going in: this many come off the top of the column. The rest are thrown
 // off the lip of the crown.
 const TIP_DROPS = 3;
@@ -106,10 +105,32 @@ const DROP_SIZE = [0.005, 0.01];
 const LIFE_SIZE_WITHIN = 7;
 const SIZE_MAX = 1.25;
 
-// The whole splash is over after this long, s: going in, coming out.
-const LIFE = { in: 1.1, out: 1.45, thrash: 0.8 };
+// The three kinds of splash, each from the numbers above. life: it is all over after this
+// long, s. throws: how many drops. crown: the sheet round it, or none: how tall, the
+// radius of its foot from first to last, how long it stands. column: what stands in the
+// middle, or none: how long after the blow it starts, how tall, how wide at the foot, how
+// long. root: its size grows as the root of how hard and how heavy, not in step with it.
+const KINDS = {
+  in: {
+    life: 1.1, throws: 14, root: false,
+    crown: { height: CROWN_HEIGHT, foot: CROWN_FOOT, life: CROWN_LIFE },
+    column: { after: JET_AFTER, height: JET_HEIGHT, foot: JET_FOOT, life: JET_LIFE },
+  },
+  out: {
+    life: 1.45, throws: 14, root: false,
+    crown: null,
+    column: { after: 0, height: HEAP_HEIGHT, foot: HEAP_FOOT, life: HEAP_LIFE },
+  },
+  thrash: {
+    life: 0.8, throws: 26, root: true,
+    crown: { height: SHEET_HEIGHT, foot: SHEET_FOOT, life: SHEET_LIFE },
+    column: null,
+  },
+};
+const kindOf = (kind) => KINDS[kind] || KINDS.in;
+
 export function lifeOf(kind) {
-  return LIFE[kind] || LIFE.in;
+  return kindOf(kind).life;
 }
 
 // How many times life size a splash this far from the eye is drawn.
@@ -124,7 +145,7 @@ export function sizeAt(distance) {
 export function bigOf(strength, weight = WEIGHT, kind = 'in') {
   const bulk = Math.min(BIG_MOST, Math.pow(Math.max(weight, 1e-4) / WEIGHT, BY_WEIGHT));
   const big = (0.45 + 0.55 * Math.min(1, Math.max(0, strength))) * bulk;
-  return kind === 'thrash' ? Math.sqrt(big) : big;
+  return kindOf(kind).root ? Math.sqrt(big) : big;
 }
 
 /**
@@ -133,15 +154,14 @@ export function bigOf(strength, weight = WEIGHT, kind = 'in') {
  * the water throws none. A thrashing fish's is the low sheet it throws off sideways.
  */
 export function crownAt(kind, age, big, out) {
-  const thrash = kind === 'thrash';
-  const u = age / (thrash ? SHEET_LIFE : CROWN_LIFE);
-  if (kind === 'out' || u <= 0 || u >= 1) {
+  const crown = kindOf(kind).crown;
+  const u = crown ? age / crown.life : 0;
+  if (u <= 0 || u >= 1) {
     out.radius = 0; out.height = 0;
     return out;
   }
-  const foot = thrash ? SHEET_FOOT : CROWN_FOOT;
-  out.radius = (foot[0] + (foot[1] - foot[0]) * u) * big;
-  out.height = (thrash ? SHEET_HEIGHT : CROWN_HEIGHT) * big * Math.sin(Math.PI * u);
+  out.radius = (crown.foot[0] + (crown.foot[1] - crown.foot[0]) * u) * big;
+  out.height = crown.height * big * Math.sin(Math.PI * u);
   return out;
 }
 
@@ -152,16 +172,16 @@ export function crownAt(kind, age, big, out) {
  * it has fallen back.
  */
 export function columnAt(kind, age, big, out) {
-  const going = kind === 'in';
-  const u = going ? (age - JET_AFTER) / JET_LIFE : age / HEAP_LIFE;
-  if (kind === 'thrash' || u <= 0 || u >= 1) {
+  const column = kindOf(kind).column;
+  const u = column ? (age - column.after) / column.life : 0;
+  if (u <= 0 || u >= 1) {
     out.radius = 0; out.height = 0;
     return out;
   }
   // Up fast and down slower: the top of its rise is a third of the way through.
   const rise = Math.sin(Math.PI * Math.pow(u, 0.7));
-  out.height = (going ? JET_HEIGHT : HEAP_HEIGHT) * big * rise;
-  out.radius = (going ? JET_FOOT : HEAP_FOOT) * big * (1 - 0.45 * u);
+  out.height = column.height * big * rise;
+  out.radius = column.foot * big * (1 - 0.45 * u);
   return out;
 }
 
@@ -179,17 +199,18 @@ export function makeDrops(kind = 'in', seed = 1) {
   let s = seed;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const drops = [];
+  const throws = kindOf(kind).throws;
   for (let i = 0; i < DROPS; i += 1) {
     const turn = rnd() * Math.PI * 2;
     const size = between(DROP_SIZE, rnd());
-    if (i >= (THROWS[kind] || THROWS.in)) {
+    if (i >= throws) {
       // Not thrown by this kind.
       drops.push({ t0: Infinity, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 0, rings: false });
     } else if (kind === 'thrash') {
       // Spray off the flank: outward every way, low, a few of them a little late.
       const speed = between(SPRAY_SPEED, rnd());
       const up = between(SPRAY_UP, rnd());
-      const around = (i + rnd()) / THROWS.thrash * Math.PI * 2;
+      const around = (i + rnd()) / throws * Math.PI * 2;
       drops.push({ t0: 0.05 * rnd() * rnd(), x: Math.cos(around) * SPRAY_FROM, y: 0.01, z: Math.sin(around) * SPRAY_FROM, vx: Math.cos(around) * speed * Math.cos(up), vy: speed * Math.sin(up), vz: Math.sin(around) * speed * Math.cos(up), size: between(SPRAY_SIZE, rnd()), rings: i % 9 === 0 });
     } else if (kind === 'out') {
       // Run off the thing as it rises: let go where it has got to, with no speed of its own.
