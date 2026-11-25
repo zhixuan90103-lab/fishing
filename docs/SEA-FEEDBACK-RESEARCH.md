@@ -38,4 +38,15 @@
 
 这些支撑的判断：走着的东西留的是两条斜臂的 V，不是一串圆；慢的张到开尔文角，快的更窄。做成什么样见 [SPLASH.md](./SPLASH.md) 第 9 节。没有查到的：钩住的鱼冲的时候水面的照片或测量；鱼前头那个鼓包没有做。
 
+2026-11-25 再补：鱼在水面扑腾时溅起的水是什么样。
+
+| 标题 | 链接 | 类型 | 用在哪 |
+|---|---|---|---|
+| Splashing of impacting drops | https://arxiv.org/pdf/1701.02504 | 论文 | 溅起来先是一片薄水，薄水的边缘起指状，再碎成大量小水珠：是一片喷雾，不是几颗大水珠 |
+| Growth and breakup of ligaments in unsteady fragmentation | https://www.cambridge.org/core/journals/journal-of-fluid-mechanics/article/abs/growth-and-breakup-of-ligaments-in-unsteady-fragmentation/CFD8837691FCBF62EC8805FB7571E4A8 | 论文 | 薄水片先拉成一道道细丝再断成水珠 |
+| 飞鱼的旧文献（archive.org） | https://archive.org/download/biostor-194322/biostor-194322.pdf | 论文 | 鱼破水之前是用尾巴把水甩成喷雾的，快到肉眼只看见一团 |
+| Saltwater Sportsman 的一篇拍摄手记 | https://www.saltwatersportsman.com/?p=52062 | 社区 | 条纹鲈在水面抢食：水面起沫，尾巴拍水，水溅到镜头上 |
+
+这些支撑的判断：扑腾的水花是甩出去的薄水碎成的一片小水珠，四溅、偏低偏远。没有查到的：往哪个方向甩得多、甩多高的测量。做成什么样见 [SPLASH.md](./SPLASH.md) 第 3 节。
+
 已查看、未写入上表：没有 0.3 毫米钓线的波高测量，所以不给线的浪高。SUBOFF 潜深到大约 3 到 4 个直径以后散开波看不清，那是艇体，不是鱼，不写进上表。

@@ -71,8 +71,9 @@ try {
     const t0 = Date.now();
     await key('keyDown'); await sleep(900); await key('keyUp');
     let n = 0, wet = false;
-    for (let i = 0; i < 1200 && n < most; i += 1) {
-      await sleep(60);
+    for (let i = 0; i < 4000 && n < most; i += 1) {
+      // Until the lure is down, look often: the splash is over in a second.
+      await sleep(wet ? 60 : 15);
       const text = await read(); if (!text) continue;
       if (!wet && text.split(' ')[0] !== 'water') { if ((Date.now() - t0) / 1000 > 60) break; continue; }
       wet = true;

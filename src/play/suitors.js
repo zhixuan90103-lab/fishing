@@ -78,10 +78,11 @@ const OFF_DEPTH = -2.6;
 /**
  * school: the fish, with fishes, take, giveBack, bring, dismiss and mouth. line: for its
  * tip. move: the lure's motion. out: the line out. haptics: optional. random: 0 to 1.
- * water: optional, with stir(x, z, strength, weight, depth): the water over a bite.
+ * surface: the top of the water, optional, with stir(x, z, strength, weight, depth): the
+ * water over a bite.
  * species: which table of fishKind.js these fish are read off.
  */
-export function createSuitors({ school, line, move, out, haptics, water = null, random, species }) {
+export function createSuitors({ school, line, move, out, haptics, surface = null, random, species }) {
   // What the fish biting now weighs, kg: the water over it is told with each pluck.
   let biterLoad = 0;
   const allure = createAllure();
@@ -384,7 +385,7 @@ export function createSuitors({ school, line, move, out, haptics, water = null, 
         haptics?.playTransient(bite.knock.intensity, bite.knock.sharpness);
         // The pluck stirs the water over it, as hard as the hand feels it: what shows of
         // that from down there is the water's business.
-        water?.stir?.(move.x, move.z, bite.knock.intensity, biterLoad, -move.y);
+        surface?.stir(move.x, move.z, bite.knock.intensity, biterLoad, -move.y);
       }
       if (what === 'scraped') return hook();
       // The bite has passed and nobody struck: the fish stays, and will bite again.

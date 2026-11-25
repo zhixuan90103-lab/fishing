@@ -59,7 +59,12 @@ const LEAVES_AFTER = 0.1;
 const DESK_FULL_HOLD = 1;
 
 /**
- * rod, line, lure, splash: the materials. school: the fish, with fishes, take, giveBack,
+ * rod, line, lure: the materials. surface: the top of the water, with burst(x, z, strength,
+ * weight) where something goes into it, breach(x, z, strength, weight) where something
+ * is drawn up out of it, thrash(x, z, strength, weight) where a fish at the top throws it
+ * about, and stir(x, z, strength, weight, depth) where
+ * something under it stirs it. wash: the lure's own wake as it is drawn along under the
+ * water, optional, a wake's track with follow and lift (src/shore/wakeTrack.js). school: the fish, with fishes, take, giveBack,
  * mouth, hang and keep. Without one no fish ever comes. net: the landing net, with place
  * and hide, optional. haptics: impact, notification and playTransient, optional.
  * random: 0 to 1, for the times that are drawn. spool: the line the reel holds, m;
@@ -67,7 +72,7 @@ const DESK_FULL_HOLD = 1;
  * Call begin() once after the line's first update. Then every frame, after the school has
  * moved: update() before the phone and the rod, and follow() after the line's update.
  */
-export function createFishing({ rod, line, lure, splash, churn = null, school = null, net = null, haptics = null, random = Math.random, spool }) {
+export function createFishing({ rod, line, lure, surface, churn = null, wash = null, school = null, net = null, haptics = null, random = Math.random, spool }) {
   const move = createLureMove();
   const out = createLineOut();
   const retrieve = createRetrieve();
@@ -113,7 +118,7 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
   // How the last fish was lost in this cast: '', 'spooled' or 'shed'.
   let lost = '';
   // The fish's half of the cast. It is handed the lure's motion and the line out.
-  const fish = createCatch({ rod, line, splash, churn, school, net, haptics, random, move, out, spool });
+  const fish = createCatch({ rod, line, surface, churn, school, net, haptics, random, move, out, spool });
 
   function toReady() {
     stage = 'ready';
@@ -152,7 +157,7 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     // Where it really came down: the same place, unless the line was stopped short.
     spot.x = move.x;
     spot.z = move.z;
-    splash.burst(move.x, move.z, move.impact / SPLASH_FULL, LURE_KG);
+    surface.burst(move.x, move.z, move.impact / SPLASH_FULL, LURE_KG);
     out.land(move.gap(tip));
     armed = !input.finger;
     lifted = false;
@@ -439,6 +444,12 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
       } else if (fish.land(dt, input, tip, spot)) toNetted(tip);
       fish.carry(dt, input, tip);
       show(dt, tip);
+      // The lure in the water with no fish on it leaves its own wake: where it is and how
+      // deep. A hooked fish's wake is the fish's (catch.js).
+      if (wash) {
+        if (stage === 'water' && move.y < 0) wash.follow(dt, move.x, move.z, 1, -move.y);
+        else wash.lift(dt);
+      }
     },
 
     // Once a frame, after the line's update.

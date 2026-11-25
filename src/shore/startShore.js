@@ -17,8 +17,8 @@ import { createLure } from './lure.js';
 import { createSplash } from './splash.js';
 import { createRipples } from './ripples.js';
 import { createWake } from './wake.js';
-import { atTop, createWakeTrack, inWater } from './wakeTrack.js';
-import { LURE_KG } from './lureMove.js';
+import { createWakeTrack } from './wakeTrack.js';
+import { FISH_WAKE, LINE_WAKE, LURE_WAKE, marksOf } from './wakeMarks.js';
 import { createNet } from './net.js';
 import { createFishing } from '../play/fishing.js';
 import { createPhoneLook } from './phoneLook.js';
@@ -34,18 +34,6 @@ import { LensDrops } from './minamo/post/lensDrops.js';
 // Degrees the view turns per CSS pixel dragged, without a phone.
 const DRAG_DEG_PER_PIXEL = 0.17;
 // What is said when the line breaks. The only words the game says to the player.
-
-// What each thing going along the water leaves on it (rippleField.js trail): as a thing
-// of this weight, kg, would; this share of how strong its wake is; a piece every this
-// many seconds. The pieces of one wake lie on top of one another along its
-// arms. Measured from above, drawn along steadily: the fish's arms stand 4.6 cm at 4 m/s
-// and 2.9 at 1.5, the line's 0.25 cm at 2 m/s, the lure's 0.3 cm at 1 m/s and 0.4 m down.
-// The line is a thread. A fish is a fish, whichever fish it is.
-const LINE_WAKE = { weight: 0.0003, share: 0.35, every: 0.07 };
-// A fish at the top of the water, cutting it with its back, throws it about far more
-// than one just under: its wake stands `atTop` times as tall there, and is no wider.
-const FISH_WAKE = { weight: 1.2, share: 1.3, every: 0.12, atTop: 2 };
-const LURE_WAKE = { share: 1.2, every: 0.1 };
 
 export async function startShore(container, hooks = {}) {
   if (!navigator.gpu) throw new Error('WebGPU unavailable');
@@ -272,18 +260,17 @@ export async function startShore(container, hooks = {}) {
   // Things lying on the water that are see-through. Drawn after the water, or they would
   // be blended with the sea bed and left as holes in it.
   const onWater = new THREE.Scene();
-  const splash = createSplash();
+  // A drop of spray that falls back in makes its own small ring. ripples is made further up.
+  const splash = createSplash((x, z, strength, weight) => ripples.poke(x, z, strength, weight));
   onWater.add(splash.object);
   // The line cutting the water where it goes in, and a fish churning it near the top.
-  // Each leaves a wake on the water as it goes (WAKES below).
+  // What each leaves on the water as it goes is in wakeMarks.js.
   // The line throws no spray (taken out 2026-11-25: with the fish's a few metres beyond
   // it, the two lots of drops read as one thing at two heights). It only marks the water.
-  const lineWake = createWakeTrack(0, Math.random, { every: LINE_WAKE.every, hit: (x, z, strength, dx, dz, speed) => ripples.trail(x, z, strength * LINE_WAKE.share, LINE_WAKE.weight, dx, dz, speed) });
-  const fishWake = createWake(2.6, 48, { every: FISH_WAKE.every, hit: (x, z, strength, dx, dz, speed, depth) => ripples.trail(x, z, strength * FISH_WAKE.share * inWater(depth), FISH_WAKE.weight, dx, dz, speed, Math.max(0, depth), 1 + (FISH_WAKE.atTop - 1) * atTop(depth)) });
-  // The lure drawn along under the water raises a soft furrow over itself, lower and
-  // broader the deeper it runs (rippleField.js). It throws no spray.
-  const lureWake = createWakeTrack(0, Math.random, { every: LURE_WAKE.every, hit: (x, z, strength, dx, dz, speed) => ripples.trail(x, z, strength * LURE_WAKE.share, LURE_KG, dx, dz, speed, lureDepth) });
-  let lureDepth = 0;
+  const lineWake = createWakeTrack(0, Math.random, marksOf(LINE_WAKE, ripples));
+  const fishWake = createWake(1.6, 64, marksOf(FISH_WAKE, ripples));
+  // The lure drawn along under the water throws no spray either. Play leads its wake.
+  const lureWake = createWakeTrack(0, Math.random, marksOf(LURE_WAKE, ripples));
   onWater.add(fishWake.object);
   // The cast: it alone says where the line ends, how much is out, where the view looks
   // and which fish is on the line.
@@ -292,7 +279,17 @@ export async function startShore(container, hooks = {}) {
   // What hits the water throws spray up and sets rings going, both from the one blow.
   const hitWater = {
     burst(x, z, strength, weight) {
-      splash.burst(x, z, strength);
+      splash.burst(x, z, strength, weight);
+      ripples.poke(x, z, strength, weight);
+    },
+    // A fish thrashing at the top of the water threw it about: spray every way.
+    thrash(x, z, strength, weight) {
+      splash.thrash(x, z, strength, weight);
+      ripples.poke(x, z, strength, weight);
+    },
+    // Something was drawn up out of the water: it brings water up with it and it runs off.
+    breach(x, z, strength, weight) {
+      splash.breach(x, z, strength, weight);
       ripples.poke(x, z, strength, weight);
     },
     // Something under the water stirred it: rings and no spray, less the deeper it is.
@@ -300,7 +297,7 @@ export async function startShore(container, hooks = {}) {
       ripples.poke(x, z, strength, weight, depth);
     },
   };
-  const fishing = createFishing({ rod, line, lure, splash: hitWater, churn: fishWake.track, school: shoreSchool, net, haptics });
+  const fishing = createFishing({ rod, line, lure, surface: hitWater, churn: fishWake.track, wash: lureWake, school: shoreSchool, net, haptics });
   let fishingBegun = false;
   // The panel's cast readout is refreshed every this many frames.
   const READOUT_EVERY = 6;
@@ -426,11 +423,6 @@ export async function startShore(container, hooks = {}) {
     if (line.wet) lineWake.follow(dt, line.entry.x, line.entry.z);
     else lineWake.lift(dt);
     fishWake.update();
-    // The lure in the water with no fish on it: a hooked fish's wake is the fish's.
-    if (fishingBegun && fishing.stage === 'water' && fishing.lure.y < 0) {
-      lureDepth = -fishing.lure.y;
-      lureWake.follow(dt, fishing.lure.x, fishing.lure.z);
-    } else lureWake.lift(dt);
     if (fishingBegun) {
       fishing.follow();
       readoutIn -= 1;

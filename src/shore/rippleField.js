@@ -80,12 +80,17 @@ const GONE_UNDER = 0.0012;
 // the sharpness out. What it raises is lower the deeper it is, down to a third for every
 // FADES m, and broader, the crests twice as far apart for every SOFTENS m. So half a
 // metre down it is a slow, low swell where at the surface it would be a sharp ring, and
-// from the bottom, 2.4 m, nothing. (Tried on 2026-11-25: all of it down to 1 m, which put
+// from the bottom, 2.4 m, no wake at all. (Tried on 2026-11-25: all of it down to 1 m, which put
 // sharp rings over a thing plainly under water; none of it below 0.2 m, which left the
 // water dead over a fish a hand's breadth down; FADES 0.45, too faint over a towed lure
 // and a fish drawn in; and 0.7, at which a bite on the bottom showed.)
 export const FADES = 0.6;
 export const SOFTENS = 0.25;
+// A blow from deeper than this, m, is taken as from this deep: a bite on the bottom still
+// lifts the water a little, in one broad faint ring, so that it is not felt in the hand
+// with nothing at all to see. (Asked for on 2026-11-25. True would be nothing.) Only a
+// blow: a thing going along down there leaves no wake up here.
+export const DEEP_AS = 0.9;
 // The very middle is held flat within about this share of a crest: the thing itself is there.
 export const MIDDLE = 0.19;
 // The widest a wake is: the sine of Kelvin's angle, 19.47 degrees. A wave left behind by
@@ -220,7 +225,7 @@ export function createRippleField() {
      */
     poke(x, z, strength, weight = WEIGHT, depth = 0) {
       if (!(strength > 0)) return;
-      const ring = { x, z, age: 0, ...ringOf(strength, weight, depth), dirX: 0, dirZ: 1, lean: ROUND };
+      const ring = { x, z, age: 0, ...ringOf(strength, weight, Math.min(depth, DEEP_AS)), dirX: 0, dirZ: 1, lean: ROUND };
       if (!(ring.tall > GONE_UNDER)) return;
       ring.speed = speedOf(ring.apart);
       ring.lasts = LASTS * Math.sqrt(ring.apart / APART);
@@ -233,7 +238,7 @@ export function createRippleField() {
      * unit. speed: how fast, m/s. taller: its crests stand this many times as tall, and
      * no further apart.
      */
-    trail(x, z, strength, weight, dirX, dirZ, speed, depth = 0, taller = 1) {
+    trail({ x, z, strength, weight = WEIGHT, dirX, dirZ, speed, depth = 0, taller = 1 }) {
       if (!(strength > 0) || !(speed > 0)) return;
       const ring = { x, z, age: 0, ...ringOf(strength, weight, depth), dirX, dirZ };
       ring.tall *= taller;
@@ -273,10 +278,6 @@ export function createRippleField() {
       return out;
     },
 
-    clear() {
-      rings.length = 0;
-      pack();
-    },
   };
 
   function pack() {

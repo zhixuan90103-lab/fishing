@@ -13,6 +13,7 @@
 const SRC = process.env.SRC || new URL('../src', import.meta.url).pathname;
 const { createFishing } = await import(`${SRC}/play/fishing.js`);
 const { createWakeTrack } = await import(`${SRC}/shore/wakeTrack.js`);
+const { FISH_WAKE } = await import(`${SRC}/shore/wakeMarks.js`);
 const { createFlock } = await import(`${SRC}/fish/flock.js`);
 const { createRodFlex } = await import(`${SRC}/shore/rodFlex.js`);
 const { createRodHold } = await import(`${SRC}/shore/rodHold.js`);
@@ -174,7 +175,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   };
   const lureSeen = { visible: true };
   const lure = { place() {}, show(yes) { lureSeen.visible = yes; } };
-  const splash = { burst(x, z, s) { events.push({ t: time, kind: 'splash', s }); } };
+  const surface = { burst(x, z, s) { events.push({ t: time, kind: 'splash', s }); }, breach(x, z, s) { events.push({ t: time, kind: 'splash', s }); }, thrash(x, z, s) { events.push({ t: time, kind: 'splash', s }); }, stir() {} };
   const net = { place() {}, hide() {} };
   const haptics = {
     impact(style) { events.push({ t: time, kind: 'impact', style }); },
@@ -184,8 +185,8 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   // The real reading of a fish churning the water; only the drawing is left out.
   // What it leaves on the water as it goes is kept in wakeHits: how strong, how deep.
   const wakeHits = [];
-  const churn = createWakeTrack(48, seeded(seed + 77), { every: 0.12, hit: (x, z, s, dx, dz, v, depth) => wakeHits.push({ t: time, s, depth }) });
-  const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random, spool });
+  const churn = createWakeTrack(48, seeded(seed + 77), { every: FISH_WAKE.every, hit: (track) => wakeHits.push({ t: time, s: track.strength, depth: track.depth, weight: track.weight }) });
+  const fishing = createFishing({ rod, line, lure, surface, churn, school: noSchool ? null : school, net, haptics, random, spool });
   const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, raised: null, lift: false };
   let time = 0;
   let frame = 0;

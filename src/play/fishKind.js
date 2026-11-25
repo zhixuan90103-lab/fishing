@@ -1,7 +1,8 @@
 /**
  * What kind of fish is on the line: the numbers a fight takes from its species and size.
  *
- * Owns: one table per species, and reading a fish of a given size off it.
+ * Owns: one table per species, reading a fish of a given size off it, and the two
+ * measurements of the body the rules need.
  * Does not own: what the numbers do. How it pulls and tires is fight.js, how its head
  * shakes reach the line is thump.js, its weight on the tip is tipWeight.js. Nor the
  * size itself: the school gives every fish one (src/fish/flock.js) and catch.js reads it.
@@ -51,6 +52,13 @@ const KINDS = {
     { size: 1.4, runFresh: 58.8, runSpent: 16.8, tire: 0.22, burst: 6, recover: 3.4, dash: 6, thump: 15.6, beat: [0.17, 0.28], load: 2.16 },
   ],
 };
+
+// The body, for a fish of size 1 (0.45 m long, about a third as deep as it is long): how
+// far its back stands over its middle, and how far its mouth is under its middle, m.
+// Both go with the size. Where its back is, is reckoned from where its middle or its
+// mouth is.
+export const BACK_OVER = 0.08;
+export const MOUTH_UNDER = 0.033;
 
 const GRAVITY = 9.81;
 // How far a fish's own nature can carry it from the table, either way, as a share: its

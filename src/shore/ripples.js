@@ -85,10 +85,9 @@ export function createRipples() {
     poke(x, z, strength, weight, depth) {
       field.poke(x, z, strength, weight, depth);
     },
-    // A thing going along the water leaves a piece of its wake at (x, z): the way it is
-    // going, a unit, and how fast, m/s.
-    trail(x, z, strength, weight, dirX, dirZ, speed, depth, taller) {
-      field.trail(x, z, strength, weight, dirX, dirZ, speed, depth, taller);
+    // A thing going along the water leaves a piece of its wake: rippleField.js trail().
+    trail(piece) {
+      field.trail(piece);
     },
 
     // Once a frame, before the water is drawn.

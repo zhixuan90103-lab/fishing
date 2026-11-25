@@ -22,8 +22,8 @@
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js`，朝哪 `src/shore/lurePose.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
-| 水花、水纹和涟漪 | `docs/SPLASH.md`。水面被砸一下自己起的圈：算数 `src/shore/rippleField.js`，交给水面 `src/shore/ripples.js`，只认哪里、多重、多沉，圈多大跟着后两样走（第 9 节）。落水的水花：画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
-| 玩法 | `docs/PLAY.md`，玩法只有这一份设计：一竿怎么走、咬口和抬杆（第 7 节）、钩住的鱼的规则（第 8 节，开头有一张"钓手手上有几样，各管什么"）、还没定的（第 14 节）、提过的需求和出过的问题（第 16 节）。接线的三个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/suitors.js`（钩住之前围着饵的鱼）、`src/play/catch.js`（钩住的鱼）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`allure`、`muster`、`outOfSight`、`visit`、`bite`、`strike`、`fright`、`flee`、`fight`、`course`、`onLine`、`sideStrain`、`highRod`、`shed`、`haul`、`lean`、`lowRod`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
+| 水花、水纹和涟漪 | `docs/SPLASH.md`。水面自己的起伏（涟漪，第 9 节）：算数 `src/shore/rippleField.js`，交给水面 `src/shore/ripples.js`，只认哪里、多重、多沉、多深；线、鱼、饵各留多大的尾迹在 `src/shore/wakeMarks.js`，多近算在水面上在 `src/shore/waterTop.js`。落水的水花：画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
+| 玩法 | `docs/PLAY.md`，玩法只有这一份设计：一竿怎么走、咬口和抬杆（第 7 节）、钩住的鱼的规则（第 8 节，开头有一张"钓手手上有几样，各管什么"）、还没定的（第 14 节）、提过的需求和出过的问题（第 16 节）。接线的三个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/suitors.js`（钩住之前围着饵的鱼）、`src/play/catch.js`（钩住的鱼）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`allure`、`muster`、`outOfSight`、`visit`、`bite`、`strike`、`fright`、`flee`、`fight`、`course`、`onLine`、`sideStrain`、`highRod`、`surfacing`、`shed`、`haul`、`lean`、`lowRod`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
 | 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
@@ -97,7 +97,7 @@ npm run ios           # sync 并打开 Xcode
 
 - **等定的几件**（`docs/PLAY.md` 第 14 节最上面）：咬死降到每一口 2.3% 以后干等 40 秒仍约五竿一竿自己钩上，还要不要再少；反着带竿能不能逼它当场掉头；竿偏着不回正整场反而长；脱口的鱼多数留下不跑。
 
-- **遛鱼等定的**（`docs/PLAY.md` 第 14 节）：咬钩后急转往远处逃，现在转到横着就跑、往外很慢，小鱼出不去；小鱼顶着的劲小，头转得慢、松线拿不回；起冲甩头在真机上还需不需要。深度 2026-11-25 改了：平常待在水面下 0.35 米，玩家把竿抬到三十度出头（比平常高十来度），线把它带到水面，它在那里跟着竿的回弹上下，背有时露出水面几厘米（`highRod.js`、`onLine.js`）。被托在水面时侧翻露出侧面，落回水里摆正并猛摆尾；钩住以后尾巴一直在使劲。抬多高算数是起点。
+- **遛鱼等定的**（`docs/PLAY.md` 第 14 节）：咬钩后急转往远处逃，现在转到横着就跑、往外很慢，小鱼出不去；小鱼顶着的劲小，头转得慢、松线拿不回；起冲甩头在真机上还需不需要。深度 2026-11-25 改了：平常待在水面下 0.35 米，玩家把竿抬到三十度出头（比平常高十来度），线把它带到水面，它在那里跟着竿的回弹上下，背有时露出水面几厘米（`highRod.js`、`onLine.js`）。线牵着它的头：线占上风时头被往上带，越近越明显，托在水面时头先出水；被托在水面时侧翻露出侧面，落回水里摆正并猛摆尾；钩住以后尾巴一直在使劲。抬多高算数是起点。
 - 松着的线画出来有一串小折，要改 `lineCurve.js`。现在线很少松，检查过得了，毛病还在。
 - **咬口和抬杆等定的**（`docs/PLAY.md` 第 14 节）：三种口在手里分不分得开、来不来得及抬、抬杆的门槛（现在手机每秒往上倾 110 度）。全是起点。
 - **饵边的鱼等定的**（`docs/PLAY.md` 第 14 节）：几条合适、会不会太挤，补的鱼游进来要五秒上下，旁边的鱼受的惊很小，按住不到一秒就算快收。全是起点。
@@ -111,8 +111,8 @@ npm run ios           # sync 并打开 Xcode
 - 抛投的快慢是松手时竿尖的速度，照实；往哪抛、抛多高是手指按下那一刻镜头看的方向，不是竿尖出手的方向。线挡不开合，只在规则里。
 - 饵的重量不压竿（竿按鱼的力调硬以后更是这样），落水以后水面上读不出饵在哪。十几米外水下的鱼很淡。见 `docs/LURE.md` 第 6 节。
 - 竿的软硬跟着鱼的力定（`docs/ROD.md` 第 4 节的转角表，表里的牛顿数是乘六以前的）。出线点或者鱼的力再改时，要回来对这张表。
-- 水的反应做了两步（2026-11-25）：水面上的东西让水面猛地动，水下的让它缓缓地动（越深越低越宽，两米以下不出），水珠只有贴着水面才甩。饵落水、鱼出水、线入水点、钩住的鱼、拖着的饵、咬口都接上了；走着的东西（线、鱼、饵）拖的是两条斜臂的 V 形尾迹，不是圆。还差：饵下沉时的气泡和越深越淡；水花同时只能一次；钩住的鱼起圈都按一个重量；鱼落网不砸水（`docs/SPLASH.md` 第 9 节末尾）。
+- 水的反应做了两步（2026-11-25）：水面上的东西让水面猛地动，水下的让它缓缓地动（越深越低越宽，沉得深的咬口只起一圈很淡的圆），水珠只有贴着水面才甩。饵落水、鱼出水、线入水点、钩住的鱼、拖着的饵、咬口都接上了；走着的东西（线、鱼、饵）拖的是两条斜臂的 V 形尾迹，不是圆。还差：饵下沉时的气泡和越深越淡；钩住的鱼起圈都按一个重量；鱼落网不砸水（`docs/SPLASH.md` 第 9 节末尾）。
 - 音效（`docs/AUDIO.md`）。震动已有几处，轻重还没定；冲的整段一直轻震还没做（需求第 10 节）。
-- 鱼出水、入网时水面和网的细节：水花同时只能放一次，网兜是整体拉长的，没有拿网的手。
+- 水花 2026-11-25 重做了（水冠、中间的水柱、落回去砸小圈的水珠；鱼出水单独一个样子；遛鱼时鱼背破水和落回去各一下四溅的水花；水珠画成拉长的亮点，不是圆球；同时四处；材质是亮边淡心，`sprayMaterial.js`）。水冠和水柱还是硬边的几何体。网兜是整体拉长的，没有拿网的手。
 - 线只有 70 米，真的线轮一般一百五十米以上。船没有画。
 - Android。

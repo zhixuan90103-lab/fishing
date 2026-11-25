@@ -39,7 +39,7 @@ function one({ seed, fps, press, hold, size, noSchool, rodStays, sway, seconds, 
     for (const v of [m.x, m.y, m.z, m.nose.x, m.nose.y, m.nose.z, m.back.x, m.back.y, m.back.z, m.swum, l.end.x, l.end.y, l.end.z, l.length, l.tied ? 1 : 0, l.tip.x, l.tip.y, l.tip.z,
       rig.rodState.wound, rig.rodState.load, rig.strain, rig.rod.tipTension, STAGE[f.stage], FISH[f.fish], f.lineOut, f.tension, f.pull, f.press, f.effort, f.running, f.stamina, f.landed, f.size,
       f.watch ? f.watch.x : -999, f.watch ? f.watch.z : -999, f.watchRod ? 1 : 0, rig.lureSeen.visible ? 1 : 0, rig.events.length, f.lost ? f.lost.length : 0,
-      BITE[f.bite], f.hookIn ? 1 : 0, f.around, f.hunger, f.interest, f.fright, f.hookLoose, f.braked ?? f.held, f.lowered]) row[k++] = v;
+      BITE[f.bite], f.hookIn ? 1 : 0, f.around, f.hunger, f.interest, f.fright, f.hookLoose, f.braked ?? f.held, f.lowered, f.raised ?? 0]) row[k++] = v;
     let n = 0; for (const mind of f.minds) { if (n++ >= 10) break; row[k++] = MIND[mind.state]; row[k++] = mind.hunger; row[k++] = mind.interest; row[k++] = mind.fright; row[k++] = mind.spare ? 1 : 0; }
     h.update(Buffer.from(row.buffer, 0, k * 8)); count += k;
     if (rig.time > 30 && f.stage === 'ready' && frames > 600 && rig.events.length > 3 && rig.time > seconds * 0.6) break;

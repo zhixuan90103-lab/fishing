@@ -60,8 +60,23 @@ const ACCEL_BOOST = 1.15;
 // down from the top of the water.
 const THRASH_WIDE = 0.5;
 const THRASH_FAST = 0.6;
-// A fish said to lie over on its side (aim.lie) comes over, and rights itself, this fast, 1/s.
+// A fish said to lie over on its side (aim.lie) comes over, and rights itself, this fast,
+// 1/s: while it is told to, and until it is back within UPRIGHT radians of its bank.
+// Otherwise it banks into its turns at BANK_RATE.
 const LIE_RATE = 7;
+const UPRIGHT = 0.35;
+const BANK_RATE = 3;
+// The tail comes up to what is asked of it at DRIVE_RATE, 1/s, and to a thrash at
+// THRASH_RATE.
+// Climbing or diving of its own accord it pitches no more than PITCH_MOST radians, and
+// comes to that at PITCH_RATE, 1/s. Led by the mouth (aim.tilt) it comes at TILT_RATE.
+const PITCH_MOST = 0.4;
+const PITCH_RATE = 1.2;
+const TILT_RATE = 6;
+// Climbing and led up at once, the two together are no more than this, radians.
+const LED_MOST = 0.85;
+const DRIVE_RATE = 5;
+const THRASH_RATE = 12;
 
 export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -77,7 +92,7 @@ export function makeAim() {
   return {
     yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE,
     slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX, effort: null, towX: 0, towZ: 0,
-    lie: 0, thrash: 0,
+    lie: 0, thrash: 0, tilt: 0,
   };
 }
 
@@ -214,7 +229,9 @@ export function writePose(fish) {
  * lie is how far over on its side it is laid, radians, positive its right side down,
  * on top of the bank of its turn: a fish held up by the mouth at the top of the water.
  * thrash is how much it is thrashing, 0 to 1: its tail beats wider and faster for it.
- * Both are 0 for the school's fish.
+ * tilt is how far its nose is drawn up, radians, below zero down, on top of the pitch of
+ * its own climbing and diving: a fish led by the mouth by a line that pulls from above.
+ * All three are 0 for the school's fish.
  * crowdX/Y/Z is this fish's entry from measureCrowd.
  */
 export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
@@ -260,7 +277,7 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
 
   const thrash = clamp(aim.thrash || 0, 0, 1);
   driveAim *= 1 + THRASH_WIDE * thrash;
-  fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-(thrash > 0 ? 12 : 5) * dt));
+  fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-(thrash > 0 ? THRASH_RATE : DRIVE_RATE) * dt));
   const k = aim.speed > fish.speed ? aim.accel : aim.slow;
   fish.speed += (aim.speed - fish.speed) * (1 - Math.exp(-k * dt));
   // What its tail beats in step with: the water it covers, or its effort if that is more.
@@ -275,7 +292,7 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   fish.yawRate += (turn - fish.yawRate) * (1 - Math.exp(-6 * dt));
   fish.bend = clamp(fish.yawRate * 0.55, -0.6, 0.6);
   const lie = aim.lie || 0;
-  fish.roll += (clamp(-fish.yawRate * 0.3, -0.3, 0.3) + lie - fish.roll) * (1 - Math.exp(-(lie !== 0 || Math.abs(fish.roll) > 0.35 ? LIE_RATE : 3) * dt));
+  fish.roll += (clamp(-fish.yawRate * 0.3, -0.3, 0.3) + lie - fish.roll) * (1 - Math.exp(-(lie !== 0 || Math.abs(fish.roll) > UPRIGHT ? LIE_RATE : BANK_RATE) * dt));
 
   // Its own horizontal motion is along the nose and nothing else. A fish someone has on
   // a line may be hauled bodily as well, whichever way it faces: that is the line's doing
@@ -306,6 +323,8 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   fish.y = clamp(fish.y + (aim.y - fish.y) * (1 - Math.exp(-aim.rise * dt)), DEPTH_MIN, top);
   const vy = dt > 0 ? (fish.y - yBefore) / dt : 0;
   const pitchAim = -Math.atan2(vy, Math.max(fish.speed, 0.04));
-  fish.pitch += (clamp(pitchAim, -0.4, 0.4) - fish.pitch) * (1 - Math.exp(-1.2 * dt));
+  // A positive pitch is nose down. Led by the mouth it comes to where it is led quickly.
+  const tilt = aim.tilt || 0;
+  fish.pitch += (clamp(clamp(pitchAim, -PITCH_MOST, PITCH_MOST) - tilt, -LED_MOST, LED_MOST) - fish.pitch) * (1 - Math.exp(-(tilt !== 0 ? TILT_RATE : PITCH_RATE) * dt));
   writePose(fish);
 }

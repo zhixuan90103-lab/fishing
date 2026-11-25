@@ -29,8 +29,8 @@
 
 import { createCourse } from './course.js';
 import { createFight } from './fight.js';
-import { BACK_OVER, createOnLine } from './onLine.js';
-import { drawNature, fishOf } from './fishKind.js';
+import { createOnLine } from './onLine.js';
+import { BACK_OVER, drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
 import { toward } from './maths.js';
@@ -43,6 +43,7 @@ import { createSuitors } from './suitors.js';
 import { createLean } from './lean.js';
 import { createLowRod } from './lowRod.js';
 import { createHighRod } from './highRod.js';
+import { createSurfacing } from './surfacing.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { LURE_KG } from '../shore/lureMove.js';
@@ -72,9 +73,6 @@ const SPOOL = 70;
 // wake is never less than this share of what a fish flat out makes at that speed. One
 // that is not moving makes none, whatever this says.
 const TOWED = 0.4;
-// Its mouth is this far under its middle, m, for a body of size 1: where its back is, is
-// reckoned from where its mouth is.
-const MOUTH_UNDER = 0.033;
 // While a fish is on, the point the view watches follows it at this rate, 1/s. Lower and
 // the view drifts after the fish and swings less with every turn it makes; too low and a
 // fish crossing at speed is out of the picture before the view has come round.
@@ -102,14 +100,15 @@ const BREAK_SPLASH = 0.45;
 const NET_NEARER = 0.45;
 
 /**
- * rod, line, splash: the materials. school: the fish, with fishes, take, giveBack, mouth,
+ * rod, line: the materials. surface: the top of the water (burst, stir: fishing.js).
+ * school: the fish, with fishes, take, giveBack, mouth,
  * hang and keep. Without one no fish ever comes. net: the landing net, with place and
  * hide, optional. haptics: impact, notification and playTransient, optional.
  * random: 0 to 1, for the times that are drawn.
  * move: the lure's motion. out: the line out. Both are fishing.js's, shared: while a
  * fish is on, this file says where the lure is and how long the line.
  */
-export function createCatch({ rod, line, splash, churn = null, school, net, haptics, random, move, out, spool = SPOOL }) {
+export function createCatch({ rod, line, surface, churn = null, school, net, haptics, random, move, out, spool = SPOOL }) {
   const haul = createHaul();
   const fight = createFight(random);
   const onLine = createOnLine(fight);
@@ -118,6 +117,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const lean = createLean();
   const lowRod = createLowRod();
   const highRod = createHighRod();
+  const surfacing = createSurfacing();
   const strain = createStrain();
   const scoop = createScoop();
   const click = createReelClick();
@@ -126,7 +126,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const shed = createShed(random);
   const sideStrain = createSideStrain();
   // The fish round the lure before one is hooked. Without a school there are none.
-  const suitors = school ? createSuitors({ school, line, move, out, haptics, water: splash, random, species: SPECIES }) : null;
+  const suitors = school ? createSuitors({ school, line, move, out, haptics, surface, random, species: SPECIES }) : null;
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
@@ -179,7 +179,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     const wants = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
     // A rod carried against the way this run heads takes some of that off.
     const own = wants * sideStrain.step(dt, line.tip, bearing, wants);
-    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt, highRod.lifts, highRod.rides);
+    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt, highRod);
   };
 
   // The fish that came has the hook: struck while it was in its mouth, or scraped home
@@ -206,6 +206,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     lean.begin();
     lowRod.begin();
     highRod.begin();
+    surfacing.begin();
     haul.reset();
     school.take(hooked, fightBrain);
     // A fish that can take line lands on the rod harder than one that cannot.
@@ -277,7 +278,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     const dry = dryness(move.y);
     // Half out of the water: it feels the air and kicks, and the water breaks round it.
     if (kick.rise(dry)) {
-      splash.burst(move.x, move.z, BREAK_SPLASH, kind.load * BREAKS_WITH);
+      surface.breach(move.x, move.z, BREAK_SPLASH, kind.load * BREAKS_WITH);
       haptics?.impact('medium');
     }
     hangDt = dt;
@@ -470,10 +471,13 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       if (shake) haptics?.playTransient(shake.intensity, shake.sharpness);
       school.mouth(hooked, mouth);
       // Near the top and pulling, it churns the water, pointing the way it goes.
-      if (churn) {
-        const backUnder = -mouth.y - (BACK_OVER + MOUTH_UNDER) * kind.size;
-        churn.follow(dt, mouth.x, mouth.z, Math.max(TOWED, Math.min(1, fight.force / kind.runFresh)), backUnder);
-      }
+      // How far under the surface its back is: from its middle, not its mouth, for its
+      // nose may be drawn up or down.
+      const backUnder = -hooked.y - BACK_OVER * kind.size;
+      if (churn) churn.follow(dt, mouth.x, mouth.z, Math.max(TOWED, Math.min(1, fight.force / kind.runFresh)), backUnder, kind.load);
+      // Its back coming out of the water, and going back in, each throw it about.
+      const broke = surfacing.step(dt, backUnder);
+      if (broke) surface.thrash(hooked.x, hooked.z, broke.strength, kind.load * BREAKS_WITH);
       tension = line.tension;
       // What the hand holds is the pull on the rod, read off the rod.
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);

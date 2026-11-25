@@ -1,13 +1,12 @@
 /**
  * Something cutting along the water's surface: how fast, which way, the drops it throws,
- * and where it sets rings going on the water as it goes.
+ * and when it leaves a piece of its wake on the water.
  * No Three and no scene, so it runs in Node.
  *
  * Owns: reading the speed and heading of a point that is led along the surface, how
- * strong a wake that makes, the drops of spray it throws up, and when it has gone far
- * enough to hit the water again.
- * Does not own: drawing (wake.js), the rings a hit makes (rippleField.js: it is only told
- * where and how hard), what the point is (a line where it goes into the water,
+ * strong a wake that makes, the drops of spray it throws up, and when it is
+ * time to leave another piece of its wake on the water.
+ * Does not own: drawing (wake.js), the piece itself (wakeMarks.js, rippleField.js), what the point is (a line where it goes into the water,
  * or a fish near the top), or any fishing rule.
  *
  * A wake has no say in when it is there. It is as strong as the thing is fast: below
@@ -20,6 +19,8 @@
  * Units: metres, seconds. The surface is y = 0, and x, z lie in it.
  */
 
+import { atTop, inWater } from './waterTop.js';
+
 // How closely the trailing point follows, 1/s. The speed read is about 1 / TRAIL s old.
 const TRAIL = 9;
 // Below this speed, m/s, nothing shows. At FULL and over, the wake is at its strongest.
@@ -31,45 +32,28 @@ const DIES = 2.5;
 // Spray: no drops below this speed, m/s. Over it, this many a metre travelled at the
 // wake's strongest.
 const SPRAY_ABOVE = 1.1;
-const DROPS_A_METRE = 9;
+const DROPS_A_METRE = 14;
 // A drop is thrown up at between these, m/s, out to the side and back at up to this,
 // and lasts this long, s.
-const DROP_UP = [0.9, 2.1];
-const DROP_OUT = 0.7;
+// Thrown off sideways more than up: it is spray flying out, not drops popping up (until
+// 2026-11-25: up at 0.9 to 2.1, out at 0.7).
+const DROP_UP = [0.5, 1.4];
+const DROP_OUT = 1.7;
 const DROP_LIFE = 0.42;
-// Spray is thrown only by a thing at the top of the water: all of it within SPRAY_TOP m
-// of the surface, none of it from SPRAY_DEEP m under. A thing deeper than that still
-// leaves its wake on the water, and what that looks like from down there is the rings'
-// business (rippleField.js).
-const SPRAY_TOP = 0.04;
-const SPRAY_DEEP = 0.14;
 const GRAVITY = 9.81;
+// Spray is thrown only by a thing at the top of the water (waterTop.js). A thing deeper
+// than that still leaves its wake on the water, and what that looks like from down there
+// is the rings' business (rippleField.js).
 
 // A wake weaker than this hits the water with nothing.
 const HITS_ABOVE = 0.03;
 
-// A thing that has come up out of the water is not moving it: by OUT m above the surface
-// it leaves nothing on it. Less than nothing is how far above it is.
-const OUT = 0.05;
-
-// How much a thing this far under the surface, m, is at the top of the water: 1 within
-// SPRAY_TOP of it, 0 from SPRAY_DEEP down, and 0 again by OUT m above it.
-export function atTop(depth) {
-  if (depth < 0) return Math.max(0, 1 + depth / OUT);
-  return Math.min(1, Math.max(0, (SPRAY_DEEP - depth) / (SPRAY_DEEP - SPRAY_TOP)));
-}
-
-// How much of a thing's wake is left on the water for its being out of it: all of it
-// under the surface and at it, none by OUT m above.
-export function inWater(depth) {
-  return depth < 0 ? Math.max(0, 1 + depth / OUT) : 1;
-}
-
 /**
  * drops: how many drops of spray it can have in the air at once.
- * rings: left out, it sets no rings going. Or { hit(x, z, strength, dirX, dirZ, speed, depth),
- * every }: called every `every` seconds while it has a wake, with how strong the wake
- * is, 0 to 1, which way it is going and how fast. So many a second, whatever the frame
+ * rings: left out, it leaves nothing on the water. Or { hit(track), every }: called
+ * every `every` seconds while it has a wake and is in the water, with this track: where
+ * it is, how strong its wake is, which way it is going, how fast and how deep. So many
+ * a second, whatever the frame
  * rate: the pieces of a wake have to lie close along its way to join up, and a slow
  * thing's spread out slowly, so it has to leave them closer together than a fast one
  * (tried by the metre: a slow fish's wake came apart into beads).
@@ -95,6 +79,8 @@ export function createWakeTrack(drops = 32, random = Math.random, rings = null) 
     strength: 0,
     // How far under the surface it is, m. Below zero it is that far out of the water.
     depth: 0,
+    // What it weighs, kg, if whoever leads it has said. Null: not said.
+    weight: null,
     // The drops: x, y, z and how much of its life each has left, 1 to 0. 0 is none.
     drops: Array.from({ length: drops }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, left: 0 })),
 
@@ -109,11 +95,13 @@ export function createWakeTrack(drops = 32, random = Math.random, rings = null) 
     /**
      * Once a frame while it is at the surface, or under it, at (x, z). share: how much
      * of a wake it can make at all, 0 to 1: a fish that is not working makes less.
-     * depth: how far under the surface it is, m.
+     * depth: how far under the surface it is, m. weight: what it weighs, kg, where that
+     * is not always the same: a fish.
      */
-    follow(dt, x, z, share = 1, depth = 0) {
+    follow(dt, x, z, share = 1, depth = 0, weight = null) {
       if (!(dt > 0)) return;
       track.depth = depth;
+      track.weight = weight;
       if (!known) {
         trail.x = last.x = x;
         trail.z = last.z = z;
@@ -152,7 +140,7 @@ export function createWakeTrack(drops = 32, random = Math.random, rings = null) 
         sinceHit += dt;
         while (sinceHit >= rings.every) {
           sinceHit -= rings.every;
-          rings.hit(x, z, track.strength, track.dirX, track.dirZ, track.speed, track.depth);
+          rings.hit(track);
         }
       }
       age(dt);

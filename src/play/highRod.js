@@ -28,6 +28,8 @@
 
 import { toward } from './maths.js';
 
+// As the rod is usually carried its tip stands about this high, m.
+export const USUAL = 1.9;
 const FROM = 2.0;
 const FULL = 2.25;
 // How fast it follows the rod, 1/s.
@@ -56,11 +58,14 @@ export function createHighRod() {
     lifts: 0,
     // How far up of where the rod holds it the rod's spring has it now, m. Below zero, down.
     rides: 0,
+    // How high the rod tip stands above the water, m.
+    tip: USUAL,
 
     // A fish is hooked.
     begin() {
       high.lifts = 0;
       high.rides = 0;
+      high.tip = USUAL;
       stood = null;
     },
 
@@ -68,6 +73,7 @@ export function createHighRod() {
     // above the water, m. load: what the fish weighs, kg. Returns how much of the way up
     // it brings the fish, 0 to 1.
     step(dt, tipHeight, load = WEIGHS) {
+      high.tip = tipHeight;
       const t = Math.min(1, Math.max(0, (tipHeight - FROM) / (FULL - FROM)));
       high.lifts = toward(high.lifts, t * t * (3 - 2 * t), FOLLOWS, dt);
       stood = stood === null ? tipHeight : toward(stood, tipHeight, 1 / SETTLES, dt);

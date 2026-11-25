@@ -1,8 +1,9 @@
 /**
- * A splash where something small hits the water: a crown of water, drops thrown up out
- * of it, and rings spreading on the surface.
+ * The splash where something goes into the water or is drawn up out of it: a crown, the
+ * column that jumps up in the middle, and drops. The rings on the water are the water's
+ * own (ripples.js); a drop that falls back in is reported, so that it can make one.
  *
- * Owns: drawing one splash at a time, and its age.
+ * Owns: drawing a few splashes at a time, and the age of each.
  * Does not own: the shape over time (splashBurst.js), when one happens (the caller), or
  * the sea. The ocean's look is settled and is not touched: this is geometry laid on top.
  * Design: docs/SPLASH.md.
@@ -17,15 +18,11 @@
  */
 
 import * as THREE from 'three/webgpu';
+import { createSprayMaterial } from './sprayMaterial.js';
 import {
-  DROPS, RINGS, SPLASH_LIFE, crownAt, dropAt, makeDrops, ringAt, sizeAt,
+  DROPS, bigOf, columnAt, crownAt, dropAt, landsAt, lifeOf, makeDrops, sizeAt,
 } from './splashBurst.js';
 
-// Scene-linear colour of the spray. A little over white, because the post pass applies an
-// exposure well under 1. Higher is whiter and harder against the water.
-const COLOR = new THREE.Color(0xdcebf2).multiplyScalar(1.15);
-// How much of the water shows through it, 0 solid to 1 nothing there, at the start.
-const OPACITY = 0.5;
 // It fades out over this last share of its life, on top of shrinking.
 const FADE_OVER = 0.6;
 // The crown is a ring of this many points, every other one standing taller. It flares:
@@ -34,29 +31,30 @@ const FADE_OVER = 0.6;
 const CROWN_POINTS = 14;
 const CROWN_FLARE = 1.7;
 const CROWN_DIP = 0.5;
-// The rings ride this far above the still surface so the low swell does not cover them, metres.
-const RING_LIFT = 0.025;
-// Segments around a ring.
-const RING_SEGMENTS = 40;
+// The column is a round spike of this many sides, its top this share as wide as its foot.
+const COLUMN_SIDES = 10;
+const COLUMN_TOP = 0.25;
+// A drop is drawn long, along the way it is going: this many times as long as it is
+// wide standing still, and STREAKS more for each m/s it is making. A round drop with a
+// bright rim reads as a bubble.
+const DROP_LONG = 1.4;
+const STREAKS = 0.9;
+// How many splashes there can be at once. One more takes the place of the oldest.
+const AT_ONCE = 4;
+// A drop that falls back in hits the water this hard, for a splash of size 1, and as a
+// thing of this weight, kg: a ring a hand's breadth across.
+const DROP_HITS = 0.14;
+const DROP_KG = 0.001;
 
-export function createSplash() {
+/**
+ * landed(x, z, strength, weight): called when a drop that makes a ring falls back into
+ * the water, optional.
+ */
+export function createSplash(landed = null) {
   const object = new THREE.Group();
   object.name = 'splash';
-  object.visible = false;
 
-  const material = new THREE.MeshBasicMaterial({
-    color: COLOR, transparent: true, opacity: OPACITY, depthWrite: false,
-  });
-  const flat = new THREE.MeshBasicMaterial({
-    color: COLOR, transparent: true, opacity: OPACITY, depthWrite: false, side: THREE.DoubleSide,
-  });
-
-  const dropShape = new THREE.IcosahedronGeometry(1, 0);
-  const drops = new THREE.InstancedMesh(dropShape, material, DROPS);
-  drops.frustumCulled = false;
-  drops.castShadow = false;
-  object.add(drops);
-
+  const dropShape = new THREE.IcosahedronGeometry(1, 1);
   // The crown: a flared sheet with a jagged lip, one unit tall on a foot of radius one.
   // It is scaled to the size crownAt gives.
   const crownShape = new THREE.BufferGeometry();
@@ -75,113 +73,147 @@ export function createSplash() {
     }
     crownShape.setAttribute('position', new THREE.BufferAttribute(new Float32Array(p), 3));
     crownShape.setIndex(index);
+    crownShape.computeVertexNormals();
   }
-  const crown = new THREE.Mesh(crownShape, flat);
-  crown.frustumCulled = false;
-  crown.castShadow = false;
-  object.add(crown);
+  // The column: a spike one unit tall on a foot of radius one, its foot on the water.
+  const columnShape = new THREE.CylinderGeometry(COLUMN_TOP, 1, 1, COLUMN_SIDES, 1, false);
+  columnShape.translate(0, 0.5, 0);
 
-  // Each ring is a strip of quads whose inner and outer edge are rewritten every frame.
-  const rings = [];
-  for (let r = 0; r < RINGS; r += 1) {
-    const positions = new Float32Array((RING_SEGMENTS + 1) * 2 * 3);
-    const index = [];
-    for (let i = 0; i < RING_SEGMENTS; i += 1) {
-      const a = i * 2;
-      index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setIndex(index);
-    const mesh = new THREE.Mesh(geometry, flat);
-    mesh.frustumCulled = false;
-    mesh.castShadow = false;
-    object.add(mesh);
-    rings.push({ geometry, positions });
-  }
-
-  const table = makeDrops();
-  const at = { x: 0, y: 0, z: 0, size: 0 };
-  const ring = { radius: 0, width: 0 };
+  const tables = { in: makeDrops('in'), out: makeDrops('out'), thrash: makeDrops('thrash') };
+  const at = { x: 0, y: 0, z: 0, size: 0, vx: 0, vy: 0, vz: 0 };
+  const along = new THREE.Vector3();
+  const upright = new THREE.Vector3(0, 1, 0);
+  const turned = new THREE.Quaternion();
+  const where = new THREE.Vector3();
+  const sized = new THREE.Vector3();
   const sheet = { radius: 0, height: 0 };
   const matrix = new THREE.Matrix4();
   // Where it is seen from, to size a far splash up.
   const eye = new THREE.Vector3();
-  let age = SPLASH_LIFE;
-  let strength = 0;
 
-  function draw() {
-    const fade = Math.min(1, (1 - age / SPLASH_LIFE) / FADE_OVER);
-    material.opacity = OPACITY * fade;
-    flat.opacity = OPACITY * fade;
-    crownAt(age, strength, sheet);
-    crown.visible = sheet.height > 0;
-    crown.scale.set(sheet.radius, sheet.height, sheet.radius);
+  // One splash: its own crown, column and drops, so that several can go on at once.
+  const splashes = Array.from({ length: AT_ONCE }, () => {
+    const group = new THREE.Group();
+    group.visible = false;
+    // What it looks like is the spray's (sprayMaterial.js): the sheet is seen from both sides.
+    const material = createSprayMaterial();
+    const flat = createSprayMaterial(true);
+    const speck = createSprayMaterial(false, true);
+    const drops = new THREE.InstancedMesh(dropShape, speck.material, DROPS);
+    const crown = new THREE.Mesh(crownShape, flat.material);
+    const column = new THREE.Mesh(columnShape, material.material);
+    for (const mesh of [drops, crown, column]) {
+      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      group.add(mesh);
+    }
+    object.add(group);
+    return { group, material, flat, speck, drops, crown, column, kind: 'in', age: Infinity, life: 0, big: 0, done: new Array(DROPS).fill(true) };
+  });
+
+  function draw(one) {
+    const fade = Math.min(1, (1 - one.age / one.life) / FADE_OVER);
+    one.material.setFade(fade);
+    one.flat.setFade(fade);
+    one.speck.setFade(fade);
+    crownAt(one.kind, one.age, one.big, sheet);
+    one.crown.visible = sheet.height > 0;
+    one.crown.scale.set(sheet.radius, sheet.height, sheet.radius);
+    columnAt(one.kind, one.age, one.big, sheet);
+    one.column.visible = sheet.height > 0;
+    one.column.scale.set(sheet.radius, sheet.height, sheet.radius);
+    const table = tables[one.kind];
     for (let i = 0; i < DROPS; i += 1) {
-      dropAt(table[i], age, strength, at);
-      matrix.makeScale(at.size, at.size, at.size).setPosition(at.x, at.y, at.z);
-      drops.setMatrixAt(i, matrix);
-    }
-    drops.instanceMatrix.needsUpdate = true;
-    for (let r = 0; r < RINGS; r += 1) {
-      ringAt(r, age, strength, ring);
-      const inner = Math.max(0, ring.radius - ring.width * 0.5);
-      const outer = ring.radius + ring.width * 0.5;
-      const p = rings[r].positions;
-      for (let i = 0; i <= RING_SEGMENTS; i += 1) {
-        const a = (i / RING_SEGMENTS) * Math.PI * 2;
-        const c = Math.cos(a);
-        const s = Math.sin(a);
-        const k = i * 6;
-        p[k] = c * inner; p[k + 1] = RING_LIFT; p[k + 2] = s * inner;
-        p[k + 3] = c * outer; p[k + 4] = RING_LIFT; p[k + 5] = s * outer;
+      dropAt(table[i], one.age, one.big, at);
+      // Drawn out along its way.
+      const speed = Math.hypot(at.vx, at.vy, at.vz);
+      if (speed > 1e-6) turned.setFromUnitVectors(upright, along.set(at.vx / speed, at.vy / speed, at.vz / speed));
+      else turned.identity();
+      matrix.compose(where.set(at.x, at.y, at.z), turned, sized.set(at.size, at.size * (DROP_LONG + STREAKS * speed), at.size));
+      one.drops.setMatrixAt(i, matrix);
+      // A drop that has fallen back in: say so, once, where it came down.
+      if (!one.done[i] && one.age >= landsAt(table[i], one.big)) {
+        one.done[i] = true;
+        if (landed && table[i].rings) {
+          const turn = one.group.rotation.y;
+          const scale = one.group.scale.x;
+          const c = Math.cos(turn);
+          const s = Math.sin(turn);
+          landed(one.group.position.x + (at.x * c + at.z * s) * scale, one.group.position.z + (at.z * c - at.x * s) * scale, DROP_HITS * one.big, DROP_KG);
+        }
       }
-      rings[r].geometry.attributes.position.needsUpdate = true;
     }
+    one.drops.instanceMatrix.needsUpdate = true;
+  }
+
+  function start(kind, x, z, strength, weight) {
+    let one = splashes.find((it) => !(it.age < it.life));
+    if (!one) one = splashes.reduce((oldest, it) => (it.age > oldest.age ? it : oldest));
+    one.kind = kind;
+    one.group.position.set(x, 0, z);
+    one.group.scale.setScalar(sizeAt(Math.hypot(x - eye.x, eye.y, z - eye.z)));
+    // Each splash is the same one turned a different way.
+    one.group.rotation.y = (x * 12.9898 + z * 78.233) % (Math.PI * 2);
+    one.big = bigOf(strength, weight, kind);
+    one.life = lifeOf(kind);
+    one.age = 0;
+    one.done.fill(false);
+    one.group.visible = true;
+    draw(one);
   }
 
   return {
     object,
-    // True while a splash is still playing.
+    // True while any splash is still playing.
     get active() {
-      return age < SPLASH_LIFE;
+      return splashes.some((it) => it.age < it.life);
     },
 
-    // Where the splash is looked at from, world space. One far away is drawn larger.
+    // Where the splashes are looked at from, world space. One far away is drawn larger.
     seenFrom(position) {
       eye.copy(position);
     },
 
-    // Start a splash on the surface at (x, z). strength 0 to 1: how hard it hit. A new
-    // one replaces any still playing.
-    burst(x, z, hit = 1) {
-      object.position.set(x, 0, z);
-      object.scale.setScalar(sizeAt(Math.hypot(x - eye.x, eye.y, z - eye.z)));
-      // Each splash is the same crown turned a different way.
-      object.rotation.y = (x * 12.9898 + z * 78.233) % (Math.PI * 2);
-      strength = Math.max(0, Math.min(1, hit));
-      age = 0;
-      object.visible = true;
-      draw();
+    // Something went into the water at (x, z). strength 0 to 1: how hard it hit.
+    // weight: of the thing, kg.
+    burst(x, z, strength = 1, weight) {
+      start('in', x, z, strength, weight);
+    },
+
+    // Something was drawn up out of the water at (x, z). strength 0 to 1: how much water
+    // it brings with it. weight: of what comes through, kg.
+    breach(x, z, strength = 1, weight) {
+      start('out', x, z, strength, weight);
+    },
+
+    // A fish thrashing at the top of the water at (x, z) threw it about. strength 0 to
+    // 1: how hard. weight: of what struck the water, kg.
+    thrash(x, z, strength = 1, weight) {
+      start('thrash', x, z, strength, weight);
     },
 
     // Once a frame.
     update(dt) {
-      if (age >= SPLASH_LIFE) return;
-      age += dt;
-      if (age >= SPLASH_LIFE) {
-        object.visible = false;
-        return;
+      for (const one of splashes) {
+        if (!(one.age < one.life)) continue;
+        one.age += dt;
+        if (one.age >= one.life) {
+          one.group.visible = false;
+          continue;
+        }
+        draw(one);
       }
-      draw();
     },
 
     dispose() {
       dropShape.dispose();
       crownShape.dispose();
-      for (const r of rings) r.geometry.dispose();
-      material.dispose();
-      flat.dispose();
+      columnShape.dispose();
+      for (const one of splashes) {
+        one.material.dispose();
+        one.flat.dispose();
+        one.speck.dispose();
+      }
     },
   };
 }
