@@ -37,40 +37,43 @@ const MOST = 0.7;
 const FOLLOWS = 6;
 
 export function createSideStrain() {
-  // Where the tip was when this run set off this way, and the level direction it heads.
+  // Where the tip was when this run set off this way, the level direction it heads, and
+  // which side that is: 1 to the left of the line out to the fish, -1 to the right, 0
+  // with no run under way.
   let fromX = 0;
   let fromZ = 0;
   let headX = 0;
   let headZ = 0;
-  let going = false;
+  let side = 0;
 
   const strain = {
     // The share of its speed across the line the fish has lost to it, 0 to MOST.
     share: 0,
 
-    // A run sets off, or cuts to its other side: across the line in the level direction
-    // (dirX, dirZ), with the rod tip at tip.
-    begin(tip, dirX, dirZ) {
-      fromX = tip.x;
-      fromZ = tip.z;
-      headX = dirX;
-      headZ = dirZ;
-      going = true;
-    },
-
-    // The run is over.
-    end() {
-      going = false;
+    // A fish is hooked: nothing is counted yet. What the last fish lost eases off by itself.
+    reset() {
+      side = 0;
     },
 
     /**
-     * Once a frame. tip: the rod tip now. far: level metres from under it to the fish.
-     * Returns the share of its speed across the line the fish keeps, 1 to 1 - MOST.
+     * Once a frame. tip: the rod tip now. to: where the fish is from the tip, a level
+     * unit vector x, z and how far, `far`, m. across: how fast it means to swim across
+     * the line, m/s, positive to the left of the line out to it, 0 when it is not running.
+     * A run setting off, or cutting to its other side, is counted from where the tip is
+     * then. Returns the share of that speed the fish keeps, 1 to 1 - MOST.
      */
-    step(dt, tip, far) {
-      const against = going ? -((tip.x - fromX) * headX + (tip.z - fromZ) * headZ) : 0;
-      const to = Math.min(MOST, Math.max(0, GAIN * against / Math.max(far, 1)));
-      strain.share = toward(strain.share, to, FOLLOWS, dt);
+    step(dt, tip, to, across) {
+      const now = across > 0 ? 1 : across < 0 ? -1 : 0;
+      if (now !== side) {
+        side = now;
+        fromX = tip.x;
+        fromZ = tip.z;
+        headX = -to.z * side;
+        headZ = to.x * side;
+      }
+      const against = side ? -((tip.x - fromX) * headX + (tip.z - fromZ) * headZ) : 0;
+      const goal = Math.min(MOST, Math.max(0, GAIN * against / Math.max(to.far, 1)));
+      strain.share = toward(strain.share, goal, FOLLOWS, dt);
       return 1 - strain.share;
     },
   };

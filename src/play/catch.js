@@ -41,6 +41,7 @@ import { createSideStrain } from './sideStrain.js';
 import { createStrike } from './strike.js';
 import { createSuitors } from './suitors.js';
 import { createLean } from './lean.js';
+import { createLowRod } from './lowRod.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { LURE_KG } from '../shore/lureMove.js';
@@ -48,7 +49,7 @@ import { DRY_BY, DRY_FROM, LIMP_SHARE, dryness } from './tipWeight.js';
 
 // What this file reports about the fish, for tuning against a real hand: the names of
 // the read-only values on the object createCatch returns. fishing.js passes them on.
-export const FISH_READOUT = ['fish', 'held', 'around', 'bite', 'hookIn', 'hunger', 'interest', 'fright', 'hookLoose', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
+export const FISH_READOUT = ['fish', 'braked', 'lowered', 'around', 'bite', 'hookIn', 'hunger', 'interest', 'fright', 'hookLoose', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
 // The one species in the water. Its numbers by size are in fishKind.js.
 const SPECIES = 'dorade';
 
@@ -103,6 +104,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const course = createCourse(random);
   const thump = createThump(random);
   const lean = createLean();
+  const lowRod = createLowRod();
   const strain = createStrain();
   const scoop = createScoop();
   const click = createReelClick();
@@ -110,10 +112,8 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const strike = createStrike();
   const shed = createShed(random);
   const sideStrain = createSideStrain();
-  // Which side the run under way heads, 1 left, -1 right, 0 with none: for side strain.
-  let runSide = 0;
   // The fish round the lure before one is hooked. Without a school there are none.
-  const suitors = school ? createSuitors({ school, line, move, out, haptics, random }) : null;
+  const suitors = school ? createSuitors({ school, line, move, out, haptics, random, species: SPECIES }) : null;
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
@@ -164,15 +164,8 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     // How far to the left of the cast's direction its head points, -1 to 1.
     head = Math.cos(fish.yaw) * homeX - Math.sin(fish.yaw) * homeZ;
     const wants = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
-    // A rod carried against the way this run heads takes some of that off (sideStrain.js).
-    // It is counted from where the tip was as the run set off this way.
-    const side = wants > 0 ? 1 : wants < 0 ? -1 : 0;
-    if (side !== runSide) {
-      runSide = side;
-      if (side) sideStrain.begin(line.tip, -bearing.z * side, bearing.x * side);
-      else sideStrain.end();
-    }
-    const own = wants * sideStrain.step(dt, line.tip, bearing.far);
+    // A rod carried against the way this run heads takes some of that off.
+    const own = wants * sideStrain.step(dt, line.tip, bearing, wants);
     onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt);
   };
 
@@ -182,8 +175,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   function hook(fish) {
     hooked = fish;
     shed.begin();
-    runSide = 0;
-    sideStrain.end();
+    sideStrain.reset();
     hung = false;
     tension = 0;
     stretch = 0;
@@ -199,6 +191,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     course.begin(head, kind.bold);
     thump.begin(kind);
     lean.begin();
+    lowRod.begin();
     haul.reset();
     school.take(hooked, fightBrain);
     // A fish that can take line lands on the rod harder than one that cannot.
@@ -344,7 +337,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     },
     // The share of its speed across the line a running fish has lost to a rod carried
     // against it, 0 to 1.
-    get held() {
+    get braked() {
       return hooked && !hung ? sideStrain.share : 0;
     },
     // How near the hooked fish is to throwing the hook, 0 to 1.
@@ -389,6 +382,10 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     },
     get effort() {
       return strain.effort;
+    },
+    // What a rod held low is adding to what the reel holds, N.
+    get lowered() {
+      return hooked && !hung ? lowRod.holds : 0;
     },
     // How much shorter the line is drawn tight for this frame than what is out, m: a
     // shake of a hooked fish's head snatching it, or a biting fish plucking it.
@@ -446,6 +443,9 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       course.step(dt, fight.running, kind.bold);
       // A finger held down on a fish that is taking line leans on it.
       lean.step(dt, input.finger, fight.force > RUN_OUT_AT);
+      // A rod held low has its butt in it: the reel holds that much more. With the
+      // finger's lean, this is what stands against the fish over the reel's own hold.
+      haul.brace(lean.press + lowRod.step(dt, tip.y));
       // Its head shakes: a snatch on the line and in the hand.
       const shake = thump.step(dt, fight.running, fight.stamina);
       if (shake) haptics?.playTransient(shake.intensity, shake.sharpness);
@@ -464,9 +464,9 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       // left to take, it has it all and is gone. It goes by the fish's own pull and by
       // nothing else: a fish that cannot out-pull the reel gets no line, however hard it
       // fetches up against the end of it. What is wound in from such a fish stays in.
-      const slips = haul.slip(gap - out.length, line.stiffness, lean.press);
+      const slips = haul.slip(gap - out.length, line.stiffness);
       let given = 0;
-      if (haul.gives(fight.force, lean.press)) {
+      if (haul.gives(fight.force)) {
         given = Math.min(slips, Math.max(0, spool - out.length));
         out.pay(given);
         if (slips > given) {
@@ -478,7 +478,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
         // A knock, not line taken: lent, and wound back as the fish comes off the end.
         out.pay(slips);
         haul.lend(slips);
-        out.pay(-haul.takeBack(gap - out.length, line.stiffness, lean.press));
+        out.pay(-haul.takeBack(gap - out.length, line.stiffness));
       }
       running = given / dt;
       // On a slack line it shakes the hook, and may throw it.

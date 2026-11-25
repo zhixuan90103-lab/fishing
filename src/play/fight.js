@@ -145,11 +145,11 @@ export function createFight(random = Math.random) {
      * pull following that. tension: how hard the line is pulling now, N. uneasy: how much
      * less of a run it waits to have back before it bolts again, as a share, 0 to 1: its
      * own unease at where it is (course.js), not anything this file knows about.
-     * braced: the share of its swimming a rod carried against it has turned straight
+     * thwarted: the share of its swimming a rod carried against it has turned straight
      * against the line (sideStrain.js), 0 to 1: that much of its effort is met in full.
      * Returns true on the frame a run begins.
      */
-    step(dt, tension = 0, uneasy = 0, braced = 0) {
+    step(dt, tension = 0, uneasy = 0, thwarted = 0) {
       if (!(dt > 0)) return false;
       // What it can pull now, worn as it is: a run is all of that, whatever it has come
       // down to.
@@ -159,7 +159,7 @@ export function createFight(random = Math.random) {
       const idle = kind.rest + HANGS_BACK * kind.runFresh * fight.stamina;
       const exert = able > idle ? Math.min(1, Math.max(0, fight.force - idle) / (able - idle)) : 0;
       const held = fight.force > 1e-6 ? Math.min(1, Math.max(0, tension) / fight.force) : 0;
-      const met = held + (1 - held) * Math.min(1, Math.max(0, braced));
+      const met = held + (1 - held) * Math.min(1, Math.max(0, thwarted));
       // What a second of this takes out of it. The more worn it is the more that is: the
       // same effort empties a tired fish sooner.
       const worn = WORN_OUT + (1 - WORN_OUT) * fight.stamina;

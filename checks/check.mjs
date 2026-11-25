@@ -19,9 +19,11 @@ import { createStrain } from '../src/play/strain.js';
 import { SPEED_FULL, SPEED_MIN, castReach } from '../src/play/swing.js';
 import { createBite } from '../src/play/bite.js';
 import { createStrike } from '../src/play/strike.js';
-import { FRIGHT, createFlee, nerveOf, wary } from '../src/play/flee.js';
+import { createFlee } from '../src/play/flee.js';
+import { FRIGHT, nerveOf, wary } from '../src/play/fright.js';
 import { createShed } from '../src/play/shed.js';
 import { createSideStrain } from '../src/play/sideStrain.js';
+import { createLowRod } from '../src/play/lowRod.js';
 import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
@@ -1243,6 +1245,9 @@ check('bites: nobody striking, no fish is hooked but by a dead bite, the fish st
     // Into its mouth and out again the lure moves by no more than the reach of a touch in a frame, and springs back no faster than the line tows it.
     expect(c.lureJump < 0.2, 'the lure never jumps', `${c.lureJump.toFixed(2)} m in a frame`);
   }
+  // With several fish taking turns at the lure a cast is bitten many times over. When one bite in twelve hooked itself,
+  // more than half of all casts left alone did: waiting was a way to fish.
+  expect(casts.filter((c) => c.hooked).length <= 4, 'left alone, a cast seldom hooks its own fish', `${casts.filter((c) => c.hooked).length} of 12 in forty seconds`);
   expect(casts.filter((c) => c.bites.length >= 2).length >= 6, 'with fish round the lure there is bite after bite', casts.map((c) => c.bites.length).join(' '));
   expect(of('light').length > 3 && of('medium').length > 3 && of('heavy').length > 3, 'all three kinds turn up', `${of('light').length} ${of('medium').length} ${of('heavy').length}`);
   const pull = (kind) => meanOf(of(kind).map((b) => b.peak)), nod = (kind) => meanOf(of(kind).map((b) => b.turn));
@@ -1360,12 +1365,13 @@ check('bites: winding on without striking draws the lure out of its mouth and fr
 
 check('side strain: a rod carried against a run slows the fish across the line, more the nearer it is, and carried with it does nothing', () => {
   // The tip carried a metre in a quarter of a second, against a run heading +x or with it, the fish so far off.
-  const settles = (far, metres, fps) => { const st = createSideStrain(); st.begin({ x: 0, z: 0 }, 1, 0); let keeps = 1; for (let k = 1; k <= 2 * fps; k += 1) keeps = st.step(1 / fps, { x: -metres * Math.min(1, k / fps / 0.25), z: 0 }, far); return 1 - keeps; };
+  // The fish lies in -z from the tip and runs to the left of the line out to it, which is +x.
+  const settles = (far, metres, fps) => { const st = createSideStrain(); const to = { x: 0, z: -1, far }; let keeps = st.step(1 / fps, { x: 0, z: 0 }, to, 3); for (let k = 1; k <= 2 * fps; k += 1) keeps = st.step(1 / fps, { x: -metres * Math.min(1, k / fps / 0.25), z: 0 }, to, 3); return 1 - keeps; };
   expect(Math.abs(settles(15, 1, 60) - 4 / 15) < 0.01, 'a metre against it at fifteen metres takes off four times what the turn of the line truly would', settles(15, 1, 60).toFixed(3));
   expect(settles(5, 1, 60) > 2 * settles(15, 1, 60) && settles(5, 2, 60) <= 0.7 + 1e-9, 'the nearer the fish the more the rod has it, up to a limit', `${settles(5, 1, 60).toFixed(2)} at five metres`);
   expect(settles(15, -1, 60) === 0, 'carried the way it is going, nothing');
   expect(Math.abs(settles(15, 1, 20) - settles(15, 1, 120)) < 0.005, 'the same at 20 and 120 frames');
-  const again = createSideStrain(); again.begin({ x: 0, z: 0 }, 1, 0); for (let k = 0; k < 120; k += 1) again.step(1 / 60, { x: -1, z: 0 }, 10); again.begin({ x: -1, z: 0 }, -1, 0); let left = 1; for (let k = 0; k < 120; k += 1) left = again.step(1 / 60, { x: -1, z: 0 }, 10);
+  const again = createSideStrain(); const out = { x: 0, z: -1, far: 10 }; again.step(1 / 60, { x: 0, z: 0 }, out, 3); for (let k = 0; k < 120; k += 1) again.step(1 / 60, { x: -1, z: 0 }, out, 3); let left = 1; for (let k = 0; k < 120; k += 1) left = again.step(1 / 60, { x: -1, z: 0 }, out, -3);
   expect(1 - left < 0.01, 'it starts again when the run cuts to its other side: a rod left where it was holds nothing', (1 - left).toFixed(3));
   // Whole fights, a small fish, the finger down only while it rests. The rod: left alone, or carried thirty degrees
   // against whichever way the fish is going round and brought straight again as it rests, or carried with it.
@@ -1392,6 +1398,30 @@ check('side strain: a rod carried against a run slows the fish across the line, 
   expect(along.speed > 0.94 * still.speed, 'carried with them, it is not slowed', `${along.speed.toFixed(2)} against ${still.speed.toFixed(2)} m/s`);
   // A rod left off to one side while the fish rests keeps the line tighter and the winding slower: that made any carrying of the rod a longer fight.
   expect(against.time < 1.03 * still.time, 'and brought straight again as it rests, the fight is no longer for it', `${against.time.toFixed(0)} against ${still.time.toFixed(0)} s`);
+});
+
+check('low rod: carried as usual it adds nothing, lowered on a run the reel holds more and the fish gets less line', () => {
+  const settles = (height, fps) => { const low = createLowRod(); low.begin(); let holds = 0; for (let k = 0; k < 3 * fps; k += 1) holds = low.step(1 / fps, height); return holds; };
+  expect(settles(1.9, 60) === 0 && settles(1.75, 60) === 0, 'with the tip where a rod is usually carried, or bent down by a hard run, nothing', settles(1.75, 60));
+  expect(settles(1.2, 60) > 3 && settles(0.6, 60) > settles(1.2, 60) + 3 && Math.abs(settles(0.3, 60) - settles(0.6, 60)) < 1e-6, 'the lower the tip the more, up to a limit', `${settles(1.2, 60).toFixed(1)} and ${settles(0.6, 60).toFixed(1)} N`);
+  expect(Math.abs(settles(1, 20) - settles(1, 120)) < 0.01, 'the same at 20 and 120 frames');
+  // Whole fights with the biggest fish, the finger down only while it rests. The rod as usual, or lowered thirty degrees while it runs.
+  const fought = (lowered) => {
+    const given = [], most = [];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      let want = 20, top = 0;
+      const r = fightOne({ seed, fps: 60, press: 'rests', size: 1.4, each: (rig) => {
+        const f = rig.fishing; if (f.stage !== 'fight') return;
+        want += ((lowered && f.mood === 'run' ? -10 : 20) - want) * (1 - Math.exp(-5 / 60)); rig.setLift(want); top = Math.max(top, f.lowered);
+      } });
+      expect(r.end === 'landed', `rod ${lowered ? 'lowered' : 'as usual'}, seed ${seed}: landed`, r.end);
+      given.push(r.given); most.push(top);
+    }
+    return { given: meanOf(given), most: Math.max(...most) };
+  };
+  const usual = fought(false), low = fought(true);
+  expect(usual.most === 0, 'carried as usual through a whole fight, the rod adds nothing', usual.most);
+  expect(low.most > 6 && low.given < 0.9 * usual.given, 'lowered in its runs, the fish takes less line', `${low.given.toFixed(1)} against ${usual.given.toFixed(1)} m`);
 });
 
 check('thrown hook: a line kept tight never loses the fish, a rod dropped at every rest does, and the lure is left for the next fish', () => {

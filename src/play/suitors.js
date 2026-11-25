@@ -9,8 +9,11 @@
  * brought and dismissed, the lure and the line where a mouth holding the hook is, the
  * haptics the knock of a bite.
  * Does not own: the hooked fish (catch.js, which this file hands it to), or any of the
- * sums: how a lure draws a fish (allure.js), what a bite is (bite.js), fright and nerve
- * (flee.js), how a fish swims to the lure, idles and makes off (visit.js).
+ * sums: how a lure draws a fish (allure.js), what a bite is (bite.js), what frightens a
+ * fish and whether it stays (fright.js), how it bolts (flee.js), how many fish a cast
+ * wants and when the next spare is due (muster.js), where the view cannot see
+ * (outOfSight.js), how a fish swims to the lure, idles and makes off (visit.js), how big
+ * a fish is among its kind (fishKind.js).
  * No Three: like catch.js it only joins those to the materials' openings.
  * Rules: docs/FISHING-REQUIREMENTS.md sections 7 to 9. Design: docs/PLAY.md section 7.
  *
@@ -39,38 +42,20 @@
 
 import { AFTER_A_BITE, GIVES_UP, createAllure, drawGoesAt, taste } from './allure.js';
 import { createBite, drawHunger } from './bite.js';
-import { FRIGHT, NEAR, createFlee, frightBeside, getsOver, nerveOf, wary } from './flee.js';
+import { bulkOf } from './fishKind.js';
+import { createFlee } from './flee.js';
+import { FRIGHT, NEAR, frightBeside, getsOver, nerveOf, wary } from './fright.js';
 import { between } from './maths.js';
+import { MOST, createMuster } from './muster.js';
+import { placeBeside, unseen, wayOut } from './outOfSight.js';
 import { steerAbout, steerOff, steerToLure, steerWithLure, touching } from './visit.js';
 
 // A fish of the school within this of the lure, level metres, notices it. One that has
 // noticed it and drifts this much further off forgets it, and so does an idling one.
 const NOTICE = 7;
 const FORGET = 3;
-// No more fish than this have a mind about the lure at once.
-const MOST = 10;
-// A cast wants between these many fish round the lure. With fewer of the school's near,
-// spares make up the number: this long after the lure lands, s, and then one at a time,
-// this far apart, s.
-const WANTED = [1, 10];
-const TOP_UP_AFTER = 1;
-const BRING_EVERY = [0.4, 1.6];
-// With every fish gone from the lure, more are brought after this long, s.
-const COME_AFTER = [1.5, 4];
-// Where a spare is put in: to one side of the lure by at least this, m, or this share of
-// how far off the lure is, whichever is more, and this much either way along the cast.
-// And how deep, m.
-const SIDE_LEAST = 5;
-const SIDE_SHARE = 0.55;
-const SIDE_MORE = [0, 2.5];
-const ALONG = [-2, 4];
+// A spare is put in this deep, m.
 const BRING_DEPTH = [-2.6, -1.2];
-// What the view cannot see: further than this off its line, radians, or further away
-// than this, m. The picture reaches 13.5 degrees to either side; the rest is margin for
-// reckoning from the rod tip and not the eye, which is this far behind it, m.
-const UNSEEN_OFF = 24 * Math.PI / 180;
-const UNSEEN_FAR = 38;
-const EYE_BEHIND = 2.2;
 // A fish idles round the lure at between these many metres, and this much above or
 // below it, m.
 const RING = [1.2, 3.2];
@@ -87,18 +72,18 @@ const BITES_AGAIN = [0.8, 2.4];
 const SHY_FOR = 20;
 // When a fish is hooked the others bolt at least this frightened, and do not come back.
 const HOOKED_FRIGHT = 0.5;
-// The body sizes that pluck the line lightest and hardest in a bite.
-const BITE_SIZES = [0.78, 1.4];
 // A spare leaving goes down to this depth, m.
 const OFF_DEPTH = -2.6;
 
 /**
  * school: the fish, with fishes, take, giveBack, bring, dismiss and mouth. line: for its
  * tip. move: the lure's motion. out: the line out. haptics: optional. random: 0 to 1.
+ * species: which table of fishKind.js these fish are read off.
  */
-export function createSuitors({ school, line, move, out, haptics, random }) {
+export function createSuitors({ school, line, move, out, haptics, random, species }) {
   const allure = createAllure();
   const bite = createBite(random);
+  const muster = createMuster(random);
   // Every fish with a mind about the lure, by fish. And the spares among the fish this
   // file has ever had, hooked ones included, so that a spare is never given to the school.
   const minds = new Map();
@@ -112,15 +97,6 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
   let homeZ = 1;
   // This cast's fish are from the hungry half.
   let starved = false;
-  // How many fish this cast wants round the lure, how many spares are still to be
-  // brought, and seconds until the next thing to do with either.
-  let wanted = 1;
-  let toBring = 0;
-  let nextIn = 0;
-  let toppedUp = false;
-  // Seconds the lure has had no fish at all, and how long that goes on before more come.
-  let emptyFor = 0;
-  let refillAfter = 0;
   // The fish going for the lure and for how long, the fish biting (the same one, once
   // its mouth is there), how fast the lure is going, and the fish just hooked.
   let goer = null;
@@ -130,6 +106,8 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
   let caught = null;
   const mouth = { x: 0, y: 0, z: 0 };
   const brainMouth = { x: 0, y: 0, z: 0 };
+  const spot = { x: 0, z: 0 };
+  const off = { x: 0, z: 0 };
 
   // One function writes the aim of every fish this file has taken, by what it is doing.
   const brain = (fish, aim) => {
@@ -174,34 +152,14 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
 
   const farFromLure = (fish) => Math.hypot(fish.x - move.x, fish.z - move.z);
 
-  // Whether the view, looking along viewYaw from behind the rod tip, cannot see x, z.
-  function unseen(x, z, viewYaw, tip) {
-    const fx = Math.sin(viewYaw);
-    const fz = Math.cos(viewYaw);
-    const dx = x - (tip.x - fx * EYE_BEHIND);
-    const dz = z - (tip.z - fz * EYE_BEHIND);
-    const far = Math.hypot(dx, dz);
-    const ahead = dx * fx + dz * fz;
-    return far > UNSEEN_FAR || ahead <= 0 || Math.acos(Math.min(1, ahead / far)) > UNSEEN_OFF;
-  }
-
   // Put one spare in the water out of sight, to one side of the lure, heading for it.
   // Returns false when no place out of sight was found or no spare is left.
   function bringOne(viewYaw, tip) {
-    const lureFar = Math.hypot(move.x - tip.x, move.z - tip.z) + EYE_BEHIND;
-    const side = random() < 0.5 ? -1 : 1;
-    for (let n = 0; n < 6; n += 1) {
-      const along = between(random, ALONG);
-      const across = side * (n % 2 ? -1 : 1) * (Math.max(SIDE_LEAST, SIDE_SHARE * (lureFar + along)) + between(random, SIDE_MORE)) * (1 + 0.25 * (n >> 1));
-      const x = move.x + homeX * along + homeZ * across;
-      const z = move.z + homeZ * along - homeX * across;
-      if (!unseen(x, z, viewYaw, tip)) continue;
-      const fish = school.bring(x, between(random, BRING_DEPTH), z, Math.atan2(move.x - x, move.z - z), brain);
-      if (!fish) return false;
-      newMind(fish, true, 'near');
-      return true;
-    }
-    return false;
+    if (!placeBeside(random, move, homeX, homeZ, viewYaw, tip, spot)) return false;
+    const fish = school.bring(spot.x, between(random, BRING_DEPTH), spot.z, Math.atan2(move.x - spot.x, move.z - spot.z), brain);
+    if (!fish) return false;
+    newMind(fish, true, 'near');
+    return true;
   }
 
   // A fish is done with the lure. One of the school is let go and swims home; a spare
@@ -221,28 +179,41 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
     shy.set(mind.fish, SHY_FOR);
   }
 
-  // Frighten a fish by so much. It bolts if that is more than it has the nerve for,
-  // and stays if not. Returns whether it bolted.
-  function scare(mind, fright, mayReturn = true) {
-    mind.fright += fright;
-    if (mind.fright <= nerveOf(mind.hunger) && mayReturn) {
-      // It stays, and thinks better of the lure for now.
-      if (mind.state === 'biting' || mind.state === 'coming') mind.state = 'near';
-      if (goer === mind) goer = null;
-      mind.interest *= AFTER_A_BITE;
-      return false;
-    }
+  // It bolts. One of the school that had not come over yet just loses interest for a while.
+  function bolt(mind, mayReturn) {
     if (mind.state === 'watching') {
-      // One of the school that had not come yet: it just loses interest for a while.
       minds.delete(mind.fish);
       shy.set(mind.fish, SHY_FOR);
-      return true;
+      return;
     }
     if (goer === mind) goer = null;
     mind.state = 'fleeing';
     mind.mayReturn = mayReturn;
     mind.flee.begin(mind.fish, mind.fright);
-    return true;
+  }
+
+  // Frighten a fish by so much. It bolts if that is more than it has the nerve for. If
+  // not it stays, and thinks better of the lure for now.
+  function scare(mind, fright) {
+    mind.fright += fright;
+    if (mind.fright > nerveOf(mind.hunger)) {
+      bolt(mind, true);
+      return;
+    }
+    if (mind.state === 'biting' || mind.state === 'coming') mind.state = 'near';
+    if (goer === mind) goer = null;
+    mind.interest *= AFTER_A_BITE;
+  }
+
+  // The bite came to nothing through the angler's doing: the fish that was at the hook
+  // is frightened by so much, and is back among the others if it stays.
+  function spoil(fright) {
+    const was = biter;
+    endBite();
+    was.biteIn = between(random, BITES_AGAIN);
+    was.state = 'near';
+    scare(was, fright);
+    return was;
   }
 
   // The bite is off without a fish hooked.
@@ -260,14 +231,14 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
     minds.delete(mind.fish);
     endBite();
     open = false;
-    toBring = 0;
+    muster.stop();
     for (const other of [...minds.values()]) {
       if (other.state === 'leaving' || other.state === 'fleeing') {
         other.mayReturn = false;
         continue;
       }
       other.fright = Math.max(HOOKED_FRIGHT, other.fright + frightBeside(farFromLure(other.fish)));
-      scare(other, 0, false);
+      bolt(other, false);
     }
     return 'hooked';
   }
@@ -292,15 +263,10 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
     get pull() {
       return biter ? bite.pull : 0;
     },
-    // How many fish this file has in hand, and how many of them are spares in the water.
+    // How many fish are round the lure: come over to it, and not bolting or leaving.
     get around() {
       let n = 0;
-      for (const mind of minds.values()) if (mind.state !== 'watching') n += 1;
-      return n;
-    },
-    get sparesIn() {
-      let n = 0;
-      for (const mind of minds.values()) if (mind.spare) n += 1;
+      for (const mind of minds.values()) if (mind.state === 'near' || mind.state === 'coming' || mind.state === 'biting') n += 1;
       return n;
     },
     // The fish that matters most just now, for the readout: the one biting, else the
@@ -333,12 +299,7 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
       homeZ = dirZ;
       starved = hungry;
       open = true;
-      wanted = Math.min(MOST, Math.floor(between(random, [WANTED[0], WANTED[1] + 1])));
-      toBring = 0;
-      toppedUp = false;
-      nextIn = TOP_UP_AFTER;
-      emptyFor = 0;
-      refillAfter = between(random, COME_AFTER);
+      muster.arm();
       allure.reset();
     },
 
@@ -353,41 +314,18 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
       lureSpeed = Math.hypot(move.vx, move.vz);
       allure.step(dt, lureSpeed);
       // The school's fish near enough take notice, each with a mind of its own.
-      if (open && minds.size < MOST) {
+      if (open) {
+        let room = MOST - live();
         for (const fish of school.fishes) {
+          if (room <= 0) break;
           if (fish.state !== 'free' || minds.has(fish) || shy.has(fish)) continue;
           if (farFromLure(fish) > NOTICE) continue;
           newMind(fish, false, 'watching');
-          if (minds.size >= MOST) break;
+          room -= 1;
         }
       }
-      // With too few near, spares make up the number, one at a time. With none left at
-      // all, after a while the number is made up afresh.
-      if (open) {
-        if (toBring > 0) {
-          nextIn -= dt;
-          if (nextIn <= 0) {
-            if (bringOne(viewYaw, tip)) toBring -= 1;
-            nextIn = between(random, BRING_EVERY);
-          }
-        } else if (!toppedUp) {
-          nextIn -= dt;
-          if (nextIn <= 0) {
-            toBring = Math.max(0, wanted - live());
-            toppedUp = true;
-            nextIn = 0;
-          }
-        } else if (live() === 0) {
-          emptyFor += dt;
-          if (emptyFor >= refillAfter) {
-            wanted = Math.min(MOST, Math.floor(between(random, [WANTED[0], WANTED[1] + 1])));
-            toBring = wanted;
-            nextIn = 0;
-            emptyFor = 0;
-            refillAfter = between(random, COME_AFTER);
-          }
-        } else emptyFor = 0;
-      }
+      // With too few near, spares make up the number, one at a time.
+      if (open && muster.step(dt, live())) muster.brought(bringOne(viewYaw, tip));
       let began = false;
       // The keenest of the fish that want the lure and are free to go for it.
       let keenest = null;
@@ -429,7 +367,7 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
         if (!touching(mouth, move)) continue;
         biter = mind;
         mind.state = 'biting';
-        bite.begin(mind.hunger, taste(lureSpeed), (fish.size - BITE_SIZES[0]) / (BITE_SIZES[1] - BITE_SIZES[0]));
+        bite.begin(mind.hunger, taste(lureSpeed), bulkOf(species, fish.size));
         began = true;
       }
       if (!goer && keenest) {
@@ -453,14 +391,7 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
       // whether to bolt. Struck and wound in the same moment is a strike.
       if (struck) {
         if (biter && bite.held) return hook();
-        const was = biter;
-        if (was) {
-          const fright = bite.kind === 'light' ? FRIGHT.nipped : FRIGHT.missed;
-          endBite();
-          was.biteIn = between(random, BITES_AGAIN);
-          was.state = 'near';
-          scare(was, fright);
-        }
+        const was = biter ? spoil(bite.kind === 'light' ? FRIGHT.nipped : FRIGHT.missed) : null;
         for (const mind of [...minds.values()]) {
           if (mind === was || mind.state === 'fleeing' || mind.state === 'leaving') continue;
           const far = farFromLure(mind.fish);
@@ -469,11 +400,7 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
         return '';
       }
       if (what === 'drawn') {
-        const was = biter;
-        endBite();
-        was.biteIn = between(random, BITES_AGAIN);
-        was.state = 'near';
-        scare(was, FRIGHT.drawn);
+        spoil(FRIGHT.drawn);
         return '';
       }
       // In its mouth the lure goes where the mouth goes, and the line with it: finger up
@@ -498,8 +425,6 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
         if (left <= dt) shy.delete(fish);
         else shy.set(fish, left - dt);
       }
-      const fx = Math.sin(viewYaw);
-      const fz = Math.cos(viewYaw);
       for (const mind of [...minds.values()]) {
         const fish = mind.fish;
         if (mind.state === 'fleeing') {
@@ -518,17 +443,16 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
           minds.delete(fish);
           continue;
         }
-        // Off to the side of the picture it is nearer to, and a little away.
-        const side = (fish.x - tip.x) * fz - (fish.z - tip.z) * fx >= 0 ? 1 : -1;
-        mind.offX = fz * side + fx * 0.3;
-        mind.offZ = -fx * side + fz * 0.3;
+        wayOut(fish.x, fish.z, viewYaw, tip, off);
+        mind.offX = off.x;
+        mind.offZ = off.z;
       }
     },
 
     // The lure is out of the water, or the cast is over: every fish goes.
     scatter() {
       open = false;
-      toBring = 0;
+      muster.stop();
       goer = null;
       for (const mind of [...minds.values()]) if (mind.state !== 'leaving') leave(mind);
     },
@@ -545,10 +469,7 @@ export function createSuitors({ school, line, move, out, haptics, random }) {
       school.take(fish, brain);
       if (!lure) return;
       open = true;
-      toppedUp = true;
-      toBring = 0;
-      emptyFor = 0;
-      refillAfter = between(random, COME_AFTER);
+      muster.again();
       allure.reset();
     },
 

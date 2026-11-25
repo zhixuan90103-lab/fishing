@@ -16,7 +16,9 @@
  * Past that point the reel gives line, finger down or not: exactly as much as brings the
  * tension back to the point. That is a length, not a rate, so it is the same at any
  * frame rate. A finger held down on a running fish does not stop the line. It leans on
- * it: the reel holds that much more (lean.js says how much), so the tension rises with it.
+ * it: the reel holds that much more (lean.js says how much), so the tension rises with
+ * it. A rod held low does the same (lowRod.js). Whatever the angler has standing against
+ * the fish over the reel's own hold is told here once a frame, as one number: brace().
  *
  * Whether a fish takes line goes by its own pull and nothing else: harder than the reel
  * holds, it does; not, it gets none, however hard it fetches up against the end of the
@@ -42,15 +44,24 @@ export function createHaul() {
     speed: 0,
     // Line the tackle has let go under a knock and has still to take back, m.
     lent: 0,
+    // What the angler has standing against the fish over the reel's own hold, N.
+    braced: 0,
 
     reset() {
       haul.speed = 0;
       haul.lent = 0;
+      haul.braced = 0;
     },
 
-    // Whether a fish pulling this hard, N, takes line off the reel. press: as for slip().
-    gives(pull, press = 0) {
-      return pull > RUN_OUT_AT + press;
+    // Once a frame, before the rest: what stands against the fish over the reel's own
+    // hold, N. A finger leaning on a run and a rod held low, added together.
+    brace(newtons) {
+      haul.braced = newtons;
+    },
+
+    // Whether a fish pulling this hard, N, takes line off the reel.
+    gives(pull) {
+      return pull > RUN_OUT_AT + haul.braced;
     },
 
     // The fish has taken line for good: what it had only knocked out is its own now.
@@ -64,18 +75,17 @@ export function createHaul() {
     },
 
     // How much of what was lent comes back in right now, m: as much as the line can take
-    // without pulling harder than the reel holds. stretch, stiffness, press: as for slip().
-    takeBack(stretch, stiffness, press = 0) {
-      const back = Math.min(haul.lent, Math.max(0, (RUN_OUT_AT + press) / stiffness - stretch));
+    // without pulling harder than the reel holds. stretch, stiffness: as for slip().
+    takeBack(stretch, stiffness) {
+      const back = Math.min(haul.lent, Math.max(0, (RUN_OUT_AT + haul.braced) / stiffness - stretch));
       haul.lent -= back;
       return back;
     },
 
     // How much line the reel gives up right now, m. stretch: how much further the hook is
     // from the tip than there is line. stiffness: the line's, N per metre stretched.
-    // press: what a hand leaning on the run adds to what the reel holds, N (lean.js).
-    slip(stretch, stiffness, press = 0) {
-      return Math.max(0, stretch - (RUN_OUT_AT + press) / stiffness);
+    slip(stretch, stiffness) {
+      return Math.max(0, stretch - (RUN_OUT_AT + haul.braced) / stiffness);
     },
 
     // Once a frame. held: the finger is down. tension: the line's pull now, N.

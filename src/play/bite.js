@@ -49,8 +49,10 @@ const TASTE_COUNTS = 0.4;
 const LIGHT_SHARE = [0.6, 0.15];
 const MEDIUM_SHARE = 0.3;
 // Of heavy bites, the share in which the hook scrapes home: from a full fish to a
-// starved one.
-const SCRAPES = [0.04, 0.3];
+// starved one. It is meant to be a rare gift, not a way to fish: at 0.04 to 0.3, with
+// several fish taking turns at the lure, a cast left alone for forty seconds hooked
+// itself more often than not.
+const SCRAPES = [0.01, 0.08];
 
 // The pluck on the line as the fish touches or takes the lure, N for a fish of full
 // heft, and how long it lasts, s: one rise and fall. A heavy bite plucks again as it

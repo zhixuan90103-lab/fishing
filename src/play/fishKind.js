@@ -109,5 +109,13 @@ export function fishOf(kind, size, nature = PLAIN) {
   };
 }
 
+// How big a fish of this species this is among its kind: 0 the smallest in its table to
+// 1 the biggest. Not held to that range: a size off either end reads past it.
+export function bulkOf(kind, size) {
+  const rows = KINDS[kind];
+  if (!rows) throw new Error(`No such fish: ${kind}`);
+  return (size - rows[0].size) / (rows[rows.length - 1].size - rows[0].size);
+}
+
 // The hardest any fish of any kind pulls, N.
 export const HARDEST_RUN = Math.max(...Object.values(KINDS).flat().map((row) => row.runFresh)) * (1 + VARIES);

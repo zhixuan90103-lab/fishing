@@ -124,7 +124,7 @@ export function mountTunePanel(container, tune, hooks) {
     // fishing: the cast's read-only numbers (src/play/fishing.js).
     showCast(f) {
       castText.textContent = `${f.stage} · 线 ${f.lineOut.toFixed(1)} 米 · 竿尖 ${f.swing.toFixed(1)} 米/秒 · 上次松手 ${f.lastRelease.toFixed(1)} 米/秒 仰角 ${Math.round(f.lastAngle)}°`
-        + ` · 鱼 ${f.fish} ${f.mood}${f.around ? ` 饵边 ${f.around} 条` : ''}${f.interest ? ` 想吃 ${Math.round(f.interest * 100)}` : ''}${f.bite ? ` 咬口 ${f.bite}${f.hookIn ? ' 钩在嘴里' : ''}` : ''}${f.hunger ? ` 饿 ${Math.round(f.hunger * 100)}` : ''}${f.fright ? ` 惊 ${Math.round(f.fright * 100)}` : ''}${f.size ? ` ${f.big ? '大' : '小'} ${f.size.toFixed(2)}` : ''} · 张力 ${f.tension.toFixed(1)} 牛 · 鱼的力 ${f.pull.toFixed(1)} 牛 · 硬顶 ${f.press.toFixed(1)} 牛 · 手上 ${Math.round(f.effort * 100)} · 出线 ${f.running.toFixed(1)} 米/秒 · 气力 ${Math.round(f.stamina * 100)} · 带竿刹住 ${Math.round(f.held * 100)} · 钩松 ${Math.round(f.hookLoose * 100)} · 钓到 ${f.landed}${f.lost ? ` · ${f.lost}` : ''}`;
+        + ` · 鱼 ${f.fish} ${f.mood}${f.around ? ` 饵边 ${f.around} 条` : ''}${f.interest ? ` 想吃 ${Math.round(f.interest * 100)}` : ''}${f.bite ? ` 咬口 ${f.bite}${f.hookIn ? ' 钩在嘴里' : ''}` : ''}${f.hunger ? ` 饿 ${Math.round(f.hunger * 100)}` : ''}${f.fright ? ` 惊 ${Math.round(f.fright * 100)}` : ''}${f.size ? ` ${f.big ? '大' : '小'} ${f.size.toFixed(2)}` : ''} · 张力 ${f.tension.toFixed(1)} 牛 · 鱼的力 ${f.pull.toFixed(1)} 牛 · 硬顶 ${f.press.toFixed(1)} 牛 · 压竿 ${f.lowered.toFixed(1)} 牛 · 手上 ${Math.round(f.effort * 100)} · 出线 ${f.running.toFixed(1)} 米/秒 · 气力 ${Math.round(f.stamina * 100)} · 带竿刹住 ${Math.round(f.braked * 100)} · 钩松 ${Math.round(f.hookLoose * 100)} · 钓到 ${f.landed}${f.lost ? ` · ${f.lost}` : ''}`;
     },
     remove() { toggle.remove(); panel.remove(); },
   };
