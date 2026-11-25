@@ -8,7 +8,7 @@ import {
   Fn, float, vec2, vec3, vec4, uniform, texture, positionGeometry, positionWorld, cameraPosition, varying, normalize,
   dot, max, min, clamp, mix, sqrt, pow, exp, abs, smoothstep, saturate, length, reflect, refract, frontFacing,
   screenUV,
-  cameraProjectionMatrix, cameraViewMatrix, pmremTexture, If, select, PI, sin, cos, fract, mx_noise_float, screenCoordinate, ivec2,
+  cameraProjectionMatrix, cameraViewMatrix, pmremTexture, equirectUV, normalWorldGeometry, If, select, PI, sin, cos, fract, mx_noise_float, screenCoordinate, ivec2,
 } from "three/tsl";
 
 const SEGMENTS = 512;
@@ -65,6 +65,30 @@ const ggx = (NdotH, a) => {
   return a2.div(d.mul(d).mul(PI));
 };
 
+// How much of the haze is the panel's fog colour; the rest is the sky's own colour low down.
+const HAZE_TINT = 0.3;
+// The sky is hazed too, from the horizon up to about this far above it (the sine of the angle).
+const HAZE_SKY_TOP = 0.11;
+
+// The colour of the haze looking this way: the sky just over the horizon in that direction, blurred,
+// with a share of the fog colour. The far water fades to it and so does the foot of the sky, so the
+// two meet in one colour with no line between them. (Fishing, 2026-11-25.)
+const hazeToward = (env, direction, fogColor) => {
+  const level = normalize(vec3(direction.x, float(0.045), direction.z));
+  return mix(pmremTexture(env, level, float(0.45)).rgb, fogColor, float(HAZE_TINT));
+};
+
+/**
+ * The sky as it is drawn behind everything: the sky texture, and low down the same haze the far
+ * water fades to, all of it at the horizon and none by HAZE_SKY_TOP above. fogColor: the water
+ * material's own uniform, so the panel moves both.
+ */
+export function makeHazedSky(env, fogColor) {
+  const sky = texture(env, equirectUV(normalWorldGeometry)).rgb;
+  const low = smoothstep(float(HAZE_SKY_TOP), float(0), normalWorldGeometry.y);
+  return mix(sky, hazeToward(env, normalWorldGeometry, fogColor), low.mul(low));
+}
+
 // backdrop: ExternalTexture over Post.backdrop (opaque scene colour, linear view depth in alpha), copied before each
 // water side is drawn. nearS: ExternalTexture over Post.nearTex (r32float, signed height of the pixel's near-plane
 // point above the water, computed before the scene render). Swap both with setBackdrop / setNearS after a resize.
@@ -81,9 +105,9 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS, ripples = nul
     roughness: uniform(params.waterRoughness),
     sss: uniform(params.sss),
     refractStrength: uniform(params.refractStrength),
-    fogNear: uniform(0),
-    fogFar: uniform(110),
-    fogColor: uniform(new THREE.Color('#bdc7d1')),
+    fogNear: uniform(30),
+    fogFar: uniform(234),
+    fogColor: uniform(new THREE.Color('#95aac6')),
     sunAngularRadius: uniform(0.0047 * 2.5),
     debug: uniform(params.waterDebug || 0),
   };
@@ -198,12 +222,14 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS, ripples = nul
     // Haze follows the horizon angle, not a hard distance shelf. Far, nearly level
     // rays take the fog colour from the panel. Looking down stays clear: the angle term is zero.
     const elev = saturate(V.y);
-    const distT = smoothstep(W.fogNear, W.fogFar, dist);
+    // It comes on fast and then eases to full. From an eye 1.7 m up, everything past 100 m is
+    // within one degree of the horizon: a haze that grew evenly with distance was all in that
+    // last sliver of the picture, a line and not a fade.
+    const reach = saturate(dist.sub(W.fogNear).div(max(W.fogFar.sub(W.fogNear), 1)));
+    const distT = float(1).sub(pow(float(1).sub(reach), 4));
     const angleT = smoothstep(float(0.32), float(0.0), elev);
     const fog = distT.mul(angleT);
-    const hazeDir = normalize(vec3(V.x.negate(), float(0.045), V.z.negate()));
-    const skyHaze = pmremTexture(env, hazeDir, float(0.45)).rgb.mul(0.82);
-    const haze = mix(skyHaze, W.fogColor, float(0.75));
+    const haze = hazeToward(env, V.negate(), W.fogColor);
     out.assign(mix(out, haze, fog));
     If(W.debug.greaterThan(0.5), () => {
       out.assign(vec3(dist.div(10), select(camAbove, float(1), float(0)), abs(dot(Nw, V))));

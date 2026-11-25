@@ -29,6 +29,7 @@ import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
 import { bigOf, columnAt, crownAt, dropAt, landsAt, lifeOf, makeDrops } from '../src/shore/splashBurst.js';
+import { bitAt, foamOf, makeSpray } from '../src/shore/splashSpray.js';
 import { createWakeTrack } from '../src/shore/wakeTrack.js';
 import { FISH_WAKE, LINE_WAKE, marksOf, pieceOf } from '../src/shore/wakeMarks.js';
 import { APART, HEIGHT, MOST, SPEED, createRippleField, ringOf } from '../src/shore/rippleField.js';
@@ -1141,6 +1142,29 @@ check('splash: going in, a crown, then a taller column in the middle whose top c
   expect(spray.every((drop) => drop.size < 0.0065), 'thrashing: and its drops are small');
   // Harder and heavier is bigger, within bounds.
   expect(bigOf(0.3, 0.01) < full * 0.7 && bigOf(1, 0.2) > full * 1.4 && bigOf(1, 50) <= 2.4 + 1e-9, 'a soft drop is a smaller splash, a heavier thing a bigger one, and never past all bounds', `${bigOf(0.3, 0.01).toFixed(2)} / ${bigOf(1, 0.2).toFixed(2)} / ${bigOf(1, 50).toFixed(2)}`);
+});
+
+check('spray: a splash is hundreds of bits of water that fill its shape: going in a crown then a taller jet, coming out a low heap and drips, thrashing a low fan; none goes under, and a bigger one goes higher', () => {
+  const b = { x: 0, y: 0, z: 0, there: false };
+  // Over the life of a splash of this size: how high and how far out the bits of a kind of bit get, when the highest is, and the lowest any goes while it is there.
+  const flown = (kind, big, which) => { let high = 0, at = 0, far = 0, low = 0, n = 0; const bits = makeSpray(kind).filter(which); for (const bit of bits) { n += 1; for (let a = 0; a < 2.5; a += 0.004) { bitAt(bit, a, big, b); if (!b.there) continue; low = Math.min(low, b.y); far = Math.max(far, Math.hypot(b.x, b.z)); if (b.y > high) { high = b.y; at = a; } } } return { high, at, far, low, n }; };
+  const water = (bit) => bit.kind === 0, drop = (bit) => bit.kind === 1, all = () => true;
+  const o = { radius: 0, height: 0 }; let crownTop = 0, jetTop = 0;
+  for (let a = 0; a < 1; a += 0.002) { crownAt('in', a, 1, o); crownTop = Math.max(crownTop, o.height); columnAt('in', a, 1, o); jetTop = Math.max(jetTop, o.height); }
+  for (const kind of ['in', 'out', 'thrash']) {
+    const f = flown(kind, 1, all);
+    expect(f.n > (kind === "in" ? 120 : 200) && f.low > -0.0101, `${kind}: hundreds of bits, and none is drawn under the water`, `${f.n} bits, lowest ${f.low.toFixed(3)} m`);
+    expect(makeSpray(kind).every((bit) => bit.after + bit.life < lifeOf(kind) + 0.6), `${kind}: all of it is over soon after the splash is`);
+    expect(foamOf(kind).radius > 0.03 && foamOf(kind).life > 1, `${kind}: it leaves foam on the water for a second or more`);
+  }
+  const early = flown('in', 1, (bit) => water(bit) && bit.after < 0.05), late = flown('in', 1, (bit) => water(bit) && bit.after >= 0.05);
+  expect(early.high > crownTop * 0.6 && early.high < crownTop * 2 && late.high > jetTop * 0.6 && late.high < jetTop * 1.8 && late.high > early.high * 1.5 && late.at > early.at, 'going in: white water to about the height of the crown, then to about the height of the column, later', `${(early.high * 100).toFixed(0)} cm at ${early.at.toFixed(2)} s, then ${(late.high * 100).toFixed(0)} cm at ${late.at.toFixed(2)} s`);
+  const heap = flown('out', 1, water), drips = makeSpray('out').filter((bit) => bit.kind === 1 && bit.vy <= 0);
+  expect(heap.high < late.high && heap.far > early.far && drips.length > 30 && drips[drips.length - 1].after - drips[0].after > 0.5, 'coming out: a heap lower and wider than the jet, and drips let go over half a second', `${(heap.high * 100).toFixed(0)} cm up, ${(heap.far * 100).toFixed(0)} cm out, ${drips.length} drips`);
+  const fan = flown('thrash', 1, drop), sheet = flown('thrash', 1, water);
+  expect(fan.far > fan.high * 2 && sheet.far > sheet.high * 2 && sheet.high < late.high, 'thrashing: the sheet and its drops fly out further than up', `sheet ${(sheet.high * 100).toFixed(0)} up ${(sheet.far * 100).toFixed(0)} out, drops ${(fan.high * 100).toFixed(0)} up ${(fan.far * 100).toFixed(0)} out, cm`);
+  const big = flown('out', 2.2, water);
+  expect(big.high > heap.high * 1.6 && big.far > heap.far * 1.4, 'a bigger splash throws its water higher and wider', `${(big.high * 100).toFixed(0)} cm up, ${(big.far * 100).toFixed(0)} cm out`);
 });
 
 check('rings: a hit raises rings that run outward, get lower and die, add up, are bigger the harder and the heavier, and the same at any frame rate', () => {

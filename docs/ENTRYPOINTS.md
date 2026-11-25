@@ -182,7 +182,7 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 钩住的鱼待多深、被带上来多快、在水面侧翻多少、头抬多少、落回去摆尾多猛、尾巴多活 | [PLAY.md](./PLAY.md) 第 8 节，`src/play/posture.js` 顶部的常量 |
 | 遛鱼时鱼背破水、落回去算不算一下水花 | `src/play/surfacing.js` |
 | 水花多高、几种、水珠多少 | [SPLASH.md](./SPLASH.md) 第 3 节，`src/shore/splashBurst.js` |
-| 溅起来的水什么颜色、多透 | [SPLASH.md](./SPLASH.md) 第 4 节，`src/shore/sprayMaterial.js` |
+| 溅起来的水什么颜色、多透 | [SPLASH.md](./SPLASH.md) 第 4 节，`src/shore/sprayPool.js`（空中的水）、`src/shore/foamPatch.js`（水面的白沫） |
 | 线切水、鱼近水面带起的水珠：多快才有、多密、多大 | [SPLASH.md](./SPLASH.md) 第 8 节，`src/shore/wakeTrack.js`、`src/shore/wake.js` |
 | 鱼多浅才搅水面 | `src/play/catch.js` 的 `CHURN_TOP`、`CHURN_DEEP` |
 | 水面之后再画一层的东西 | `src/shore/startShore.js` 的 `onWater` |
@@ -242,7 +242,8 @@ HUD 状态行有 `plugin: true/false`。`false` = 仍在默认 `CAPBridgeViewCon
 | 鱼线：形状 | [LINE.md](./LINE.md)，`src/shore/lineCurve.js` |
 | 鱼线：外观、软硬、接到竿上 | `src/shore/line.js` |
 | 线在竿上走哪些点 | `src/shore/rod.js` 的 `linePath` 和导环表 |
-| 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js` |
+| 水面着色与雾 | `src/shore/minamo/ocean/waterMaterial.js`。天空脚下的雾也在这里（`makeHazedSky`），由 `startShore.js` 接到 `scene.backgroundNode` |
+| 用哪张天空 | `src/shore/startShore.js` 的 `params.hdri`，文件在 `public/assets/hdri/`。怎么换见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节"换天空贴图" |
 | 浪谱与浪高 | `src/shore/minamo/ocean/spectrum.js`、`ocean.js` 的 `waveScale` |
 | 鱼的摆幅和骨骼 | `src/fish/dorade.js` 的 `SPINE` 表 |
 | 渔轮的形状和尺寸 | `src/shore/reel.js` 顶部常量和各部件的轮廓表 |

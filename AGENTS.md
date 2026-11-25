@@ -22,10 +22,10 @@
 | 鱼线 | `docs/LINE.md`，`src/shore/line.js`，形状在 `src/shore/lineCurve.js` |
 | 饵 | `docs/LURE.md`，模型 `src/shore/lure.js`，怎么动 `src/shore/lureMove.js`，朝哪 `src/shore/lurePose.js` |
 | 抄网 | `docs/NET.md`，模型 `src/shore/net.js`，走的路 `src/play/scoop.js` |
-| 水花、水纹和涟漪 | `docs/SPLASH.md`。水面自己的起伏（涟漪，第 9 节）：算数 `src/shore/rippleField.js`，交给水面 `src/shore/ripples.js`，只认哪里、多重、多沉、多深；线、鱼、饵各留多大的尾迹在 `src/shore/wakeMarks.js`，多近算在水面上在 `src/shore/waterTop.js`。落水的水花：画 `src/shore/splash.js`，形状 `src/shore/splashBurst.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
+| 水花、水纹和涟漪 | `docs/SPLASH.md`。水面自己的起伏（涟漪，第 9 节）：算数 `src/shore/rippleField.js`，交给水面 `src/shore/ripples.js`，只认哪里、多重、多沉、多深；线、鱼、饵各留多大的尾迹在 `src/shore/wakeMarks.js`，多近算在水面上在 `src/shore/waterTop.js`。落水的水花：起一次 `src/shore/splash.js`，顺序和形状 `src/shore/splashBurst.js`，由哪些水组成 `src/shore/splashSpray.js`；空中的水长什么样、在哪 `src/shore/sprayPool.js`（水花和水纹共用一个池子），留在水面的白沫 `src/shore/foamPatch.js`。贴着水面划过去的纹（线入水的那一点、近水面的鱼）：画 `src/shore/wake.js`，多快多强 `src/shore/wakeTrack.js`，没有人打开它，只看那个点走多快。都放在海面上方，不动海面 |
 | 玩法 | `docs/PLAY.md`，玩法只有这一份设计：一竿怎么走、咬口和抬杆（第 7 节）、钩住的鱼的规则（第 8 节，开头有一张"钓手手上有几样，各管什么"）、还没定的（第 14 节）、提过的需求和出过的问题（第 16 节）。接线的三个：`src/play/fishing.js`（饵这一半和整竿走到哪）、`src/play/suitors.js`（钩住之前围着饵的鱼）、`src/play/catch.js`（钩住的鱼）。其余只算数，一个文件回答一个问题：`swing`、`retrieve`、`lineOut`、`looseLine`、`fishKind`、`allure`、`muster`、`outOfSight`、`visit`、`bite`、`strike`、`fright`、`flee`、`fight`、`course`、`onLine`、`sideStrain`、`posture`、`highRod`、`surfacing`、`shed`、`haul`、`lean`、`lowRod`、`thump`、`strain`、`reelClick`、`tipWeight`、`kick`、`scoop`，表在文档第 1 节。每条鱼不一样的数（力气、气力、甩头、多重）只写在 `fishKind.js` 的表里 |
 | 水面（Minamo，MIT） | `src/shore/minamo/` |
-| 资源 | `public/assets/`，路径前缀 `./assets/`。天空、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
+| 资源 | `public/assets/`，路径前缀 `./assets/`。天空（2026-11-25 换成深蓝少云的 `rustig_koppie_puresky`）、沙滩、石头是 CC0；鲷鱼模型是 CC BY，发布要署名 |
 | 单看一条鱼 | `fish.html` → `src/fish/preview.js` |
 | 设计舞台 | `src/adapt/design.ts` |
 | 设备预览 | `src/adapt/devicePreview.ts` |
@@ -61,7 +61,7 @@
 6. **Pad 只改外层视口**，不改 `DESIGN_*`。
 7. **改 Swift 改 `plugins/native-haptics/`** 再 `ios:bootstrap`。Capacitor 8 的 `SceneDelegate` 必须是 `BridgeViewController`。
 8. **无 WebGPU 则明确失败**，不静默 WebGL。Minamo 同样拒绝非 WebGPU。
-9. **水面外观已定，先不要改；水对碰它的东西要有反应。** 外观指样式和颜色（2026-11-25 说明）：不要换掉三层 256² FFT，也不要再调浪高、雾、粗糙、曝光、太阳和反射压暗，数值见 `docs/ENGINEERING.md` 第 6 节。反应分两样：溅起来的水（水花、水珠）放在海面上方另加，半透明的放进 `startShore` 的 `onWater` 场景，放进主场景会在水面上留洞；水面自己的起伏（涟漪）是唯一写进水面的东西，接在水面材质的 `ripples` 上，只加高度和倾斜，颜色和光照的算法不动。水面上的东西让水面猛地动，水下的只让它缓缓地动，出了水面的不动它。见 `docs/SPLASH.md` 第 2、9 节。
+9. **水面外观已定，先不要改；水对碰它的东西要有反应。** 外观指样式和颜色（2026-11-25 说明）：不要换掉三层 256² FFT，也不要再调浪高、粗糙、曝光、太阳和反射压暗（2026-11-25 试着重定过一轮，手机上不好，回滚了；只留下新天空和那一版的雾：天空脚下和远处的水用同一种雾），数值见 `docs/ENGINEERING.md` 第 6 节。反应分两样：溅起来的水（水花、水珠）放在海面上方另加，半透明的放进 `startShore` 的 `onWater` 场景，放进主场景会在水面上留洞；水面自己的起伏（涟漪）是唯一写进水面的东西，接在水面材质的 `ripples` 上，只加高度和倾斜，颜色和光照的算法不动。水面上的东西让水面猛地动，水下的只让它缓缓地动，出了水面的不动它。见 `docs/SPLASH.md` 第 2、9 节。
 10. **包名保持 `com.wangzhixuan.fishing`**。模板 id `com.wangzhixuan.pwgbase.hapticstest` 会覆盖别的已装 App。
 11. **物料里不写玩法。** 每样东西只做自己的物理，能用统一规则的不写特殊规则，由力决定的事不用时钟和开关（`docs/CONVENTIONS.md` 第 3 节开头）。 水面、鱼群、鱼竿、鱼线、饵、水花、水纹、涟漪、抄网不含抛投、咬口和拔河；深了变成什么样、多近算在水面，是物料的事，玩法只报东西在哪、多重、多深、使了几成劲。规则只写在 `src/play/`，只通过物料留的口子动物料；口子的表在 `docs/CONVENTIONS.md` 第 1 节。物料只报数，这个数意味着什么由玩法判断；什么时候、多用力归玩法，成什么样归物料。镜头不由玩法直接动，玩法只报出要看的点 `fishing.watch`。
 12. **鱼不横移，动作连续，没有人指挥鱼群。** 没被取走的鱼每条自己拿主意，只看身边的鱼和它待的那片水；不加整群的朝向、深度、节奏，也不加整群共用的钟（`docs/FISH-SCHOOL.md` 第 2 节）。 行为只写目标：朝向、速度、深度，和姿势（侧躺多少、鼻尖被带起多少、猛摆尾多少），由 `src/fish/swim.js` 游过去。不要直接改鱼的位置和姿势。例外有三个：出了水、挂在线上的鱼，走鱼群的 `hang` 和 `keep`（`docs/FISH-SCHOOL.md` 第 7 节）；备用的鱼进水出水走 `bring` 和 `dismiss`，只许在看不见的地方（第 6 节）；钩住、还在水里的鱼可以被线整条拖着走（`aim.towX`、`aim.towZ`），它自己游的那一份仍只沿鼻尖，拖它的只能是线、只能朝竿尖（2026-11-24，`docs/PLAY.md` 第 8 节）。
@@ -112,7 +112,8 @@ npm run ios           # sync 并打开 Xcode
 - 饵的重量不压竿（竿按鱼的力调硬以后更是这样）。落水以后水面上读得出饵在哪的只有它被拖着走时那一道很轻的缓纹，停着或下沉时读不出。十几米外水下的鱼很淡。见 `docs/LURE.md` 第 6 节。
 - 竿的软硬跟着鱼的力定（`docs/ROD.md` 第 4 节的转角表，表里的牛顿数是乘六以前的）。出线点或者鱼的力再改时，要回来对这张表。
 - 水的反应（`docs/SPLASH.md`）还差：饵下沉时的气泡和越深越淡；鱼落网、网入水不砸水；圈不会被石头挡回来；鱼和线同时拖尾迹时同时近四十条在算，手机上的帧率没有数；镜头要是会下水，镜头前那条水线要补上涟漪。大小和强弱都是起点。
+- 海水的外观 2026-11-25 试着重定过一轮（水调浑、反射、浪、折射），电脑截图里看着好，手机上不好，回滚了，只留下新天空和雾。当时量到的两个主因还在：水太清，五米半的海底看得清，读成浅水；水面反射掺了一半深蓝、又很粗糙，读不出有一层水面。要再做，一步一上手机（`docs/CONVENTIONS.md` 第 7 节）。那一轮的补丁在 `/tmp/fishing-backup-1125/`，是临时目录。
 - 音效（`docs/AUDIO.md`）。震动已有几处，轻重还没定；冲的整段一直轻震还没做（需求第 10 节）。
-- 水花还差：水冠和水柱是硬边的几何体，天光是一个定死的颜色；鱼出水的那堆水没有跟着鱼的身形。网兜是整体拉长的，没有拿网的手。
+- 水花 2026-11-25 重做成粒子（几百小团白水、水珠、水雾，加留在水面的白沫），比照实慢将近一倍、远处有保底的大小，都是为了读得出来，数是起点。还差：白水的颜色是定死的，不跟着天和太阳变；和水面相交处是硬切的；白沫不跟着浪起伏；手机上的帧率没有数；鱼出水的那堆水没有跟着鱼的身形。网兜是整体拉长的，没有拿网的手。
 - 线只有 70 米，真的线轮一般一百五十米以上。船没有画。
 - Android。

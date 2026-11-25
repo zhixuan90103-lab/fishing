@@ -2,9 +2,13 @@
  * The shape of one splash over time: the crown, the column that jumps up in the middle,
  * and where each drop is and how big.
  *
- * Owns: the two kinds of splash, the table of drops each throws, and the closed forms
+ * Owns: the three kinds of splash, the table of drops each throws, and the closed forms
  * that say where everything is `age` seconds after it.
- * Does not own: drawing (splash.js), when a splash happens, how strong or of which kind
+ * The crown and the column are a skeleton, not things that are drawn (they were, as a
+ * ring and a spike, until 2026-11-25): splashSpray.js throws white water to fill them,
+ * as high and as late as they say. The drops here are the few that are followed one by
+ * one, so that each can ring where it lands.
+ * Does not own: what a splash is made of (splashSpray.js), drawing (sprayPool.js), when a splash happens, how strong or of which kind
  * (the caller), the rings on the water (rippleField.js), or the sea itself. The ocean is
  * not touched: this is laid on top of it.
  * No Three, no scene: it runs in Node. Design: docs/SPLASH.md section 3.
@@ -128,6 +132,11 @@ const KINDS = {
   },
 };
 const kindOf = (kind) => KINDS[kind] || KINDS.in;
+
+// The shape of a kind of splash, for what fills it with water (splashSpray.js).
+export function shapeOf(kind) {
+  return kindOf(kind);
+}
 
 export function lifeOf(kind) {
   return kindOf(kind).life;

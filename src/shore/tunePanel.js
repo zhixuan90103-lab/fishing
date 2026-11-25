@@ -31,7 +31,7 @@ export function mountTunePanel(container, tune, hooks) {
   const fields = [
     ['雾', [
       ['起始', 'fogNear', 0, 80, 1],
-      ['结束', 'fogFar', 10, 200, 1],
+      ['结束', 'fogFar', 10, 400, 1],
     ]],
     ['水', [
       ['风速', 'windSpeed', 0.4, 8, 0.1, true],

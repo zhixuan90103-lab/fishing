@@ -8,13 +8,15 @@ import * as THREE from 'three/webgpu';
 import { params, applyUrl, QUALITY } from './minamo/params.js';
 import { Ocean } from './minamo/ocean/ocean.js';
 import { makeOceanNodes, updateOceanUniforms } from './minamo/ocean/oceanNodes.js';
-import { makeWaterMaterial, makeRadialGrid } from './minamo/ocean/waterMaterial.js';
+import { makeWaterMaterial, makeRadialGrid, makeHazedSky } from './minamo/ocean/waterMaterial.js';
 import { loadSky, buildWorld, SHADOW_LAYER } from './minamo/scene/world.js';
 import { createShoreSchool } from '../fish/school.js';
 import { ROD_POSE, createSpinningRod } from './rod.js';
 import { createFishingLine } from './line.js';
 import { createLure } from './lure.js';
 import { createSplash } from './splash.js';
+import { createSprayPool } from './sprayPool.js';
+import { createFoamPatch } from './foamPatch.js';
 import { createRipples } from './ripples.js';
 import { createWake } from './wake.js';
 import { createWakeTrack } from './wakeTrack.js';
@@ -40,6 +42,8 @@ export async function startShore(container, hooks = {}) {
 
   const query = applyUrl(params);
   if (!query.has('quality')) Object.assign(params, QUALITY.medium);
+  // The sky: deep blue, a few small clouds, the sun 28 degrees up. Poly Haven, CC0.
+  params.hdri = 'rustig_koppie_puresky_4k';
   // Calm water for the fishing spot. Land is +z, open sea is -z.
   params.windSpeed = 0.8;
   params.swellHeight = 0;
@@ -114,6 +118,8 @@ export async function startShore(container, hooks = {}) {
     external(device.createTexture({ size: [1, 1], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING }), true),
     ripples,
   );
+  // The foot of the sky takes the same haze the far water fades to: no line where they meet.
+  scene.backgroundNode = makeHazedSky(sky.texture, water.uniforms.fogColor);
   const waterGrid = makeRadialGrid();
   const waterScenes = [water.backMaterial, water.material].map((m) => {
     const mesh = new THREE.Mesh(waterGrid, m);
@@ -144,9 +150,9 @@ export async function startShore(container, hooks = {}) {
   const camera = new THREE.PerspectiveCamera(params.fov, 390 / 844, 0.05, 20000);
   camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
   const tune = {
-    fogNear: 0,
-    fogFar: 110,
-    fogColor: '#bdc7d1',
+    fogNear: 30,
+    fogFar: 234,
+    fogColor: '#95aac6',
     windSpeed: params.windSpeed,
     swellHeight: params.swellHeight,
     choppiness: params.choppiness,
@@ -260,18 +266,22 @@ export async function startShore(container, hooks = {}) {
   // Things lying on the water that are see-through. Drawn after the water, or they would
   // be blended with the sea bed and left as holes in it.
   const onWater = new THREE.Scene();
+  // Foam left lying where the water was broken, and over it every bit of water in the air.
+  const foam = createFoamPatch();
+  onWater.add(foam.object);
+  const spray = createSprayPool();
+  spray.lit(sun.dir);
+  onWater.add(spray.object);
   // A drop of spray that falls back in makes its own small ring. ripples is made further up.
-  const splash = createSplash((x, z, strength, weight) => ripples.poke(x, z, strength, weight));
-  onWater.add(splash.object);
+  const splash = createSplash(spray, foam, (x, z, strength, weight) => ripples.poke(x, z, strength, weight));
   // The line cutting the water where it goes in, and a fish churning it near the top.
   // What each leaves on the water as it goes is in wakeMarks.js.
   // The line throws no spray (taken out 2026-11-25: with the fish's a few metres beyond
   // it, the two lots of drops read as one thing at two heights). It only marks the water.
   const lineWake = createWakeTrack(0, Math.random, marksOf(LINE_WAKE, ripples));
-  const fishWake = createWake(1.6, 64, marksOf(FISH_WAKE, ripples));
+  const fishWake = createWake(1.6, 64, marksOf(FISH_WAKE, ripples), spray);
   // The lure drawn along under the water throws no spray either. Play leads its wake.
   const lureWake = createWakeTrack(0, Math.random, marksOf(LURE_WAKE, ripples));
-  onWater.add(fishWake.object);
   // The cast: it alone says where the line ends, how much is out, where the view looks
   // and which fish is on the line.
   const net = createNet();
@@ -423,6 +433,8 @@ export async function startShore(container, hooks = {}) {
     if (line.wet) lineWake.follow(dt, line.entry.x, line.entry.z);
     else lineWake.lift(dt);
     fishWake.update();
+    foam.update(dt);
+    spray.update(dt);
     if (fishingBegun) {
       fishing.follow();
       readoutIn -= 1;
