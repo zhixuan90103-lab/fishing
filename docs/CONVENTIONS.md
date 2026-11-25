@@ -26,7 +26,8 @@
 | 渔轮 | `rod.reel.wind(米)`，或单独转 `rotor` / `handle`、移 `spool` | — | [ROD.md](./ROD.md) 第 7 节 |
 | 鱼线 | `setEnd`（远端是一个地方）或 `carry`（远端是挂在线上的重物）、`setLength` / `tighten`、`stow`、`setTied`。玩法现在不调 `tighten` | `tension`、`stiffness`、`tip`、`end`。`slack` 线也报，玩法现在不读 | [LINE.md](./LINE.md) 第 4 节 |
 | 饵 | `lureMove` 的 `hold` / `launch` / `fly` / `tow` / `point`，在鱼嘴里时 `place`，出了水交给线带着并用 `weigh` 说钩上有多重，停着时 `upright` 让它头朝下；`lure.place`；线上没有饵了 `lure.show(false)`。`flutter` 也留着，玩法现在不调 | 位置、速度、鼻尖和背的朝向（`nose`、`back`）、`swum`、`impact`、`gap(竿尖)` 离竿尖多远、`sank` 这一帧沉下去多少 | [LURE.md](./LURE.md) 第 5 节 |
-| 水花 | `burst(x, z, 力度)` | — | [SPLASH.md](./SPLASH.md) 第 5 节 |
+| 水花 | `burst(x, z, 力度, 重量)`；水下的一下只起圈不起水花是 `stir(x, z, 力度, 重量, 多深)` | — | [SPLASH.md](./SPLASH.md) 第 5 节 |
+| 涟漪 | `poke(x, z, 力度, 重量, 多深)`；走着的东西是 `trail(…, 朝哪, 多快, 多深)`，由水纹叫。玩法不直接拿它：`startShore` 把它和水花的 `burst` 接在一起 | — | [SPLASH.md](./SPLASH.md) 第 9 节 |
 | 水纹 | `track.follow(dt, x, z, 几成)`、`track.lift(dt)`。线的那一个不归玩法，`startShore` 直接接 `line.entry` | — | [SPLASH.md](./SPLASH.md) 第 8 节 |
 | 抄网 | `place(x, y, z, 柄的方向, 网兜拉多长, 晃多少)`、`hide()`；路径是玩法这边的 `scoop.js` | — | [NET.md](./NET.md) 第 5 节 |
 | 手机瞄准 | 玩法报出 `fishing.watch`（要镜头看着的点）和 `fishing.watchRod`（看的时候要不要把竿留在画面里） | 镜头的朝向和俯仰（`viewYaw`、`viewPitch`）；手机自己往上倾了多少度（`raised`，抬杆读它，是 `phoneLook` 的俯仰，不经过镜头和竿） | [PHONE-LOOK.md](./PHONE-LOOK.md) 第 5 节 |
@@ -227,7 +228,7 @@
 | 玩法 | 饵这一半：`swing`（甩多用力）、`retrieve`（收多快）、`lineOut`（线放出多长）、`looseLine`（没有东西在收的线：让、跟、搭）→ `fishing`（这一竿走到哪）。饵边的鱼：`allure`（饵这样动招不招鱼）、`muster`（一竿要几条、下一条什么时候补）、`outOfSight`（哪里看不见、补在哪）、`visit`（鱼在饵边怎么游）、`bite`（这一口）、`fright`（吓多少、受得住多少）、`flee`（跑多快多远）→ `suitors`。钩住的鱼：`fishKind`（这条鱼是什么样）、`strike`（算不算抬杆）、`fight`（用多大力）、`onLine`（线上的鱼怎么动）、`course`（这一冲想往哪去）、`sideStrain`（反着带竿刹几成）、`shed`（钩甩掉没有）、`haul`（顶着鱼收多快、出多少线）、`lean`（硬顶叠多少力）、`lowRod`（压竿多顶多少）、`thump`（甩头把线顿多重）、`strain`（手多吃力）、`reelClick`（手里咔不咔）、`tipWeight`（鱼压竿多重）、`kick`（鱼甩多用力）、`scoop`（抄网走到哪）→ `catch`。`fishing` 驱动 `catch`，`catch` 驱动 `suitors`，三个都 → 物料的口子 |
 | 手机瞄准 | `phoneLook`（读姿态）→ `aim`（镜头追什么，剩下的给竿；`handLag` 说逆着线的力手欠多少）→ 镜头，以及 `rodHold`（握）；`startShore` 的 `applyPhone` 串一帧 |
 
-- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下（含 `hung.js`）、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`splashBurst.js`、`wakeTrack.js`、`phoneLook.js`、`aim.js`、`handLag.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
+- **模拟和渲染分开。** 算数的那几层不引 Three，可以在 Node 里跑：`flock.js` 往下（含 `hung.js`）、`rodBeam.js`、`rodFlex.js`、`lineCurve.js`、`lureMove.js`、`splashBurst.js`、`wakeTrack.js`、`rippleField.js`、`phoneLook.js`、`aim.js`、`handLag.js`，以及 `src/play/` 下的全部。只用 Three 的数学、不碰场景的（`rodHold.js`）也算在算数这一边。
 - **玩法也分"只算数的"和"接线的"。** 只算数的各回答一个问题，互相不知道对方，也不认识物料，表在 [PLAY.md](./PLAY.md) 第 1 节。认识物料的只有三个：`fishing.js` 管饵这一半和整竿走到哪一段，`suitors.js` 管钩住之前围着饵的鱼，`catch.js` 管钩住的鱼。新的规则先想它回答的是哪个问题，写成新的只算数的文件，再到这三个里接：没有鱼时的事进第一个，钩住之前的事进第二个，钩住以后的事进第三个。接线的文件长了，先看是不是里面混着一段该单独回答的问题。
 - **位置和朝向分开放。** 一样东西在哪、怎么动是一问，它朝哪是另一问。朝向的规矩多起来（摆、翻、不许翻面）就单独成文件：`lurePose.js`、`rodHand.js`、`hung.js`。
 - **松紧、快慢这类状态不许被告知，也不许按时间走。** 一样东西有多松、多快变紧，要是有原因的：什么事留下的，什么力带走的。给它一个开关再配一个固定的快慢，不管调成多少，看着都是规则限制出来的，而且从一种样子到另一种没有过程。鱼线试过四种这样的做法，都被否了（[LINE.md](./LINE.md) 第 3 节"试过不行的"）。
@@ -282,7 +283,7 @@
 - **半透明的东西不放进主场景。** 主场景先画，水面后画，盖在已有的东西上。半透明的东西在主场景里会先和海底混在一起，再在水面上留下一个洞。落在水面上的半透明物放进 `startShore.js` 的 `onWater` 场景，它在水面之后画。测深度，不写深度。见 [SPLASH.md](./SPLASH.md) 第 2 节。
 - **鱼线是写明的例外。** 它半透明，却在主场景里：线有一段在水下，要先于水面画出来，才能隔着水看见、被水染淡。挪到 `onWater` 水下那一段就没了，或者压在水面上。代价是水上那一段是和水面之前的背景混的，不是和它身后的水面混的；线只有一个像素宽，2026-11-24 记下时没有在截图上看出洞。见 [LINE.md](./LINE.md) 第 4 节。
 - **不透明的可以放主场景。** 抄网的网兜是不透明的细线，在主场景里，看得见里面的鱼。只有半透明的才要挪到 `onWater`。
-- **不为了局部的效果改海面。** 水花、涟漪、泡沫都是放在海面上方的东西，不动 `src/shore/minamo/`。
+- **不为了局部的效果改海面的样子。** 外观指样式和颜色（2026-11-25 说明）。水花、水珠、泡沫是放在海面上方的东西。涟漪是水面自己的起伏，接在 `waterMaterial.js` 的 `ripples` 上，只加高度和倾斜；除此之外不动 `src/shore/minamo/`。
 - **大小按真实的东西定，远处放大要有上限。** 10 克的饵落水是一个小"噗通"。为了远处看得见可以按距离放大一点，放多了看起来就是另一样东西落了水。
 - **颜色是场景线性的。** 渲染器不做色调映射，曝光在后期里而且远小于 1，要出来是白的得比 1 亮一些。
 
@@ -313,7 +314,7 @@
 |---|---|---|
 | `npm run check` | 常驻的检查。Node 里用真的玩法、真的鱼群、真的握和竿身跑，两分钟上下，现在五十项 | 手感、观感，以及只在页面里画的东西 |
 | `npm run record` | 把三十二竿每一帧的状态折成散列（每条鱼的位姿和状态、饵、线、竿、震动、玩法的读数、饵边每条鱼的想法）。只整理结构时前后各跑一遍，逐行相同才算没改行为 | 线怎么画、镜头怎么转：它们不在录的范围里，靠对应的检查和页面 |
-| `npm run shot` | 在无头 Chrome 里把真的页面跑起来截图：不带参数是一张静止的画面，带 `fight` 是抛一竿、等到钩在鱼嘴里时按键抬杆、把遛鱼的过程一张张拍下来，同时记下设置面板那一行读数。按手机的分辨率拍。`checks/shot.mjs` | 无头时帧率很低，游戏跟着慢：看得出画成什么样，看不出快慢。很淡的东西（十几米外水下的鱼）截图里比手机上更难认 |
+| `npm run shot` | 在无头 Chrome 里把真的页面跑起来截图：不带参数是一张静止的画面，带 `cast` 是抛一竿、从饵落水起连着拍水面，带 `fight` 是抛一竿、等到钩在鱼嘴里时按键抬杆、把遛鱼的过程一张张拍下来，同时记下设置面板那一行读数。按手机的分辨率拍。`checks/shot.mjs` | 无头时帧率很低，游戏跟着慢：看得出画成什么样，看不出快慢。很淡的东西（十几米外水下的鱼）截图里比手机上更难认 |
 | 真机 | 手感、震动、手机瞄准、动起来好不好看。用户每次改完都试 | — |
 
 **先跑常驻的检查：`npm run check`。** 它在 Node 里用真的玩法、真的鱼群、真的握和竿身跑，一分钟以内。每一项要么是出过的错，要么是设计文档里的一句承诺，写成了会失败的检查。改了 `src/` 就跑；出了新的错，修的同时加一项，让它不能再悄悄回来。它判断不了手感和观感。

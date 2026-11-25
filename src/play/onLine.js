@@ -102,18 +102,53 @@ const SLOW = 8;
 
 // ---------------------------------------------------------------- how deep
 
-// A hooked fish keeps to one depth, KEEPS_DEPTH, m, from the bite to the net: run or
-// rest, far off or by the boat. It gets away by going far, not by going down. The eye is
-// 1.7 m above the water, so depth reads as distance: a fish fifteen metres off that goes
-// two and a half metres down lands in the picture where one six metres off would be.
-// When it dived in a run and rose to rest, every run read as a lunge at the camera and
-// every rest, hauled nearer, as backing away; and rising shortened the way to the rod
-// tip, so the line fell slack at each rest. (Until 2026-11-24: to -2.9 in a run far off,
-// -0.5 at rest.)
-const KEEPS_DEPTH = -0.6;
-// The shallowest it may go, m.
-const SHALLOWEST = -0.25;
-// Hooked deeper than that, on a lure left to sink, it comes up to it once: this fast,
+// A hooked fish hangs at KEEPS_DEPTH, m, from the bite to the net: run or rest, far off
+// or by the boat. It gets away by going far, not by going down. It comes up only as the
+// angler brings it up with a raised rod (highRod.js): all the way, it is at the top of
+// the water, riding the rod's spring up and down about it (UP_UNDER), where it cuts the water and
+// its wake is on it
+// (docs/SPLASH.md section 9: a thing under the water does not mark it).
+// The eye is 1.7 m above the water, so depth reads as distance: a fish fifteen metres off
+// that goes two and a half metres down lands in the picture where one six metres off
+// would be. When it dived in a run and rose to rest, every run read as a lunge at the
+// camera and every rest, hauled nearer, as backing away. (Until 2026-11-24: to -2.9 in a
+// run far off, -0.5 at rest. Then one depth, -0.6, then -0.35. For some hours on
+// 2026-11-25 it came up by itself in every run; the angler asked for it to be the rod's
+// doing.)
+const KEEPS_DEPTH = -0.35;
+// Held up at the top by the line, the rod holds it with its back UP_UNDER m under the
+// water, and it rides the rod's spring up and down from there (highRod.js): down a
+// hand's breadth when it snatches the line, up when the rod throws it back, and its back
+// may come out of the water by OUT_MOST m and no more.
+// Tried and thrown out the same day: swinging it up and down by the clock. It looked
+// like what it was.
+const UP_UNDER = 0.06;
+const OUT_MOST = 0.07;
+// Held up by the mouth with its back at the top of the water, a fish cannot keep upright:
+// it is laid over on its side, and its flank shows. It begins to go over with its back
+// within LIES_FROM m of the surface and is LIES_MOST radians over, most of the way flat,
+// with its back as far out as it goes. Dropped back in, it rights itself, and drives down
+// with a few great strokes of its tail: it thrashes as hard as it is falling, all out at
+// FALLS m/s, and that dies away in THRASH_FOR s.
+const LIES_FROM = 0.05;
+const LIES_MOST = 1.25;
+const FALLS = 0.35;
+const THRASH_FOR = 0.45;
+// A hooked fish's tail works harder than its pull on the line says: it is fighting the
+// hook whether or not it gets anywhere. Its tail effort is its pull's share of its
+// freshest, to this power: a rest at a fifth of its pull beats at near a half, a run
+// at four fifths beats at near nine tenths. (1 until 2026-11-25: resting, its tail hardly
+// moved, and it looked like a model being towed.)
+const TAIL_KEEN = 0.45;
+// How far a fish's back stands over its middle, m, for a body of size 1 (0.45 m long,
+// about a third as deep as it is long).
+export const BACK_OVER = 0.08;
+// Brought up by the line it needs no speed of its own: it comes up this fast, 1/s. Nor
+// going down: let down again it sinks back to where it hangs at SINKS, 1/s. (Without
+// that a fish that stopped under the surface stayed there.)
+const LIFTED = 14;
+const SINKS = 0.8;
+// Hooked deeper than that, on a lure left to sink, it comes up to it: this fast,
 // 1/s, and no steeper than this share of the speed it is making, so it swims up and is
 // not lifted.
 const RISE = 0.9;
@@ -127,6 +162,11 @@ export function createOnLine(fight) {
   // at the rod tip, and how far it was from under the tip when that was last reckoned.
   let led = 0;
   let farWas = -1;
+  // Which side it goes over on at the top, 1 its right side down, -1 its left; how hard
+  // it is thrashing, 0 to 1; and how deep it was last frame.
+  let lieSide = 1;
+  let thrash = 0;
+  let wasY = null;
 
   return {
     /**
@@ -156,9 +196,11 @@ export function createOnLine(fight) {
      * winding: how fast line is coming in, m/s. holds: the most tension the reel holds
      * before it gives line, N.
      * across: how fast it is swimming across the line, m/s, positive to the left of the
-     * line out to it: its own course. dt: the frame, s.
+     * line out to it: its own course. dt: the frame, s. lifted: how much of the way up
+     * to the top of the water a raised rod is bringing it, 0 to 1, and rides: how far up
+     * of there the rod's spring has it, m (highRod.js).
      */
-    steer(fish, aim, to, stretch, stiffness, winding, holds, across, dt = 0) {
+    steer(fish, aim, to, stretch, stiffness, winding, holds, across, dt = 0, lifted = 0, rides = 0) {
       const running = fight.running;
       const ox = to.x;
       const oz = to.z;
@@ -233,8 +275,22 @@ export function createOnLine(fight) {
       aim.speed = running
         ? speed * (C_KEEPS + (1 - C_KEEPS) * faced * faced * (3 - 2 * faced))
         : speed * (keeps + (1 - keeps) * facing);
-      aim.y = KEEPS_DEPTH;
-      aim.top = SHALLOWEST;
+      // Where it hangs, or as far up from there as the rod is bringing it, and up and
+      // down of that as the rod's spring has it. The highest it may go: its back out.
+      const back = BACK_OVER * (fish.size || 1);
+      aim.y = KEEPS_DEPTH + (-(UP_UNDER + back) - KEEPS_DEPTH) * lifted + rides;
+      aim.top = OUT_MOST - back;
+      // At the top, held up, it is laid over on its side: the further its back is out,
+      // the further over. It goes over away from the line, whichever side it is on.
+      const backUnder = Number.isFinite(fish.y) ? -fish.y - back : 1;
+      const over = lifted * Math.min(1, Math.max(0, (LIES_FROM - backUnder) / (LIES_FROM + OUT_MOST)));
+      if (over < 0.02) lieSide = ox * Math.cos(fish.yaw) - oz * Math.sin(fish.yaw) >= 0 ? 1 : -1;
+      aim.lie = lieSide * LIES_MOST * over * over * (3 - 2 * over);
+      // Falling back in, it thrashes.
+      const fell = wasY !== null && dt > 0 && Number.isFinite(fish.y) ? (wasY - fish.y) / dt : 0;
+      wasY = Number.isFinite(fish.y) ? fish.y : null;
+      thrash = Math.max(thrash * Math.exp(-dt / THRASH_FOR), lifted * Math.min(1, Math.max(0, fell / FALLS)));
+      aim.thrash = thrash;
       // However hard it is being turned, it cannot come round tighter than its speed lets it.
       // Hauled by the mouth it is swung as fast as it is hauled.
       const tightest = (Math.max(fish.speed || 0, -hauled) / ARC_RADIUS + PIVOT) / TURN_SWINGS;
@@ -249,7 +305,8 @@ export function createOnLine(fight) {
       // Coming to its depth it swims there: no steeper than its speed allows.
       const drop = Number.isFinite(fish.y) ? Math.abs(aim.y - fish.y) : 0;
       aim.rise = Math.min(RISE, RISE_SLOPE * (fish.speed || 0) / Math.max(drop, 0.05));
-      aim.effort = fight.effort;
+      if (Number.isFinite(fish.y)) aim.rise = Math.max(aim.rise, lifted > 0.05 ? LIFTED : aim.y < fish.y ? SINKS : 0);
+      aim.effort = Math.pow(Math.min(1, Math.max(0, fight.effort)), TAIL_KEEN);
     },
   };
 }

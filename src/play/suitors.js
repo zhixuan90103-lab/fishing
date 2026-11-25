@@ -42,7 +42,7 @@
 
 import { AFTER_A_BITE, GIVES_UP, createAllure, drawGoesAt, taste } from './allure.js';
 import { createBite, drawHunger } from './bite.js';
-import { bulkOf } from './fishKind.js';
+import { bulkOf, fishOf } from './fishKind.js';
 import { createFlee } from './flee.js';
 import { FRIGHT, NEAR, frightBeside, getsOver, nerveOf, wary } from './fright.js';
 import { between } from './maths.js';
@@ -78,9 +78,12 @@ const OFF_DEPTH = -2.6;
 /**
  * school: the fish, with fishes, take, giveBack, bring, dismiss and mouth. line: for its
  * tip. move: the lure's motion. out: the line out. haptics: optional. random: 0 to 1.
+ * water: optional, with stir(x, z, strength, weight, depth): the water over a bite.
  * species: which table of fishKind.js these fish are read off.
  */
-export function createSuitors({ school, line, move, out, haptics, random, species }) {
+export function createSuitors({ school, line, move, out, haptics, water = null, random, species }) {
+  // What the fish biting now weighs, kg: the water over it is told with each pluck.
+  let biterLoad = 0;
   const allure = createAllure();
   const bite = createBite(random);
   const muster = createMuster(random);
@@ -368,6 +371,7 @@ export function createSuitors({ school, line, move, out, haptics, random, specie
         biter = mind;
         mind.state = 'biting';
         bite.begin(mind.hunger, taste(lureSpeed), bulkOf(species, fish.size));
+        biterLoad = fishOf(species, fish.size).load;
         began = true;
       }
       if (!goer && keenest) {
@@ -376,7 +380,12 @@ export function createSuitors({ school, line, move, out, haptics, random, specie
         keenest.state = 'coming';
       }
       const what = biter ? bite.step(dt, taken) : null;
-      if (what === 'knock') haptics?.playTransient(bite.knock.intensity, bite.knock.sharpness);
+      if (what === 'knock') {
+        haptics?.playTransient(bite.knock.intensity, bite.knock.sharpness);
+        // The pluck stirs the water over it, as hard as the hand feels it: what shows of
+        // that from down there is the water's business.
+        water?.stir?.(move.x, move.z, bite.knock.intensity, biterLoad, -move.y);
+      }
       if (what === 'scraped') return hook();
       // The bite has passed and nobody struck: the fish stays, and will bite again.
       if (what === 'over') {

@@ -115,6 +115,8 @@ export function createFlock(fishes, { bodyLength = 0.45, random = Math.random, s
       aim.effort = null;
       aim.towX = 0;
       aim.towZ = 0;
+      aim.lie = 0;
+      aim.thrash = 0;
       if (fish.state === HELD) {
         aim.turn = TURN_ALONE;
         fish.brain(fish, aim, env, dt);

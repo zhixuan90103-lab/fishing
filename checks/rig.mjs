@@ -182,7 +182,9 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
   };
   // The real reading of a fish churning the water; only the drawing is left out.
-  const churn = createWakeTrack(48, seeded(seed + 77));
+  // What it leaves on the water as it goes is kept in wakeHits: how strong, how deep.
+  const wakeHits = [];
+  const churn = createWakeTrack(48, seeded(seed + 77), { every: 0.12, hit: (x, z, s, dx, dz, v, depth) => wakeHits.push({ t: time, s, depth }) });
   const fishing = createFishing({ rod, line, lure, splash, churn, school: noSchool ? null : school, net, haptics, random, spool });
   const input = { finger: false, sensor, viewYaw, viewPitch: tune.pitch, raised: null, lift: false };
   let time = 0;
@@ -194,7 +196,7 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
   const cam = { x: tune.x, z: tune.z, yaw: viewYaw, fov: 55, aspect: 390 / 844 };
 
   const rig = {
-    fishing, flock, fishes, rod, line, churn, events, rodState, lureSeen, dt,
+    fishing, flock, fishes, rod, line, churn, wakeHits, events, rodState, lureSeen, dt,
     // The rod raised d degrees: the phone aims it 30 below that, as ROD_POSE mounts it.
     setLift(d) { grip.setAim(d - 20, 0, 0); },
     get time() { return time; },

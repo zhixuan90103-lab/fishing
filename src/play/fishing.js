@@ -36,7 +36,7 @@
  *           line winds itself in.
  */
 
-import { createLureMove } from '../shore/lureMove.js';
+import { LURE_KG, createLureMove } from '../shore/lureMove.js';
 import { FISH_READOUT, createCatch } from './catch.js';
 import { STOW_LENGTH, createLineOut } from './lineOut.js';
 import { createLooseLine } from './looseLine.js';
@@ -47,7 +47,7 @@ import { SPEED_FULL, SPEED_MIN, castReach, createSwing, launchAngle } from './sw
 // the water and it hangs.
 const LIFT_WITHIN = 1.6;
 // A lure hitting the water this fast makes the biggest splash, m/s. A stopped cast that
-// just drops in makes a smaller one.
+// just drops in makes a smaller one. The water is told how hard and how heavy the thing is.
 const SPLASH_FULL = 14;
 // A finger lifted while the rod tip is still speeding up: the lure stays on the tip until
 // the tip is at its fastest, and no longer than this, s.
@@ -152,7 +152,7 @@ export function createFishing({ rod, line, lure, splash, churn = null, school = 
     // Where it really came down: the same place, unless the line was stopped short.
     spot.x = move.x;
     spot.z = move.z;
-    splash.burst(move.x, move.z, move.impact / SPLASH_FULL);
+    splash.burst(move.x, move.z, move.impact / SPLASH_FULL, LURE_KG);
     out.land(move.gap(tip));
     armed = !input.finger;
     lifted = false;

@@ -68,7 +68,9 @@ const ggx = (NdotH, a) => {
 // backdrop: ExternalTexture over Post.backdrop (opaque scene colour, linear view depth in alpha), copied before each
 // water side is drawn. nearS: ExternalTexture over Post.nearTex (r32float, signed height of the pixel's near-plane
 // point above the water, computed before the scene render). Swap both with setBackdrop / setNearS after a resize.
-export function makeWaterMaterial(O, env, params, backdrop, nearS) {
+// ripples: rings laid on the surface by whatever hits the water (src/shore/ripples.js), or null. They add a height
+// and a tilt to the surface; nothing about its colour or light is changed.
+export function makeWaterMaterial(O, env, params, backdrop, nearS, ripples = null) {
   const U = O.U;
   // drawn as two meshes, back faces first (main.js): the front faces refract a backdrop that already contains the
   // back faces, which gives crests their glassy look (this is what three.js's DoubleSide transparent path did)
@@ -93,7 +95,9 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
   const fade = O.L.map(L => saturate(float(2).sub(spacing.div(L.div(256).mul(2)))));
   const paramXZ = local.add(U.camXZ);
   const D = O.displacement(paramXZ, fade);
-  mat.positionNode = vec3(paramXZ.x.add(D.x), U.seaLevel.add(D.y), paramXZ.y.add(D.z));
+  // rings are faded out where the grid is too coarse to carry them, as the cascades are
+  const ringHeight = ripples ? ripples.at(paramXZ, spacing).z : float(0);
+  mat.positionNode = vec3(paramXZ.x.add(D.x), U.seaLevel.add(D.y).add(ringHeight), paramXZ.y.add(D.z));
   const vParam = varying(paramXZ, "vParamXZ");
   const vDxz = varying(D.w, "vDxz");
   const vHeight = varying(D.y, "vHeight");
@@ -101,7 +105,9 @@ export function makeWaterMaterial(O, env, params, backdrop, nearS) {
   mat.outputNode = Fn(() => {
     const camDist = length(cameraPosition.sub(positionWorld));
     const { S, F } = O.surface(vParam, smoothstep(4, 1.5, camDist));
-    const Nw = O.normalFrom(S, vDxz).toVar();
+    // the rings tilt the surface; the slope moments below stay the sea's own
+    const ring = ripples ? ripples.at(vParam, float(0)) : vec3(0);
+    const Nw = O.normalFrom(vec4(S.x.add(ring.x), S.y.add(ring.y), S.z, S.w), vDxz).toVar();
     // LEAN-style slope variance from the mip chain -> roughness (kills distant sparkle aliasing)
     const varX = max(F.z.sub(S.x.mul(S.x)), 0), varZ = max(F.w.sub(S.y.mul(S.y)), 0);
     const rough = clamp(sqrt(W.roughness.mul(W.roughness).add(varX.add(varZ).mul(0.5))), 0.02, 0.5).toVar();

@@ -55,6 +55,13 @@ const STROKE_HIGH = 2.0;  // Above this, amplitude capped
 const DRIVE_CAP = 0.85;   // High-speed amplitude cap (less than DRIVE_FLAT_OUT)
 // During acceleration, amplitude can exceed steady-state by this multiplier.
 const ACCEL_BOOST = 1.15;
+// A fish said to be thrashing (aim.thrash 1) beats its tail this much wider and this much
+// faster than its effort alone would have it: the few great strokes of a fish driving
+// down from the top of the water.
+const THRASH_WIDE = 0.5;
+const THRASH_FAST = 0.6;
+// A fish said to lie over on its side (aim.lie) comes over, and rights itself, this fast, 1/s.
+const LIE_RATE = 7;
 
 export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -70,6 +77,7 @@ export function makeAim() {
   return {
     yaw: 0, speed: 0, y: 0, cruise: 0, turn: TURN_SCHOOL, accel: ACCEL_CRUISE,
     slow: COAST, rise: DEPTH_RATE, top: DEPTH_MAX, effort: null, towX: 0, towZ: 0,
+    lie: 0, thrash: 0,
   };
 }
 
@@ -203,6 +211,10 @@ export function writePose(fish) {
  * effort is how hard it is working whatever its speed, 0 to 1: its tail beats that wide,
  * and at least that fast, at top speed or held still alike. null, the school's, leaves
  * the tail to follow how hard it is trying to speed up.
+ * lie is how far over on its side it is laid, radians, positive its right side down,
+ * on top of the bank of its turn: a fish held up by the mouth at the top of the water.
+ * thrash is how much it is thrashing, 0 to 1: its tail beats wider and faster for it.
+ * Both are 0 for the school's fish.
  * crowdX/Y/Z is this fish's entry from measureCrowd.
  */
 export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
@@ -246,11 +258,13 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
       : Math.min(baseDrive, driveCap);
   }
 
-  fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-5 * dt));
+  const thrash = clamp(aim.thrash || 0, 0, 1);
+  driveAim *= 1 + THRASH_WIDE * thrash;
+  fish.drive += (driveAim - fish.drive) * (1 - Math.exp(-(thrash > 0 ? 12 : 5) * dt));
   const k = aim.speed > fish.speed ? aim.accel : aim.slow;
   fish.speed += (aim.speed - fish.speed) * (1 - Math.exp(-k * dt));
   // What its tail beats in step with: the water it covers, or its effort if that is more.
-  fish.stroke = Math.max(fish.speed, (aim.effort || 0) * STROKE_FLAT_OUT);
+  fish.stroke = Math.max(fish.speed, (aim.effort || 0) * STROKE_FLAT_OUT) * (1 + THRASH_FAST * thrash);
 
   const yawErr = wrapPi(aim.yaw - fish.yaw);
   const yawK = aim.turn + crowd * 4;
@@ -260,7 +274,8 @@ export function swimFish(fish, aim, crowdX, crowdY, crowdZ, rocks, dt) {
   const turn = dt > 0 ? yawStep / dt : 0;
   fish.yawRate += (turn - fish.yawRate) * (1 - Math.exp(-6 * dt));
   fish.bend = clamp(fish.yawRate * 0.55, -0.6, 0.6);
-  fish.roll += (clamp(-fish.yawRate * 0.3, -0.3, 0.3) - fish.roll) * (1 - Math.exp(-3 * dt));
+  const lie = aim.lie || 0;
+  fish.roll += (clamp(-fish.yawRate * 0.3, -0.3, 0.3) + lie - fish.roll) * (1 - Math.exp(-(lie !== 0 || Math.abs(fish.roll) > 0.35 ? LIE_RATE : 3) * dt));
 
   // Its own horizontal motion is along the nose and nothing else. A fish someone has on
   // a line may be hauled bodily as well, whichever way it faces: that is the line's doing

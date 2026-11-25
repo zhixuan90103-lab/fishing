@@ -26,4 +26,16 @@
 | 吸食时嘴前的流，Holzman、Wainwright，2009 | https://fishlab.ucdavis.edu/wp-content/uploads/sites/397/2020/05/Holzman-Wainwright-2009.pdf | 论文 | 咬是嘴前短促的流：先是头推开的水，嘴一张流反过来吸。扰动集中在猎物那一点，不推得很远 |
 | 表面波被动物探测 | https://en.wikipedia.org/wiki/Surface_wave_detection_by_animals | 其他 | 表面摄食的鱼循的是猎物在水面上发出的毛细波。敏感频率大约 10–250 Hz，峰值大约 75–150 Hz |
 
+2026-11-25 补的"尾迹"几行，为的是走着的东西在水面上该留什么形状：
+
+| 标题 | 链接 | 类型 | 用在哪 |
+|---|---|---|---|
+| 开尔文尾迹 | https://en.wikipedia.org/wiki/Kelvin_wake_pattern | 其他 | 深水里走着的东西身后是 V 形，两臂和中线各成约 19.47 度，和它多快无关 |
+| Ship wakes: Kelvin or Mach angle?，Rabaud、Moisy，2013 | https://arxiv.org/pdf/1304.2653 | 论文 | 航拍里快船的尾迹比 19.47 度窄，速度大时张角按速度的倒数变小，像马赫锥；转折在按船长算的弗劳德数 0.5 上下。0.4 米的鱼每秒 1 米就过了这个数 |
+| Physics World 对后续工作的报道 | https://physicsworld.com/a/physicists-rethink-celebrated-kelvin-wake-pattern-for-ships/ | 其他 | Darmon、Benzaquen、Raphaël：最外沿仍是开尔文角，最高的那一道随速度变窄。所以开尔文角当上限用 |
+| Mach-like capillary-gravity wakes | https://ar5iv.labs.arxiv.org/html/1406.0422 | 论文 | 很小的东西（细线这一档）快走时，尾迹同样是马赫锥那样的窄 V |
+| 钓友论坛：水面上移动的 V 形 | https://www.bassresource.com/bass-fishing-forums/topic/126654-v-shapes-moving-on-the-surface/ | 社区 | 近水面游的鱼在水面上留 V 形纹，前头有一个鼓包。是钓友的说法，没有测量 |
+
+这些支撑的判断：走着的东西留的是两条斜臂的 V，不是一串圆；慢的张到开尔文角，快的更窄。做成什么样见 [SPLASH.md](./SPLASH.md) 第 9 节。没有查到的：钩住的鱼冲的时候水面的照片或测量；鱼前头那个鼓包没有做。
+
 已查看、未写入上表：没有 0.3 毫米钓线的波高测量，所以不给线的浪高。SUBOFF 潜深到大约 3 到 4 个直径以后散开波看不清，那是艇体，不是鱼，不写进上表。

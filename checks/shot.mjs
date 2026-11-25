@@ -8,6 +8,7 @@
  *   npm run shot                      one picture of the view at rest
  *   npm run shot fight                cast, strike at the first bite that has the hook in, photograph the fight
  *   npm run shot fight rests 60       ...winding only while the fish rests, 60 pictures
+ *   npm run shot cast 16              cast, and photograph the lure landing and what the water does after, 16 pictures
  *
  * How the finger behaves in a fight: `able` (wind whenever line is not running out, the
  * default), `rests` (only while it rests), `always`, `never`.
@@ -24,9 +25,9 @@ import fs from 'node:fs';
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 5196;
 const DEBUG_PORT = 9336;
-const mode = process.argv[2] === 'fight' ? 'fight' : 'still';
+const mode = ['fight', 'cast'].includes(process.argv[2]) ? process.argv[2] : 'still';
 const policy = process.argv[3] || 'able';
-const most = Number(process.argv[4] || 40);
+const most = mode === 'cast' ? Number(process.argv[3] || 16) : Number(process.argv[4] || 40);
 const dir = process.env.SHOT_DIR || '/tmp/fishing-shots';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -64,6 +65,21 @@ try {
   if (mode === 'still') {
     await shoot('still');
     log.push('still');
+  } else if (mode === 'cast') {
+    // The finger is never put down again: the lure lies where it landed, and the water is left to itself.
+    const read = () => evaluate(`document.querySelector('.tune-cast')?.textContent || ''`);
+    const t0 = Date.now();
+    await key('keyDown'); await sleep(900); await key('keyUp');
+    let n = 0, wet = false;
+    for (let i = 0; i < 1200 && n < most; i += 1) {
+      await sleep(60);
+      const text = await read(); if (!text) continue;
+      if (!wet && text.split(' ')[0] !== 'water') { if ((Date.now() - t0) / 1000 > 60) break; continue; }
+      wet = true;
+      const name = String(n).padStart(3, '0'); await shoot(name); n += 1;
+      log.push(`${name} ${((Date.now() - t0) / 1000).toFixed(1)} s  ${text}`);
+    }
+    if (!wet) log.push('the lure never reached the water');
   } else {
     const read = () => evaluate(`document.querySelector('.tune-cast')?.textContent || ''`);
     const t0 = Date.now();

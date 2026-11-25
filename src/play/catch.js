@@ -29,7 +29,7 @@
 
 import { createCourse } from './course.js';
 import { createFight } from './fight.js';
-import { createOnLine } from './onLine.js';
+import { BACK_OVER, createOnLine } from './onLine.js';
 import { drawNature, fishOf } from './fishKind.js';
 import { RUN_OUT_AT, createHaul } from './haul.js';
 import { createKick } from './kick.js';
@@ -42,6 +42,7 @@ import { createStrike } from './strike.js';
 import { createSuitors } from './suitors.js';
 import { createLean } from './lean.js';
 import { createLowRod } from './lowRod.js';
+import { createHighRod } from './highRod.js';
 import { createStrain } from './strain.js';
 import { createThump } from './thump.js';
 import { LURE_KG } from '../shore/lureMove.js';
@@ -49,7 +50,7 @@ import { DRY_BY, DRY_FROM, LIMP_SHARE, dryness } from './tipWeight.js';
 
 // What this file reports about the fish, for tuning against a real hand: the names of
 // the read-only values on the object createCatch returns. fishing.js passes them on.
-export const FISH_READOUT = ['fish', 'braked', 'lowered', 'around', 'bite', 'hookIn', 'hunger', 'interest', 'fright', 'hookLoose', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
+export const FISH_READOUT = ['fish', 'braked', 'lowered', 'raised', 'around', 'bite', 'hookIn', 'hunger', 'interest', 'fright', 'hookLoose', 'mood', 'size', 'big', 'tension', 'pull', 'press', 'effort', 'running', 'stamina', 'landed'];
 // The one species in the water. Its numbers by size are in fishKind.js.
 const SPECIES = 'dorade';
 
@@ -57,16 +58,23 @@ const SPECIES = 'dorade';
 const DRY_CASTS = 3;
 // The line the reel holds, m, unless told otherwise. With this much out it gives no more.
 const SPOOL = 70;
-// A fish pulling near the top churns the water where it is: all of what its speed makes
-// at CHURN_TOP, m, and none of it deeper than CHURN_DEEP, and of that the share of its
-// freshest pull it is putting out now: it is the beating tail that throws water, and a
-// fish towed in limp throws next to none. There is no splash for the start of a run:
-// a fish that bolts near the top is fast and pulling, and that is the churn.
+// A fish that is pulling stirs the water over it, where it is: as much as its speed
+// makes, times the share of its freshest pull it is putting out now: it is the beating
+// tail that moves water, and a fish towed in limp moves next to none. There is no splash
+// for the start of a run. How far under the surface its back is goes with it: hanging
+// where it does, the water over it only swells, softly; brought up to the top by a raised
+// rod (highRod.js) it throws spray and cuts a sharp wake. What depth does to either is
+// the wake's and the rings' (src/shore/wakeTrack.js, rippleField.js), not this file's.
 // Tried without the share of its pull: a resting fish drawn in near the top showed as
 // much as a running one.
-// What it looks like is the wake's (src/shore/wakeTrack.js). churn: that wake's track.
-const CHURN_TOP = -0.5;
-const CHURN_DEEP = -2;
+// churn: that wake's track.
+// A fish drawn through the water by the line moves it whether it is working or not: its
+// wake is never less than this share of what a fish flat out makes at that speed. One
+// that is not moving makes none, whatever this says.
+const TOWED = 0.4;
+// Its mouth is this far under its middle, m, for a body of size 1: where its back is, is
+// reckoned from where its mouth is.
+const MOUTH_UNDER = 0.033;
 // While a fish is on, the point the view watches follows it at this rate, 1/s. Lower and
 // the view drifts after the fish and swings less with every turn it makes; too low and a
 // fish crossing at speed is out of the picture before the view has come round.
@@ -83,7 +91,11 @@ const LIFT_AS = 3.2;
 // in an instant: it tears free. All at once, the rod springs straight and flings the
 // bare lure up past its own tip.
 const COMES_OFF = 8;
-// The splash it makes breaking the surface, 0 to 1.
+// The splash it makes breaking the surface, 0 to 1. The water is told what breaks it:
+// the head and shoulders that come through first, this share of the fish's weight, not
+// the whole fish at once. (All of it until 2026-11-25: the rings from a big fish drawn
+// out ran 5 m, twice a thrown lure's.)
+const BREAKS_WITH = 0.1;
 const BREAK_SPLASH = 0.45;
 // The net comes from the angler's free side: this far back toward the angler for every
 // metre to the left.
@@ -105,6 +117,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const thump = createThump(random);
   const lean = createLean();
   const lowRod = createLowRod();
+  const highRod = createHighRod();
   const strain = createStrain();
   const scoop = createScoop();
   const click = createReelClick();
@@ -113,7 +126,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
   const shed = createShed(random);
   const sideStrain = createSideStrain();
   // The fish round the lure before one is hooked. Without a school there are none.
-  const suitors = school ? createSuitors({ school, line, move, out, haptics, random, species: SPECIES }) : null;
+  const suitors = school ? createSuitors({ school, line, move, out, haptics, water: splash, random, species: SPECIES }) : null;
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
@@ -166,7 +179,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     const wants = course.across(fight.running, fight.stamina, kind.dash, bearing.far);
     // A rod carried against the way this run heads takes some of that off.
     const own = wants * sideStrain.step(dt, line.tip, bearing, wants);
-    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt);
+    onLine.steer(fish, aim, bearing, stretch, line.stiffness, haul.speed, RUN_OUT_AT, own, dt, highRod.lifts, highRod.rides);
   };
 
   // The fish that came has the hook: struck while it was in its mouth, or scraped home
@@ -192,6 +205,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     thump.begin(kind);
     lean.begin();
     lowRod.begin();
+    highRod.begin();
     haul.reset();
     school.take(hooked, fightBrain);
     // A fish that can take line lands on the rod harder than one that cannot.
@@ -263,7 +277,7 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
     const dry = dryness(move.y);
     // Half out of the water: it feels the air and kicks, and the water breaks round it.
     if (kick.rise(dry)) {
-      splash.burst(move.x, move.z, BREAK_SPLASH);
+      splash.burst(move.x, move.z, BREAK_SPLASH, kind.load * BREAKS_WITH);
       haptics?.impact('medium');
     }
     hangDt = dt;
@@ -384,6 +398,10 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       return strain.effort;
     },
     // What a rod held low is adding to what the reel holds, N.
+    // How much of the way up to the top of the water the raised rod is bringing it, 0 to 1.
+    get raised() {
+      return hooked && !hung ? highRod.lifts : 0;
+    },
     get lowered() {
       return hooked && !hung ? lowRod.holds : 0;
     },
@@ -446,12 +464,16 @@ export function createCatch({ rod, line, splash, churn = null, school, net, hapt
       // A rod held low has its butt in it: the reel holds that much more. With the
       // finger's lean, this is what stands against the fish over the reel's own hold.
       haul.brace(lean.press + lowRod.step(dt, tip.y));
+      highRod.step(dt, tip.y, kind.load);
       // Its head shakes: a snatch on the line and in the hand.
       const shake = thump.step(dt, fight.running, fight.stamina);
       if (shake) haptics?.playTransient(shake.intensity, shake.sharpness);
       school.mouth(hooked, mouth);
       // Near the top and pulling, it churns the water, pointing the way it goes.
-      if (churn) churn.follow(dt, mouth.x, mouth.z, Math.min(1, Math.max(0, (mouth.y - CHURN_DEEP) / (CHURN_TOP - CHURN_DEEP))) * Math.min(1, fight.force / kind.runFresh));
+      if (churn) {
+        const backUnder = -mouth.y - (BACK_OVER + MOUTH_UNDER) * kind.size;
+        churn.follow(dt, mouth.x, mouth.z, Math.max(TOWED, Math.min(1, fight.force / kind.runFresh)), backUnder);
+      }
       tension = line.tension;
       // What the hand holds is the pull on the rod, read off the rod.
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);

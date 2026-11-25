@@ -42,6 +42,8 @@ Fishing/
 │   │   ├── lurePose.js     # 饵朝哪：鼻尖和背，摆、头朝下、侧翻。不依赖 Three
 │   │   ├── splash.js       # 水花：画水冠、水珠和圈
 │   │   ├── splashBurst.js  # 水花随时间的形状。不依赖 Three
+│   │   ├── rippleField.js  # 涟漪：水面在哪被砸过，哪一点现在多高多斜。不依赖 Three
+│   │   ├── ripples.js      # 涟漪：把这些数交给水面的着色器
 │   │   ├── wake.js         # 水纹：画贴着水面划过去的东西带起的水珠
 │   │   ├── wakeTrack.js    # 水纹：那个点多快、往哪走、水珠在哪。不依赖 Three
 │   │   ├── net.js          # 抄网的模型
@@ -72,6 +74,7 @@ Fishing/
 │   │   ├── haul.js         # 挂着鱼时线收多快，出线点，线出多少
 │   │   ├── lean.js         # 顶着出线的鱼按住叠多少力
 │   │   ├── lowRod.js       # 竿压得多低，渔轮多顶住多少
+│   │   ├── highRod.js      # 竿抬得多高，把鱼往水面带多少
 │   │   ├── thump.js        # 鱼甩头把线顿多重
 │   │   ├── strain.js       # 握竿的手多吃力
 │   │   ├── reelClick.js    # 渔轮在手里什么时候咔一下
@@ -180,7 +183,7 @@ renderer.setSize(390, 844)          // 始终设计分辨率
 - 陆地在 +z，海在 −z。没有传感器时拖画面改 yaw/pitch，并写回设置滑条。真机上视线和竿由手机姿态决定，设置面板的「镜头回正」把手机此刻的姿态当成默认视线，见 [PHONE-LOOK.md](./PHONE-LOOK.md)。
 - 资源在 `public/assets/`。代码许可在 `src/shore/minamo/LICENSE`（代码 MIT，Poly Haven 资源 CC0）。鲷鱼模型是 CC BY，见 [CONVENTIONS.md](./CONVENTIONS.md) 第 5 节。
 - 禁止 `setSize(innerWidth, innerHeight)` 跟窗走。
-- 落水的水花是放在海面上方的几何体，不算改水面，见 [SPLASH.md](./SPLASH.md)。它半透明，所以不在主场景里，在水面之后单独画的 `onWater` 场景里；半透明的东西放进主场景会在水面上留洞。还没做、也不算改水面：气泡、咬口涟漪。
+- 落水的水花是放在海面上方的几何体，不算改水面，见 [SPLASH.md](./SPLASH.md)。它半透明，所以不在主场景里，在水面之后单独画的 `onWater` 场景里；半透明的东西放进主场景会在水面上留洞。2026-11-25 加了涟漪：水面被砸一下自己起圈，接在水面材质的 `ripples` 上，只加高度和倾斜，上表的数没有动，见 [SPLASH.md](./SPLASH.md) 第 9 节。还没做：气泡、咬口和别的接触的涟漪。
 - 岸边鱼群已接上，规范在 [FISH-SCHOOL.md](./FISH-SCHOOL.md)。游动在 `src/fish/` 下分层，不写进水面着色器。玩法通过 `take` / `giveBack` 取鱼和放回，用 `mouth` 读鱼嘴的位置，规则不写进鱼群。
 - 鱼竿、渔轮和鱼线是代码建模，见 [ROD.md](./ROD.md) 和 [LINE.md](./LINE.md)。竿挂在镜头上，线加在场景根上。每帧先 `shoreSchool.update`，再 `fishing.update`、`applyPhone`、`line.brace`、`rod.update`、`line.update`、`fishing.follow`。饵和玩法见 [LURE.md](./LURE.md) 和 [PLAY.md](./PLAY.md)。
 

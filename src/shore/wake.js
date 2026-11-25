@@ -24,8 +24,8 @@ const OPACITY = 0.42;
 const DROP = 0.022;
 
 /** size: how big it is drawn against a line's own spray, which is 1. drops: spray in the air at once. */
-export function createWake(size = 1, drops = 32) {
-  const track = createWakeTrack(drops);
+export function createWake(size = 1, drops = 32, rings = null) {
+  const track = createWakeTrack(drops, Math.random, rings);
   const material = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: OPACITY, depthWrite: false });
   const spray = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), material, drops);
   spray.name = 'wake';

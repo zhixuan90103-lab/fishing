@@ -27,7 +27,8 @@ import { createLowRod } from '../src/play/lowRod.js';
 import { createLureMove } from '../src/shore/lureMove.js';
 import { createRodFlex } from '../src/shore/rodFlex.js';
 import { createLineCurve } from '../src/shore/lineCurve.js';
-import { createWakeTrack } from '../src/shore/wakeTrack.js';
+import { atTop, createWakeTrack, inWater } from '../src/shore/wakeTrack.js';
+import { APART, HEIGHT, MOST, SPEED, createRippleField, ringOf } from '../src/shore/rippleField.js';
 import { createLean } from '../src/play/lean.js';
 import { createFlock } from '../src/fish/flock.js';
 import { drawNature, fishOf, HARDEST_RUN } from '../src/play/fishKind.js';
@@ -1057,7 +1058,7 @@ check('hand: what it holds is what the line carries, winding or not', () => {
   }
 });
 
-check('fight: a run beats the tail wide and fast all the way through, a rest goes quiet', () => {
+check('fight: a run beats the tail wide and fast all the way through, a rest eases it off but does not stop it', () => {
   // A fish up to speed used to let its tail go slack: the beat followed only how much
   // faster it still wanted to go.
   for (const size of [0.85, 1.3]) {
@@ -1075,9 +1076,10 @@ check('fight: a run beats the tail wide and fast all the way through, a rest goe
     expect(run.length > 20 && rest.length > 20, `size ${size}: it both ran and rested`, `${run.length} / ${rest.length}`);
     expect(mean(run) > 0.9, `size ${size}: well into a run its tail still beats wider than cruising (0.55)`, mean(run).toFixed(2));
     expect(Math.min(...stroke) > 0.7, `size ${size}: and at least twice as fast as cruising (0.35 m/s)`, Math.min(...stroke).toFixed(2));
-    // 0.45, from 0.4. With rounds made even the small fish reads 0.40 here where it read 0.38: it rests
-    // more often and for less long, and each rest has its flicks. Not traced further. Cruising is 0.55.
-    expect(mean(rest) < 0.45, `size ${size}: resting, it barely beats`, mean(rest).toFixed(2));
+    // Until 2026-11-25 a rest had to read under 0.45, less than cruising (0.55): on the phone the fish
+    // looked like a model being towed. It is fighting the hook all the while: resting it still works its
+    // tail, plainly less than running.
+    expect(mean(rest) > 0.3 && mean(rest) < mean(run) * 0.7, `size ${size}: resting, its tail still works, and plainly less than in a run`, `${mean(rest).toFixed(2)} against ${mean(run).toFixed(2)}`);
   }
 });
 
@@ -1108,25 +1110,167 @@ check('wake: it is as strong as the thing is fast, points the way it goes, and n
   expect(up.strength < 0.01 && up.drops.every((d) => !(d.left > 0)), 'off the surface, it and its spray are gone');
 });
 
-check('wake: a fish churns the water only while it is being fought, and not from deep down', () => {
-  for (const size of [0.85, 1.3]) {
-    let before = 0, deep = 0, most = 0, after = 0, landedAt = -1, down = 0;
-    const r = fightOne({ seed: 3, fps: 60, press: 'rests', size, seconds: 120, each: (rig) => {
-      const f = rig.fishing; const c = rig.churn;
-      const drops = c.drops.filter((d) => d.left > 0).length;
-      if (f.stage === 'fight') { most = Math.max(most, c.strength); down = f.lure.y < -2.2 ? down + rig.dt : 0; if (down > 0.5) deep = Math.max(deep, c.strength); }
-      else if (landedAt < 0 && f.stage !== 'landed') before = Math.max(before, c.strength + drops);
-      if (f.stage === 'landed' && landedAt < 0) landedAt = rig.time;
-      if (landedAt >= 0 && rig.time > landedAt + 2.5) after = Math.max(after, c.strength + drops);
-    } });
-    expect(r.sawFight, `size ${size}: there was a fight`);
-    expect(before === 0, `size ${size}: nothing before a fish is on`, before.toFixed(3));
-    expect(most > 0.05, `size ${size}: fought near the top, it shows`, most.toFixed(2));
-    // Once it has been down there half a second: what it churned up near the top is still fading as it
-    // goes through two metres, and how much is left of that depends on how fast this fish happened to dive.
-    expect(deep < 0.09, `size ${size}: from more than two metres down it does not`, deep.toFixed(3));
-    expect(after < 0.01, `size ${size}: out of the water it is gone`, after.toFixed(3));
+check('rings: a hit raises rings that run outward, get lower and die, add up, are bigger the harder and the heavier, and the same at any frame rate', () => {
+  const run = (fps, seconds, hits = [[3, -8, 1]]) => {
+    const f = createRippleField(); for (const h of hits) f.poke(...h);
+    const dt = 1 / fps; const n = Math.round(seconds * fps);
+    for (let i = 0; i < n; i += 1) f.step(dt);
+    return f;
+  };
+  // The tallest the water stands anywhere along a line out from the hit, and where.
+  const tallest = (f, x = 3, z = -8) => { let top = 0, at = 0; for (let r = 0; r < 12; r += 0.005) { const h = Math.abs(f.heightAt(x + r * 0.6, z + r * 0.8)); if (h > top) { top = h; at = r; } } return { top, at }; };
+  expect(run(60, 0).heightAt(3.2, -8) === 0, 'the moment it is hit the water is still flat');
+  const one = run(60, 1), two = run(60, 2), four = run(60, 4);
+  expect(one.heightAt(3 + one.data[2] + 0.02, -8) === 0 && two.heightAt(3, -8 + two.data[2] + 0.02) === 0 && Math.abs(two.data[2] - one.data[2] - SPEED) < 1e-6, 'ahead of the front the water has not heard of it');
+  // It is there at once: a tenth of a second after the blow the water stands most of what it ever will.
+  const peak = Math.max(...[0.1, 0.2, 0.3, 0.5, 0.7, 1].map((t) => tallest(run(120, t)).top));
+  expect(tallest(run(120, 0.1)).top > peak * 0.6 && tallest(run(120, 0.05)).top > peak * 0.4, 'a tenth of a second after the blow the ring is most of the way up', `${(tallest(run(120, 0.1)).top * 100).toFixed(2)} of ${(peak * 100).toFixed(2)} cm`);
+  expect(Math.abs((two.count && tallest(two).at - tallest(one).at) - SPEED) < APART, 'the rings run outward at their speed', `${tallest(one).at.toFixed(2)} m at 1 s, ${tallest(two).at.toFixed(2)} m at 2 s`);
+  expect(tallest(one).top > 0.004 && tallest(one).top < HEIGHT, 'a second on, the lure thrown its hardest stands under a centimetre or so', `${(tallest(one).top * 100).toFixed(1)} cm`);
+  expect(tallest(two).top < tallest(one).top * 0.7 && tallest(four).top < tallest(two).top * 0.4, 'and it gets lower as it widens and ages', `${(tallest(one).top * 100).toFixed(2)} / ${(tallest(two).top * 100).toFixed(2)} / ${(tallest(four).top * 100).toFixed(2)} cm`);
+  expect(run(60, 12).count === 0, 'in the end it is forgotten');
+  const softer = tallest(run(60, 1, [[3, -8, 0.4]])).top / tallest(one).top;
+  expect(softer > 0.3 && softer < 0.5, 'a softer hit is that much lower', softer.toFixed(2));
+  expect(ringOf(0.4).apart < ringOf(1).apart && ringOf(0.4).apart > ringOf(1).apart * 0.6, 'and its rings a little closer together', `${ringOf(0.4).apart.toFixed(2)} / ${ringOf(1).apart.toFixed(2)} m`);
+  // The heavier the thing the bigger its rings: a fish's are about twice a lure's, not a hundred times.
+  const lure = ringOf(1, 0.01), fish = ringOf(1, 1.7);
+  expect(lure.apart === APART && lure.tall === HEIGHT, 'the lure thrown its hardest makes the rings the numbers are for');
+  expect(fish.apart > lure.apart * 1.8 && fish.apart < lure.apart * 3 && fish.tall > lure.tall * 1.8, 'a fish makes rings about twice as far apart and as tall', `${fish.apart.toFixed(2)} m apart, ${(fish.tall * 100).toFixed(1)} cm`);
+  const far = (weight) => { const f = createRippleField(); f.poke(3, -8, 1, weight); for (let i = 0; i < 120; i += 1) f.step(1 / 60); return tallest(f).at; };
+  expect(far(1.7) > far(0.01) * 1.3, 'and they run further in the same time', `${far(0.01).toFixed(2)} / ${far(1.7).toFixed(2)} m in 2 s`);
+  expect(run(60, 1, [[3, -8, 0]]).count === 0, 'and no hit is no ring');
+  // The slope it reports is the slope of the height it reports.
+  let worst = 0;
+  for (const [x, z] of [[3.3, -8.1], [3.6, -7.7], [2.5, -8.4], [3.02, -8.01], [3.9, -8.9]]) {
+    const s = two.slopeAt(x, z); const e = 1e-4;
+    worst = Math.max(worst, Math.abs(s[0] - (two.heightAt(x + e, z) - two.heightAt(x - e, z)) / (2 * e)), Math.abs(s[1] - (two.heightAt(x, z + e) - two.heightAt(x, z - e)) / (2 * e)));
   }
+  expect(worst < 1e-4, 'the tilt it gives is the tilt of the height it gives', worst.toExponential(1));
+  // No kink in the middle, and none at the front.
+  expect(Math.abs(one.heightAt(3, -8)) < 1e-9 && Math.hypot(...one.slopeAt(3.0005, -8)) < 0.02, 'the very middle is flat');
+  // Two add up, and cross.
+  const both = run(60, 1.5, [[3, -8, 1], [4, -8, 0.6]]), left = run(60, 1.5, [[3, -8, 1]]), right = run(60, 1.5, [[4, -8, 0.6]]);
+  expect(Math.abs(both.heightAt(3.5, -7.6) - left.heightAt(3.5, -7.6) - right.heightAt(3.5, -7.6)) < 1e-12, 'two rings add up where they cross');
+  // The same at any frame rate.
+  const coarse = run(20, 2), fine = run(120, 2);
+  expect(Math.abs(coarse.heightAt(3.9, -7.5) - fine.heightAt(3.9, -7.5)) < 1e-6, 'the water is the same at 20 and at 120 frames a second', `${coarse.heightAt(3.9, -7.5).toExponential(3)} / ${fine.heightAt(3.9, -7.5).toExponential(3)}`);
+  // More hits than it holds: the lowest gives its place, the newest is there.
+  const many = createRippleField();
+  for (let i = 0; i < MOST + 5; i += 1) { many.poke(i, 0, 0.5); many.step(0.02); }
+  expect(many.count === MOST && many.data.slice(0, MOST * 4).some((v, i) => i % 4 === 0 && v === MOST + 4), 'past what it holds, the oldest and lowest make way for the newest', String(many.count));
+});
+
+check('rings: a thing going along the water leaves a wake of two arms behind it, not circles, none when slow or lifted, and a thing under water less the deeper', () => {
+  const led = (speed, fps, seconds = 4) => {
+    const hits = []; const w = createWakeTrack(0, seeded(5), { every: 0.1, hit: (x, z, s, dx, dz, v) => hits.push({ x, z, s, dx, dz, v }) }); const dt = 1 / fps;
+    for (let t = 0; t < seconds; t += dt) w.follow(dt, speed * t, -5);
+    return { hits, w, dt };
+  };
+  expect(led(0.2, 60).hits.length === 0, 'too slow to cut the water, it leaves nothing');
+  const fast = led(2.4, 60);
+  expect(fast.hits.length >= 37 && fast.hits.length <= 40, 'fast, it leaves a piece of wake ten times a second', String(fast.hits.length));
+  const end = fast.hits[fast.hits.length - 1];
+  expect(end.s > 0.9 && fast.hits[0].s < end.s && Math.abs(end.dx - 1) < 0.01 && Math.abs(end.v - 2.4) < 0.1, 'stronger as its wake comes up, and it says which way it goes and how fast', `${fast.hits[0].s.toFixed(2)} to ${end.s.toFixed(2)}, ${end.v.toFixed(2)} m/s`);
+  expect(Math.abs(led(2.4, 20).hits.length - led(2.4, 120).hits.length) <= 2, 'as many at 20 frames a second as at 120', `${led(2.4, 20).hits.length} / ${led(2.4, 120).hits.length}`);
+  const n = fast.hits.length; fast.w.lift(fast.dt); fast.w.follow(fast.dt, 40, 9);
+  expect(fast.hits.length === n, 'lifted off and put down far away, it leaves nothing on the way');
+  // The shape on the water: a thing drawn along x at a steady speed for 3 s.
+  const wake = (speed, weight = 1.2) => {
+    const f = createRippleField(); const w = createWakeTrack(0, seeded(5), { every: 0.1, hit: (x, z, s, dx, dz, v) => f.trail(x, z, s * 0.5, weight, dx, dz, v) });
+    for (let t = 0; t < 3; t += 1 / 60) { w.follow(1 / 60, speed * t, 0); f.step(1 / 60); }
+    // The tallest the water stands across the wake, this far behind the thing, and how far out that is.
+    const across = (back) => { let top = 0, at = 0; for (let z = 0; z < 6; z += 0.01) { const h = Math.abs(f.heightAt(speed * 3 - back, z)); if (h > top) { top = h; at = z; } } return { top, at }; };
+    // How far out the wake reaches there: the outermost water standing a quarter as tall as the tallest.
+    const edge = (back) => { const top = across(back).top; let out = 0; for (let z = 0; z < 6; z += 0.01) if (Math.abs(f.heightAt(speed * 3 - back, z)) > top * 0.25) out = z; return out; };
+    return { f, across, edge, head: speed * 3 };
+  };
+  const quick = wake(4), slow = wake(1.5);
+  expect(Math.abs(quick.f.heightAt(quick.head + 1, 0)) < 1e-6 && Math.abs(quick.f.heightAt(quick.head - 2, 5)) < 1e-6, 'ahead of it and wide of it the water is flat');
+  const spread = (w, a = 2, b = 4) => (w.edge(b) - w.edge(a)) / (b - a);
+  expect(quick.across(2).top > 0.004 && quick.across(4).at > quick.across(2).at + 0.15, 'behind it the water stands in two arms that open out the further back', `${quick.across(2).at.toFixed(2)} m out at 2 m back, ${quick.across(4).at.toFixed(2)} at 4`);
+  expect(Math.abs(quick.f.heightAt(quick.head - 3, 0)) < quick.across(3).top * 0.35, 'and between the arms, on its own track, it is nearly flat: not circles', `${(Math.abs(quick.f.heightAt(quick.head - 3, 0)) * 100).toFixed(2)} of ${(quick.across(3).top * 100).toFixed(2)} cm`);
+  expect(spread(quick) < 0.36 && spread(quick) > 0.1, 'the arms open no wider than Kelvin\'s angle, 19.5 degrees', `${(Math.atan(spread(quick)) / deg).toFixed(1)} degrees at 4 m/s`);
+  expect(spread(slow, 1, 2) > spread(quick) && spread(slow, 1, 2) < 0.4, 'a slow thing trails a wider V than a fast one, and still no wider than Kelvin\'s', `${(Math.atan(spread(slow, 1, 2)) / deg).toFixed(1)} against ${(Math.atan(spread(quick)) / deg).toFixed(1)} degrees`);
+  // The tilt of a piece of wake is still the tilt of its height.
+  let worst = 0;
+  for (const [x, z] of [[quick.head - 2, 0.5], [quick.head - 3.3, -0.9], [quick.head - 1.2, 0.3], [quick.head - 5, 1.4]]) {
+    const s = quick.f.slopeAt(x, z); const e = 1e-4;
+    worst = Math.max(worst, Math.abs(s[0] - (quick.f.heightAt(x + e, z) - quick.f.heightAt(x - e, z)) / (2 * e)), Math.abs(s[1] - (quick.f.heightAt(x, z + e) - quick.f.heightAt(x, z - e)) / (2 * e)));
+  }
+  expect(worst < 1e-4, 'the tilt it gives is the tilt of the height it gives', worst.toExponential(1));
+  // From under the water: all of it at the top, less deeper, nothing from deep down.
+  const from = (depth) => { const f = createRippleField(); f.poke(0, 0, 0.6, 1, depth); f.step(0.2); return f.count ? f.data[3] : 0; };
+  expect(from(0) > 0 && from(0.4) > from(0) * 0.15 && from(0.4) < from(0) * 0.6 && from(2.4) === 0, 'a thing under the water raises less the deeper it is: something where the lure runs, nothing from the bottom', `${(from(0) * 100).toFixed(1)} / ${(from(0.4) * 100).toFixed(1)} / ${(from(2.4) * 100).toFixed(1)} cm`);
+  // And softer: lower and broader both, so far less steep.
+  const top = ringOf(0.6, 1, 0), under = ringOf(0.6, 1, 0.4);
+  expect(under.apart > top.apart * 2 && under.tall / under.apart < 0.25 * top.tall / top.apart, 'and what it raises is broader, so much gentler', `${top.apart.toFixed(2)} m apart at the top, ${under.apart.toFixed(2)} from 0.4 m down`);
+  // A long run of small hits does not crowd out the water: the faint ones are forgotten.
+  const f = createRippleField(); let most = 0;
+  const lw = createWakeTrack(0, seeded(5), { every: 0.05, hit: (x, z, st, dx, dz, v) => f.trail(x, z, st * 0.4, 0.0003, dx, dz, v) });
+  for (let t = 0; t < 12; t += 1 / 60) { lw.follow(1 / 60, t * 2, 0); f.step(1 / 60); most = Math.max(most, f.count); }
+  expect(most > 3 && most < MOST / 2, 'the line cutting along for twelve seconds never has many pieces going at once', String(most));
+});
+
+check('raised rod: carried as usual a hooked fish keeps under and the water over it only swells; raised a little, the line brings it to the top, where it throws spray and cuts a sharp wake; let down, it sinks back', () => {
+  for (const size of [0.85, 1.3]) {
+    // lift: degrees the rod is held at through the fight, or null for as it is carried.
+    const fought = (lift) => {
+      const backs = []; const tips = []; let stood = null;
+      const o = { before: 0, after: 0, landedAt: -1, top: -9, sum: 0, n: 0, thrown: 0, raised: 0, steep: 0, tall: 0, hits: 0, run: 0, rest: 0, rolled: 0 };
+      const r = fightOne({ seed: 3, fps: 60, press: 'rests', size, seconds: 120, each: (rig) => {
+        const f = rig.fishing; const c = rig.churn;
+        const drops = c.drops.filter((d) => d.left > 0).length;
+        if (f.stage === 'fight') {
+          if (lift !== null) rig.setLift(lift);
+          { const fish = rig.hooked(); if (fish) o.rolled = Math.max(o.rolled, Math.abs(fish.roll)); }
+          o.top = Math.max(o.top, f.lure.y); o.sum += f.lure.y; o.n += 1; stood = stood === null ? rig.line.tip.y : stood + (rig.line.tip.y - stood) * (1 - Math.exp(-rig.dt / 0.8)); if (f.raised > 0.95) { backs.push(-f.lure.y - 0.113 * size); tips.push(rig.line.tip.y - stood); } o.raised = Math.max(o.raised, f.raised); o.thrown = Math.max(o.thrown, drops);
+          if (f.mood === 'run') o.run = Math.max(o.run, c.strength); else o.rest = Math.max(o.rest, c.strength);
+        } else if (o.landedAt < 0 && f.stage !== 'landed') o.before = Math.max(o.before, drops + rig.wakeHits.length);
+        if (f.stage === 'landed' && o.landedAt < 0) { o.landedAt = rig.time; o.hits = rig.wakeHits.length; }
+        if (o.landedAt >= 0 && rig.time > o.landedAt + 2.5) o.after = Math.max(o.after, drops + rig.wakeHits.length - o.hits);
+      } });
+      // What its wake raised on the water at its strongest: how tall, and how steep (height over spacing).
+      for (const h of r.rig.wakeHits) { const made = ringOf(h.s * 1.3, 1.2, h.depth); o.tall = Math.max(o.tall, made.tall); o.steep = Math.max(o.steep, made.tall / made.apart); }
+      o.r = r; o.mean = o.sum / Math.max(1, o.n); r.rig.wakeBacks = backs; r.rig.tipsOff = tips;
+      return o;
+    };
+    const down = fought(null), up = fought(34);
+    expect(down.r.sawFight && up.r.sawFight, `size ${size}: there was a fight`);
+    expect(down.before === 0 && down.after === 0 && up.before === 0 && up.after === 0, `size ${size}: nothing before a fish is on or after it is out`);
+    expect(down.raised < 0.05 && down.top < -0.3, `size ${size}: carried as usual, the fish keeps under, run or rest`, `shallowest ${down.top.toFixed(2)} m`);
+    expect(down.thrown === 0, `size ${size}: from under there it throws no spray`, String(down.thrown));
+    expect(down.tall > 0.004 && down.tall < up.tall * 0.75, `size ${size}: but the water over it swells, lower than at the top`, `${(down.tall * 100).toFixed(1)} cm against ${(up.tall * 100).toFixed(1)}`);
+    expect(down.steep < up.steep * 0.4, `size ${size}: and far gentler`, `${down.steep.toFixed(3)} against ${up.steep.toFixed(3)}`);
+    expect(up.raised > 0.95 && up.mean > -0.24, `size ${size}: the rod raised a dozen degrees, the line brings it up under the top`, `${up.mean.toFixed(2)} m on average`);
+    expect(up.top < 0.03, `size ${size}: its mouth hardly leaves the water`, up.top.toFixed(2));
+    expect(up.rolled > 0.6 && down.rolled < 0.4, `size ${size}: held up at the top it is laid over on its side; under the water it keeps upright`, `${(up.rolled * 57.3).toFixed(0)} against ${(down.rolled * 57.3).toFixed(0)} degrees`);
+    // Up there it does not lie at one depth: it thrashes, now a hand's breadth down, now with its back out.
+    const backs = up.r.rig.wakeBacks; const lowest = Math.max(...backs), highest = Math.min(...backs);
+    expect(lowest - highest > 0.12, `size ${size}: up there it goes up and down`, `back from ${(-highest * 100).toFixed(0)} cm out to ${(lowest * 100).toFixed(0)} cm under`);
+    expect(highest < -0.02 && highest > -0.15, `size ${size}: now and then its back is a little out of the water`, `${(-highest * 100).toFixed(0)} cm`);
+    // It is the rod's spring that does it, not a clock: the fish is up when the tip is up of where it has been standing.
+    const tips = up.r.rig.tipsOff; const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length; const mt = mean(tips), mb = mean(backs);
+    let cov = 0, vt = 0, vb = 0; for (let i = 0; i < tips.length; i += 1) { cov += (tips[i] - mt) * (backs[i] - mb); vt += (tips[i] - mt) ** 2; vb += (backs[i] - mb) ** 2; }
+    const goesWith = -cov / Math.sqrt(vt * vb);
+    expect(goesWith > 0.5, `size ${size}: it goes up and down as the rod tip springs up and down`, goesWith.toFixed(2));
+    const hits = up.r.rig.wakeHits;
+    expect(hits.every((h) => h.depth > -0.05), `size ${size}: out of the water it leaves nothing on it`);
+    // The nearer the top the more it moves the water; out of it, nothing.
+    const moved = (depth) => { const made = ringOf(1.3 * inWater(depth), 1.2, Math.max(0, depth)); return made.tall * (1 + atTop(depth)); };
+    expect(moved(0.3) < moved(0.15) && moved(0.15) < moved(0.05) && moved(0.05) <= moved(0.01) && moved(-0.05) === 0, `size ${size}: the nearer the top the more it moves the water, and out of it not at all`, `${[0.3, 0.15, 0.05, 0.01, -0.05].map((d) => (moved(d) * 100).toFixed(1)).join(' / ')} cm`);
+    expect(up.thrown > 0, `size ${size}: up there it throws spray`, String(up.thrown));
+    expect(up.run > up.rest, `size ${size}: and stirs the water more running than resting`, `${up.run.toFixed(2)} / ${up.rest.toFixed(2)}`);
+  }
+  // Raised and let down again in one fight: it follows the rod both ways.
+  let phase = 0, since = 0, upY = 0, downY = 0;
+  fightOne({ seed: 3, fps: 60, press: 'never', size: 1.3, seconds: 60, each: (rig) => {
+    const f = rig.fishing; if (f.stage !== 'fight') return;
+    since += rig.dt;
+    if (phase === 0 && since > 2) { phase = 1; since = 0; }
+    if (phase === 1) { rig.setLift(34); if (since > 2.5) { upY = f.lure.y; phase = 2; since = 0; } }
+    if (phase === 2) { rig.setLift(20); if (since > 4) { downY = f.lure.y; phase = 3; } }
+  } });
+  expect(upY > -0.36 + 0.02 && downY < -0.3, 'raised it comes up within a couple of seconds, let down it sinks back', `${upY.toFixed(2)} then ${downY.toFixed(2)} m`);
 });
 
 // ---------------------------------------------------------------- bites, the strike, bolting, throwing the hook
