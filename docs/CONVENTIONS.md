@@ -544,6 +544,7 @@
 | [SEA-PHYSICS-RESEARCH.md](./SEA-PHYSICS-RESEARCH.md) | 海水自身，以及它和鱼、线、饵、竿怎么接触的检索纪要，不是规格 |
 | [SEA-FEEDBACK-RESEARCH.md](./SEA-FEEDBACK-RESEARCH.md) | 鱼在游、饵、线、咬钩时水面该有什么反馈的检索纪要，不是规格 |
 | [HAPTICS.md](./HAPTICS.md)、[AUDIO.md](./AUDIO.md) | 震动接线；音效方案（未实现） |
+| [HAPTICS-RESEARCH.md](./HAPTICS-RESEARCH.md) | 什么样的震动算舒适、怎么调的检索纪要，不是规格。接线仍以 HAPTICS.md 为准 |
 | [MERGE.md](./MERGE.md) | 底座合并时的历史对照，不再更新 |
 
 - 改了代码的结构、接口、默认值或约定，同一次改动里把对应文档改掉。

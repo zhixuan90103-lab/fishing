@@ -13,6 +13,7 @@ public class AdvancedHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "playPattern", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stackImpact", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startContinuousHaptic", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateContinuousHaptic", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopContinuousHaptic", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setKeepAwake", returnType: CAPPluginReturnPromise),
     ]
@@ -262,6 +263,7 @@ public class AdvancedHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
             )
             let pattern = try CHHapticPattern(events: [event], parameters: [])
             let player = try engine?.makeAdvancedPlayer(with: pattern)
+            try continuousPlayer?.stop(atTime: CHHapticTimeImmediate)
             try player?.start(atTime: CHHapticTimeImmediate)
             continuousPlayer = player
             call.resolve()
@@ -279,6 +281,26 @@ public class AdvancedHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             UIApplication.shared.isIdleTimerDisabled = enabled
             call.resolve(["enabled": enabled])
+        }
+    }
+
+    // MARK: - updateContinuousHaptic
+    // Multiplies the playing continuous. 1 keeps the level it started at, 0 fades it out.
+    // It cannot raise the level: a stronger one is a new startContinuousHaptic.
+
+    @objc func updateContinuousHaptic(_ call: CAPPluginCall) {
+        let intensity = min(1, max(0, call.getFloat("intensity") ?? 1))
+        guard let player = continuousPlayer else {
+            call.resolve()
+            return
+        }
+        do {
+            let param = CHHapticDynamicParameter(
+                parameterID: .hapticIntensityControl, value: intensity, relativeTime: 0)
+            try player.sendParameters([param], atTime: CHHapticTimeImmediate)
+            call.resolve()
+        } catch {
+            call.reject("Failed to update continuous haptic: \(error.localizedDescription)")
         }
     }
 

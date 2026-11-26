@@ -42,6 +42,7 @@ type AdvancedHapticsPlugin = {
     sharpness: number;
     duration?: number;
   }): Promise<void>;
+  updateContinuousHaptic(opts: { intensity: number }): Promise<void>;
   stopContinuousHaptic(): Promise<void>;
   setKeepAwake(opts: { enabled: boolean }): Promise<{ enabled: boolean }>;
   prepare?(): Promise<{ supported?: boolean; fallback?: boolean }>;
@@ -80,6 +81,20 @@ async function safely(fn: () => Promise<unknown>): Promise<{ ok: boolean; reason
     console.warn('[haptics]', lastError);
     return { ok: false, reason: lastError };
   }
+}
+
+// Starts and stops share one queue. The reel restarts the continuous every turn,
+// and those calls return before the phone has played them. A stop has to wait
+// its turn, or a late start turns the reel back on after the line has stopped.
+let continuousQueue: Promise<unknown> = Promise.resolve();
+
+function afterContinuous<T>(fn: () => Promise<T>): Promise<T> {
+  const run = continuousQueue.then(fn, fn);
+  continuousQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 function vibrateWeb(pattern: number | number[]): void {
@@ -200,18 +215,32 @@ export const haptics = {
   }): Promise<{ ok: boolean; reason?: string }> {
     if (!enabled) return { ok: false, reason: 'disabled' };
     if (!pluginReady()) return { ok: false, reason: 'not_native_ios' };
-    return safely(() =>
-      AdvancedHaptics.startContinuousHaptic({
-        intensity: clamp01(opts.intensity),
-        sharpness: clamp01(opts.sharpness),
-        duration: opts.duration,
-      }),
+    // One at a time. A start that is still on its way to the phone must not
+    // land after a stop and leave the reel buzzing.
+    return afterContinuous(() =>
+      safely(() =>
+        AdvancedHaptics.startContinuousHaptic({
+          intensity: clamp01(opts.intensity),
+          sharpness: clamp01(opts.sharpness),
+          duration: opts.duration,
+        }),
+      ),
+    );
+  },
+
+  async updateContinuous(opts: { intensity: number }): Promise<{ ok: boolean; reason?: string }> {
+    if (!enabled) return { ok: false, reason: 'disabled' };
+    if (!pluginReady()) return { ok: false, reason: 'not_native_ios' };
+    return afterContinuous(() =>
+      safely(() =>
+        AdvancedHaptics.updateContinuousHaptic({ intensity: clamp01(opts.intensity) }),
+      ),
     );
   },
 
   async stopContinuous(): Promise<{ ok: boolean; reason?: string }> {
     if (!pluginReady()) return { ok: false, reason: 'not_native_ios' };
-    return safely(() => AdvancedHaptics.stopContinuousHaptic());
+    return afterContinuous(() => safely(() => AdvancedHaptics.stopContinuousHaptic()));
   },
 
   async setKeepAwake(keep: boolean): Promise<{ ok: boolean; reason?: string }> {

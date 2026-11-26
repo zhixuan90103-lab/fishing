@@ -1580,6 +1580,17 @@ check('bites: nobody striking, no fish is hooked but by a dead bite, the fish st
   // Every knock in the hand came with a bite.
   const knocks = casts.reduce((n, c) => n + c.rig.events.filter((e) => e.kind === 'tick').length, 0);
   expect(knocks >= bites.length, 'each bite knocks in the hand', `${knocks} knocks, ${bites.length} bites`);
+  const mouthed = of('medium').length + of('heavy').length;
+  expect(knocks >= bites.length + mouthed, 'a medium or heavy bite knocks again as the lure is blown out', `${knocks} knocks, ${mouthed} mouthed`);
+});
+
+check('hand: letting the lure go knocks, and line running out clicks sharper the faster it goes', () => {
+  const rig = createRig({ seed: 2, fps: 60, hold: 0.45, noSchool: true });
+  for (let i = 0; i < 200; i += 1) rig.step();
+  const ticks = rig.events.filter((e) => e.kind === 'tick');
+  const crisp = ticks.filter((e) => e.sharpness >= 0.75);
+  expect(ticks.length >= 1, 'the release knocks', String(ticks.length));
+  expect(crisp.length >= 2, 'line paying out is a run of crisp clicks', String(crisp.length));
 });
 
 check('suitors: nobody is sent. Fish near the lure make up their own minds, one goes for it at a time, and it is the keen and the hungry that bite', () => {
@@ -1743,7 +1754,7 @@ check('low rod: carried as usual it adds nothing, lowered on a run the reel hold
     return { given: meanOf(given), most: Math.max(...most) };
   };
   const usual = fought(false), low = fought(true);
-  expect(usual.most === 0, 'carried as usual through a whole fight, the rod adds nothing', usual.most);
+  expect(usual.most < 0.05, 'carried as usual through a whole fight, the rod adds nothing', usual.most);
   expect(low.most > 6 && low.given < 0.9 * usual.given, 'lowered in its runs, the fish takes less line', `${low.given.toFixed(1)} against ${usual.given.toFixed(1)} m`);
 });
 

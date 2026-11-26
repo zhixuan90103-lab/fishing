@@ -38,6 +38,7 @@
 
 import { LURE_KG, createLureMove } from '../shore/lureMove.js';
 import { FISH_READOUT, createCatch } from './catch.js';
+import { createFeel } from './feel.js';
 import { STOW_LENGTH, createLineOut } from './lineOut.js';
 import { createLooseLine } from './looseLine.js';
 import { createRetrieve } from './retrieve.js';
@@ -66,7 +67,8 @@ const DESK_FULL_HOLD = 1;
  * something under it stirs it. wash: the lure's own wake as it is drawn along under the
  * water, optional, a wake's track with follow and lift (src/shore/wakeTrack.js). school: the fish, with fishes, take, giveBack,
  * mouth, hang and keep. Without one no fish ever comes. net: the landing net, with place
- * and hide, optional. haptics: impact, notification and playTransient, optional.
+ * and hide, optional. haptics: playTransient, startContinuous, updateContinuous and
+ * stopContinuous, optional. The hand decides what they play (feel.js).
  * random: 0 to 1, for the times that are drawn. spool: the line the reel holds, m;
  * left out, catch.js has the number.
  * Call begin() once after the line's first update. Then every frame, after the school has
@@ -118,7 +120,82 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
   // How the last fish was lost in this cast: '', 'spooled' or 'shed'.
   let lost = '';
   // The fish's half of the cast. It is handed the lure's motion and the line out.
-  const fish = createCatch({ rod, line, surface, churn, school, net, haptics, random, move, out, spool });
+  const feel = createFeel();
+  const fish = createCatch({ rod, line, surface, churn, school, net, feel, random, move, out, spool });
+  // Line out last frame, so a turn of the reel can be read from how it changed.
+  let lineWas = 0;
+  // Line run out since the last click of the cast, m. Faster line clicks sooner.
+  let flown = 0;
+  // Line wound since the start of this turn of an empty reel, m.
+  // A turn is weak, strong, weak.
+  let reeled = 0;
+  let reelArm = false;
+  // Line wound since the last tick, m. One tick about every half-centimetre.
+  let pebbles = 0;
+  let reelKick = false;
+  // The reel's own vibration is playing, so it is kept short and dropped the
+  // moment the reel is not actually taking line.
+  let reelOn = false;
+  // How long the phone's continuous is, and how much of it is left. It is
+  // restarted before it runs out, and a stop still cuts it.
+  let reelFor = 0.5;
+  let reelLeft = 0;
+  // How long this flight has lasted, s, and the fastest the line has run, m/s.
+  // The payout is loudest at that start and fades as both the speed and the time fall.
+  let flightFor = 0;
+  let flightFast = 0;
+  // The payout's decaying continuous has been started for this flight.
+  let flightSung = false;
+  // How far this cast was thrown, m, and how much line was already out when it left.
+  let castFar = 1;
+  let flightLine0 = 0;
+  // The continuous now playing, as the intensity and sharpness it was started at.
+  // 0 intensity: none.
+  let bedAt = 0;
+  let bedSharp = 0;
+  // How long the tip has been slow while the finger is still down, s. A swing that
+  // dies like that was not released: it is forgotten, and lifting the finger later
+  // is not that cast.
+  let settled = 0;
+  // One stroke in the hand. 0 waiting, 1 the tip is still speeding up, 2 fading.
+  // 'cast' is the tip going the way a throw goes. 'load' is the rod being lifted
+  // back before that. They are not the same vibration, and a cast cuts a load off.
+  let stroke = 0;
+  let strokeKind = '';
+  // How fast the tip was at the crest of this stroke, m/s, and how much of the
+  // whoosh is left, 0 to 1.
+  let crest = 0;
+  // After a throw, the next rise of the tip is the blank bouncing, not another cast.
+  // It arms once the tip has eased off the throw.
+  let ringReady = false;
+  // How long the tip has been nearly still since the last bounce, s.
+  let ringQuiet = 0;
+
+  // The lure seats on the rod as the line comes home. Strong at once, then a
+  // short fade, so the click is there and gone.
+  function seat() {
+    const dur = 0.12;
+    haptics?.playPattern?.(
+      [{
+        type: 'continuous',
+        relativeTime: 0,
+        duration: dur,
+        intensity: 0.62,
+        sharpness: 0.74,
+        attackTime: 0,
+      }],
+      [{
+        parameterID: 'hapticIntensity',
+        relativeTime: 0,
+        controlPoints: [
+          { relativeTime: 0, parameterValue: 1 },
+          { relativeTime: dur * 0.18, parameterValue: 0.42 },
+          { relativeTime: dur * 0.5, parameterValue: 0.12 },
+          { relativeTime: dur, parameterValue: 0 },
+        ],
+      }],
+    );
+  }
 
   function toReady() {
     stage = 'ready';
@@ -138,6 +215,7 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
   }
 
   function toFlight(reach, forwardX, forwardZ, angle) {
+    castFar = Math.max(reach, 1);
     stage = 'flight';
     stopped = false;
     // The view goes straight to where the lure is going to land and stays there. It does
@@ -158,6 +236,8 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
     spot.x = move.x;
     spot.z = move.z;
     surface.burst(move.x, move.z, move.impact / SPLASH_FULL, LURE_KG);
+    // The lure hitting the water. One knock, then the line-out vibration is over.
+    feel.hit(0.3, 0.58);
     out.land(move.gap(tip));
     armed = !input.finger;
     lifted = false;
@@ -212,7 +292,6 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
     winding = true;
     retrieve.reset();
     out.ease(move.gap(tip));
-    haptics?.impact('light');
   }
 
   function ready(dt, input, tip) {
@@ -229,6 +308,14 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
       down = true;
       leaving = -1;
       heldFor += dt;
+      // Still holding. Once the tip has come to rest the swing is cancelled: a finger
+      // lifted afterwards does not throw the lure at the speed of a swing already over.
+      if (swing.speed < SPEED_MIN * 0.4) settled += dt;
+      else settled = 0;
+      if (settled > 0.28 && swung >= SPEED_MIN) {
+        swing.forget();
+        settled = 0;
+      }
     } else if (down || leaving >= 0) {
       // The finger is up. The lure does not leave a tip that is still speeding up: the
       // blank is still loading, and the throw is the moment it lets go.
@@ -237,6 +324,7 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
         peak = 0;
       }
       down = false;
+      settled = 0;
       leaving += dt;
       peak = Math.max(peak, swung);
       if (!(input.sensor && (swing.speed > rising || leaving < LEAVES_AFTER) && leaving < LEAVES_WITHIN)) {
@@ -252,6 +340,9 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
         heldFor = 0;
         if (reach > 0) {
           lobbed = angle === undefined ? 28 : angle * 180 / Math.PI;
+          // The blank lets the lure go. Harder the faster the tip was.
+          const heft = Math.min(1, released / SPEED_FULL);
+          feel.hit(0.42 + 0.5 * heft, 0.92);
           toFlight(reach, Math.sin(aimedYaw), Math.cos(aimedYaw), angle);
           return;
         }
@@ -300,6 +391,7 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
       }
     }
     if (out.stowed) {
+      if (!bare) seat();
       toReady();
       return;
     }
@@ -339,6 +431,282 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
       : stage === 'water' ? out.length + loose.give - fish.snatch : out.length);
     move.point(dt, tip, stage === 'water' && !lifted);
     lure.place(move.x, move.y, move.z, move.nose.x, move.nose.y, move.nose.z, move.swum, move.back.x, move.back.y, move.back.z);
+  }
+
+  // The continuous follows what the hand is holding. A knock asked for earlier in the
+  // frame is primary and this one yields. Line wound in is the reel turning: the same
+  // continuous, its level moving with the speed. Line taken by a fish is clicks.
+  // A hook held in a mouth is quiet between the take and the spit.
+  function playHand(dt, input) {
+    const outNow = out.length;
+    const going = dt > 0 ? (outNow - lineWas) / dt : 0;
+    const coming = dt > 0 ? (lineWas - outNow) / dt : 0;
+    lineWas = outNow;
+    const reeling = (stage === 'water' && (winding || (input.finger && armed)))
+      || (stage === 'landed' && input.finger)
+      || (stage === 'fight' && input.finger);
+    let level = 0;
+    let sharp = 0.22;
+    const waving = stage === 'ready' && (input.finger || leaving >= 0);
+    // A throw is the tip going the way the cast goes, at least as fast as the
+    // slowest cast. Lifting the rod back to load is the other way, and slower
+    // shakes of the blank sit between the two.
+    const forward = swing.speed;
+    const moving = swing.pace;
+    const casting = forward >= SPEED_MIN;
+    const loading = !casting && moving >= 2.4 && forward < moving * 0.45;
+    // One falling continuous. A cast is longer and sharper. A load is short and dull,
+    // so the hand can tell the wind-up from the throw.
+    const whoosh = (kind, peak) => {
+      const heft = Math.min(1, peak / SPEED_FULL);
+      const cast = kind === 'cast';
+      // Squared, so a light tip stays light and only a full swing gets strong.
+      // The old line started at 0.55, so a gentle cast and a hard one were both loud.
+      const heft2 = heft * heft;
+      const ring = kind === 'ring';
+      // A faster tip passes quicker, so the throw itself is shorter. A bounce of
+      // the tip is measured against a few metres a second, not a full cast.
+      const wobble = Math.min(1, peak / 4);
+      const dur = cast ? 0.26 - heft * 0.12 : ring ? 0.08 + wobble * 0.06 : 0.16;
+      const strong = cast ? 0.14 + heft2 * 0.48 : ring ? 0.07 + wobble * 0.2 : 0.1 + heft * 0.1;
+      haptics?.playPattern?.(
+        [{
+          type: 'continuous',
+          relativeTime: 0,
+          duration: dur,
+          intensity: strong,
+          sharpness: cast ? 0.2 + heft * 0.22 : 0.12,
+        }],
+        [
+          {
+            parameterID: 'hapticIntensity',
+            relativeTime: 0,
+            controlPoints: [
+              { relativeTime: 0, parameterValue: 1 },
+              { relativeTime: dur * 0.2, parameterValue: cast ? 0.62 : 0.4 },
+              { relativeTime: dur * 0.55, parameterValue: 0.22 },
+              { relativeTime: dur, parameterValue: 0 },
+            ],
+          },
+          {
+            parameterID: 'hapticSharpness',
+            relativeTime: 0,
+            controlPoints: [
+              { relativeTime: 0, parameterValue: 0 },
+              { relativeTime: dur, parameterValue: cast ? -0.18 : -0.08 },
+            ],
+          },
+        ],
+      );
+    };
+    const held = waving || stage === 'flight';
+    if (!held && strokeKind !== 'ring' && strokeKind !== 'cast') {
+      stroke = 0;
+      strokeKind = '';
+      crest = 0;
+      ringReady = false;
+      ringQuiet = 0;
+    } else if (casting && waving && strokeKind !== 'cast') {
+      // The throw. It starts even if a load was still fading, so the cast is heard.
+      strokeKind = 'cast';
+      stroke = 1;
+      crest = forward;
+      ringReady = false;
+    } else if (stroke === 1) {
+      const v = strokeKind === 'cast' ? forward : moving;
+      if (v > crest) crest = v;
+      else {
+        const kind = strokeKind;
+        whoosh(kind, crest);
+        stroke = 0;
+        crest = 0;
+        // A throw is followed by the tip. A bounce can be followed by another.
+        if (kind === 'cast' || kind === 'ring') {
+          strokeKind = 'ring';
+          ringReady = false;
+          ringQuiet = 0;
+        } else strokeKind = '';
+      }
+    } else if (strokeKind === 'ring' && stage !== 'flight') {
+      // The hand can be still. What counts is the tip still moving, which is
+      // often only about a metre a second, under the old 2.4 gate.
+      if (!ringReady) {
+        if (moving < 1.2) ringReady = true;
+      } else if (moving >= 0.45) {
+        stroke = 1;
+        crest = moving;
+        ringQuiet = 0;
+      } else if (moving < 0.3) {
+        ringQuiet += dt;
+        if (ringQuiet > 0.45) {
+          strokeKind = '';
+          ringReady = false;
+          ringQuiet = 0;
+        }
+      } else ringQuiet = 0;
+    } else if (waving && loading) {
+      strokeKind = 'load';
+      stroke = 1;
+      crest = moving;
+    }
+    if (stage === 'flight') {
+      // Weaker as more line is out. At the water the line is at its longest, so
+      // this is nearly gone and the stop is not a cut. A longer cast takes longer
+      // to get there, so the vibration lasts longer too.
+      if (!flightSung) {
+        flightSung = true;
+        flightLine0 = out.length;
+      }
+      const gone = Math.max(0, out.length - flightLine0);
+      const share = Math.min(1, gone / castFar);
+      const left = 1 - share;
+      const heft = Math.min(1, released / SPEED_FULL);
+      level = (0.05 + heft * 0.14) * left * left;
+      sharp = 0.62;
+      const outSpeed = Math.max(0, going);
+      if (outSpeed > 0.8 && left > 0.08) {
+        flown += outSpeed * dt;
+        const gap = 0.012 + share * 0.07;
+        const step = gap / Math.max(outSpeed, 1);
+        const grains = [];
+        let at = 0;
+        while (flown >= gap && at < dt && grains.length < 14) {
+          grains.push({
+            type: 'transient',
+            relativeTime: at,
+            intensity: (0.008 + heft * 0.011) * left,
+            sharpness: 0.78,
+          });
+          flown -= gap;
+          at += step;
+        }
+        if (grains.length) haptics?.playPattern?.(grains);
+      }
+    } else if (stage === 'water' && fish.hookIn) {
+      level = 0;
+    } else if (
+      input.finger && reeling && !out.stowed && out.room > 0.02 && coming > 0.08
+      && (stage !== 'water' || fish.effort >= 0.12 || retrieve.speed > 0.05)
+    ) {
+      reelOn = true;
+      // One continuous, and it belongs to the reel. Only while line is actually
+      // coming in. An empty lure is one strong-to-weak beat per half turn of the
+      // rotor. A fish uses the same continuous, held steady by the pull on the line.
+      const load = Math.min(1, fish.effort);
+      const empty = load < 0.12;
+      if (empty) {
+        // One turn per half turn of the rotor (two arms). Weak, then strong, then
+        // weak. The rise is in the curve, because the shared bed only turns down.
+        // Handle is 0.72 m per turn (reel.js LINE_PER_TURN), rotor is 5.2 times that.
+        const turn = 0.72 / 5.2 / 2;
+        const peak = lifted ? 0.16 : 0.23;
+        const low = (lifted ? 0.06 : 0.05) / peak;
+        const swell = () => {
+          const dur = Math.min(0.6, Math.max(0.05, turn / Math.max(coming, 0.25)));
+          haptics?.playPattern?.(
+            [{
+              type: 'continuous',
+              relativeTime: 0,
+              duration: dur,
+              intensity: peak,
+              sharpness: 0.66,
+            }],
+            [{
+              parameterID: 'hapticIntensity',
+              relativeTime: 0,
+              controlPoints: [
+                { relativeTime: 0, parameterValue: low },
+                { relativeTime: dur * 0.5, parameterValue: 1 },
+                { relativeTime: dur, parameterValue: low },
+              ],
+            }],
+          );
+        };
+        if (!reelArm) {
+          reelArm = true;
+          swell();
+        }
+        reeled += coming * dt;
+        while (reeled >= turn) {
+          reeled -= turn;
+          swell();
+        }
+        // The swell is its own curve. The shared bed stays quiet.
+        level = 0;
+        reelOn = false;
+      } else {
+        reeled = 0;
+        level = 0.06 + load * 0.32;
+        sharp = 0.34;
+        reelFor = 1.2;
+      }
+      reelLeft -= dt;
+      if (reelLeft < 0.12) {
+        reelKick = true;
+        reelLeft = reelFor;
+      }
+      // A light tick each half-centimetre of line. Fast line packs them into a
+      // fine rustle. Clear of the water they stay, only lighter.
+      pebbles += coming * dt;
+      const stones = [];
+      let at = 0;
+      const step = 0.005 / Math.max(coming, 0.2);
+      const stone = lifted ? 0.02 : 0.024;
+      while (pebbles >= 0.005 && at < dt && stones.length < 12) {
+        stones.push({
+          type: 'transient',
+          relativeTime: at,
+          intensity: stone,
+          sharpness: 0.86,
+        });
+        pebbles -= 0.005;
+        at += step;
+      }
+      if (stones.length) haptics?.playPattern?.(stones);
+    } else {
+      reeled = 0;
+      reelArm = false;
+      reelOn = false;
+      reelLeft = 0;
+      pebbles = 0;
+    }
+    if (stage !== 'flight') {
+      flown = 0;
+      flightFor = 0;
+      flightFast = 0;
+      flightSung = false;
+      // The lure is down, or the cast is over. Tip-ring from the throw stops with the line.
+      if (stage !== 'ready' && (strokeKind === 'ring' || strokeKind === 'cast')) {
+        stroke = 0;
+        strokeKind = '';
+        crest = 0;
+        ringReady = false;
+        ringQuiet = 0;
+      }
+    }
+    feel.bed(level);
+    const felt = feel.step(dt);
+    if (felt.knock) haptics?.playTransient(felt.knock.intensity, felt.knock.sharpness);
+    if (felt.bed > 0.02) {
+      // A falling level starts again quieter. The dynamic control only turns a
+      // playing one down, and a cast's line must be heard getting lighter even
+      // when that control is not installed. Flight is short, so a missed stop
+      // cannot hold for most of a minute.
+      if (reelKick || !(bedAt > 0) || felt.bed > bedAt * 1.08 || sharp !== bedSharp) {
+        reelKick = false;
+        haptics?.startContinuous?.({
+          intensity: felt.bed,
+          sharpness: sharp,
+          duration: reelOn ? reelFor : stage === 'flight' ? 1.1 : 45,
+        });
+        bedAt = felt.bed;
+        bedSharp = sharp;
+      } else haptics?.updateContinuous?.({ intensity: felt.bed / bedAt });
+    } else if (bedAt > 0) {
+      haptics?.stopContinuous?.();
+      bedAt = 0;
+      bedSharp = 0;
+    }
   }
 
   // With the line wound in, the lure goes exactly where this frame's tip is, so it never
@@ -450,6 +818,7 @@ export function createFishing({ rod, line, lure, surface, churn = null, wash = n
         if (stage === 'water' && move.y < 0) wash.follow(dt, move.x, move.z, 1, -move.y);
         else wash.lift(dt);
       }
+      playHand(dt, input);
     },
 
     // Once a frame, after the line's update.

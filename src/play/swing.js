@@ -57,13 +57,23 @@ export function createSwing() {
 
   const swing = {
     // How fast the tip is going this way right now, m/s, by the same reading.
+    // 0 when the tip is not travelling the way a cast goes.
     speed: 0,
+    // How fast the tip is moving at all, m/s, whichever way. The blank still
+    // wobbles after a swing, and that is not only the forward half.
+    pace: 0,
 
     // Forget the swing so far. The next step starts from rest wherever the tip is.
     reset() {
       started = false;
       best = 0;
       swing.speed = 0;
+      swing.pace = 0;
+    },
+
+    // The swing was not let go. Drop the stored peak. What the tip is doing now stays.
+    forget() {
+      best = swing.speed;
     },
 
     /**
@@ -92,7 +102,9 @@ export function createSwing() {
       const lx = tip.x - trail.x;
       const ly = tip.y - trail.y;
       const lz = tip.z - trail.z;
-      swing.speed = lx * aheadX + lz * aheadZ > 0 ? TRAIL_RATE * Math.hypot(lx, ly, lz) : 0;
+      const pace = TRAIL_RATE * Math.hypot(lx, ly, lz);
+      swing.pace = pace;
+      swing.speed = lx * aheadX + lz * aheadZ > 0 ? pace : 0;
       best = Math.max(swing.speed, best * Math.exp(-BEST_FADE * dt));
       return best;
     },

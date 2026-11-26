@@ -55,12 +55,11 @@ const MEDIUM_SHARE = 0.3;
 const SCRAPES = [0.01, 0.08];
 
 // The pluck on the line as the fish touches or takes the lure, N for a fish of full
-// heft, and how long it lasts, s: one rise and fall. A heavy bite plucks again as it
-// mouths the lure, this often, s, each a share of the last.
+// heft, and how long it lasts, s: one rise and fall. Letting the lure go is a lighter
+// pluck, this share of the one that took it in.
 const PLUCK = { light: 2, medium: 5, heavy: 9, dead: 9 };
 const PLUCK_FOR = { light: 0.09, medium: 0.12, heavy: 0.16, dead: 0.16 };
-const PLUCKS_AGAIN = [0.3, 0.5];
-const AGAIN_SHARE = 0.6;
+const SPIT_SHARE = 0.4;
 // With the hook in its mouth the fish drags on the line this hard, N at full heft, until
 // it lets go: the tip stays drawn down, and springs back when the lure is blown out.
 const DRAGS = { medium: 2, heavy: 5, dead: 5 };
@@ -90,8 +89,8 @@ export function createBite(random) {
   let pluckAge = 0;
   let pluckFor = 0;
   let pluckPeak = 0;
-  let pluckNext = Infinity;
   let heft = 1;
+  let spitting = false;
   const knock = { intensity: 0, sharpness: 0 };
 
   function pluck(share) {
@@ -100,6 +99,11 @@ export function createBite(random) {
     pluckPeak = PLUCK[bite.kind] * heft * share;
     knock.intensity = KNOCK[bite.kind][0] * (SMALL_SHARE + (1 - SMALL_SHARE) * heft) * (0.5 + 0.5 * share);
     knock.sharpness = KNOCK[bite.kind][1];
+    // Blowing the lure out is the same mouth opening, lighter and a little crisper.
+    if (spitting) {
+      knock.intensity *= 0.55;
+      knock.sharpness = Math.min(1, knock.sharpness + 0.28);
+    }
     return knock;
   }
 
@@ -128,7 +132,6 @@ export function createBite(random) {
       bite.held = false;
       bite.pull = 0;
       pluckFor = 0;
-      pluckNext = Infinity;
       if (bite.kind === 'light') {
         inAt = outAt = Infinity;
         endAt = between(random, LIGHT_FOR);
@@ -164,13 +167,13 @@ export function createBite(random) {
       // A light bite plucks at the touch. The others as the hook goes in.
       const starts = bite.kind === 'light' ? 0 : inAt;
       if (before <= starts && age > starts) {
+        spitting = false;
         pluck(1);
         happened = 'knock';
-        if (bite.kind === 'heavy') pluckNext = age + between(random, PLUCKS_AGAIN);
-      } else if (age >= pluckNext && age < outAt) {
-        pluck(AGAIN_SHARE);
+      } else if (bite.kind !== 'light' && bite.kind !== 'dead' && before <= outAt && age > outAt) {
+        spitting = true;
+        pluck(SPIT_SHARE);
         happened = 'knock';
-        pluckNext = age + between(random, PLUCKS_AGAIN);
       }
       // The mean of one rise and fall over this frame's part of it.
       bite.pull = 0;

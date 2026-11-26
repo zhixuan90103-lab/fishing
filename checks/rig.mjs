@@ -181,6 +181,15 @@ export function createRig({ seed = 1, fps = 60, press = 'always', hold = 0.6, li
     impact(style) { events.push({ t: time, kind: 'impact', style }); },
     notification(type) { events.push({ t: time, kind: 'notify', type }); },
     playTransient(intensity, sharpness) { events.push({ t: time, kind: 'tick', intensity, sharpness }); },
+    playPattern(events) {
+      for (let i = 0; i < events.length; i += 1) {
+        const e = events[i];
+        if (e.type === 'transient') this.playTransient(e.intensity, e.sharpness);
+      }
+    },
+    startContinuous({ intensity }) { events.push({ t: time, kind: 'bed', intensity }); },
+    updateContinuous() {},
+    stopContinuous() { events.push({ t: time, kind: 'bed', intensity: 0 }); },
   };
   // The real reading of a fish churning the water; only the drawing is left out.
   // What it leaves on the water as it goes is kept in wakeHits: how strong, how deep.

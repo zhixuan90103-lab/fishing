@@ -2,6 +2,8 @@
 
 配套：[AGENTS.md](../AGENTS.md) · [ENGINEERING.md](./ENGINEERING.md) · [AUDIO.md](./AUDIO.md)
 
+手感检索（不是规格）：[HAPTICS-RESEARCH.md](./HAPTICS-RESEARCH.md)。玩法上怎么震、还没改的方案在 [PLAY.md](./PLAY.md) 第 14 节。
+
 > 本壳 **已经带原生插件 + JS 薄封装**，但只验通路，不是玩法层。  
 > 以前多次「没接上」，几乎都是 **只 sync、没 bootstrap**，或 **用 `prepare()` 当验收**。  
 > 正确接入按 **§0** 做；后面是差异、API、排错。

@@ -7,7 +7,7 @@
  * comes to, bringing spare fish in where they cannot be seen and sending them away
  * again likewise, and telling the materials: the school which fish it has taken, let go,
  * brought and dismissed, the lure and the line where a mouth holding the hook is, the
- * haptics the knock of a bite.
+ * feel the knock of a bite.
  * Does not own: the hooked fish (catch.js, which this file hands it to), or any of the
  * sums: how a lure draws a fish (allure.js), what a bite is (bite.js), what frightens a
  * fish and whether it stays (fright.js), how it bolts (flee.js), how many fish a cast
@@ -77,12 +77,12 @@ const OFF_DEPTH = -2.6;
 
 /**
  * school: the fish, with fishes, take, giveBack, bring, dismiss and mouth. line: for its
- * tip. move: the lure's motion. out: the line out. haptics: optional. random: 0 to 1.
+ * tip. move: the lure's motion. out: the line out. feel: the hand, optional. random: 0 to 1.
  * surface: the top of the water, optional, with stir(x, z, strength, weight, depth): the
  * water over a bite.
  * species: which table of fishKind.js these fish are read off.
  */
-export function createSuitors({ school, line, move, out, haptics, surface = null, random, species }) {
+export function createSuitors({ school, line, move, out, feel = null, surface = null, random, species }) {
   // What the fish biting now weighs, kg: the water over it is told with each pluck.
   let biterLoad = 0;
   const allure = createAllure();
@@ -382,7 +382,7 @@ export function createSuitors({ school, line, move, out, haptics, surface = null
       }
       const what = biter ? bite.step(dt, taken) : null;
       if (what === 'knock') {
-        haptics?.playTransient(bite.knock.intensity, bite.knock.sharpness);
+        feel?.hit(bite.knock.intensity, bite.knock.sharpness);
         // The pluck stirs the water over it, as hard as the hand feels it: what shows of
         // that from down there is the water's business.
         surface?.stir(move.x, move.z, bite.knock.intensity, biterLoad, -move.y);
@@ -401,6 +401,8 @@ export function createSuitors({ school, line, move, out, haptics, surface = null
       // whether to bolt. Struck and wound in the same moment is a strike.
       if (struck) {
         if (biter && bite.held) return hook();
+        // The rod moved the line and the lure, and the hook found nothing.
+        feel?.hit(0.16, 0.55);
         const was = biter ? spoil(bite.kind === 'light' ? FRIGHT.nipped : FRIGHT.missed) : null;
         for (const mind of [...minds.values()]) {
           if (mind === was || mind.state === 'fleeing' || mind.state === 'leaving') continue;

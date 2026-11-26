@@ -103,12 +103,12 @@ const NET_NEARER = 0.45;
  * rod, line: the materials. surface: the top of the water (burst, stir: fishing.js).
  * school: the fish, with fishes, take, giveBack, mouth,
  * hang and keep. Without one no fish ever comes. net: the landing net, with place and
- * hide, optional. haptics: impact, notification and playTransient, optional.
+ * hide, optional. feel: the hand, with hit, optional.
  * random: 0 to 1, for the times that are drawn.
  * move: the lure's motion. out: the line out. Both are fishing.js's, shared: while a
  * fish is on, this file says where the lure is and how long the line.
  */
-export function createCatch({ rod, line, surface, churn = null, school, net, haptics, random, move, out, spool = SPOOL }) {
+export function createCatch({ rod, line, surface, churn = null, school, net, feel = null, random, move, out, spool = SPOOL }) {
   const haul = createHaul();
   const fight = createFight(random);
   const onLine = createOnLine(fight);
@@ -126,7 +126,7 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
   const shed = createShed(random);
   const sideStrain = createSideStrain();
   // The fish round the lure before one is hooked. Without a school there are none.
-  const suitors = school ? createSuitors({ school, line, move, out, haptics, surface, random, species: SPECIES }) : null;
+  const suitors = school ? createSuitors({ school, line, move, out, feel, surface, random, species: SPECIES }) : null;
   // What the fish on the line is like: fishOf() in fishKind.js. null with none on. And
   // whether it is one that can take line: fresh, it pulls harder than the reel holds.
   let kind = null;
@@ -210,7 +210,7 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
     haul.reset();
     school.take(hooked, fightBrain);
     // A fish that can take line lands on the rod harder than one that cannot.
-    haptics?.impact(takesLine ? 'heavy' : 'medium');
+    feel?.hit(takesLine ? 0.95 : 0.62, 0.28);
   }
 
   // The hooked fish has shaken the hook out on a slack line. It bolts for good; the lure
@@ -226,7 +226,6 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
     haul.reset();
     strike.reset();
     suitors.loose(fish, true);
-    haptics?.impact('light');
   }
 
   // The fish has taken all the line. It swims off, the lure with it. What is left is bare line, and fishing.js has it wound back in.
@@ -239,7 +238,8 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
     running = 0;
     thump.end();
     haul.reset();
-    haptics?.notification('warning');
+    // The pull is gone at once: one light knock, not a warning.
+    feel?.hit(0.2, 0.4);
   }
 
   // Brought in close. From here the fish is a weight on the lure, and the lure a weight
@@ -258,7 +258,6 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
     // does not swim again: lowered back into the water it sinks on the line.
     move.weigh(kind.load, LIMP_SHARE, DRY_FROM, DRY_BY);
     tearing = kind.load;
-    haptics?.notification('success');
   }
 
   // The net has carried the fish out of the picture. It goes back to the school unseen.
@@ -279,7 +278,6 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
     // Half out of the water: it feels the air and kicks, and the water breaks round it.
     if (kick.rise(dry)) {
       surface.breach(move.x, move.z, BREAK_SPLASH, kind.load * BREAKS_WITH);
-      haptics?.impact('medium');
     }
     hangDt = dt;
     if (scoop.phase === 'away') {
@@ -303,12 +301,7 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
   // net goes. The lure stays on the line. Returns true when the net has gone.
   function inNet(dt) {
     const gone = scoop.step(dt, move.x, move.y, move.z);
-    if (scoop.landing) {
-      kick.land();
-      haptics?.impact('medium');
-    } else if (scoop.caught && kick.lie(dt)) {
-      haptics?.playTransient(0.4, 0.2);
-    }
+    if (scoop.landing) kick.land();
     // Head up in the bag, as it fell.
     school.hang(hooked, scoop.fishX, scoop.fishY, scoop.fishZ, scoop.fishX, scoop.fishY + 1, scoop.fishZ, dt, kick.vigor, false);
     net?.place(scoop.x, scoop.y, scoop.z, scoop.handleX, scoop.handleZ, scoop.stretch, scoop.rock);
@@ -468,7 +461,7 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
       highRod.step(dt, tip.y, kind.load);
       // Its head shakes: a snatch on the line and in the hand.
       const shake = thump.step(dt, fight.running, fight.stamina);
-      if (shake) haptics?.playTransient(shake.intensity, shake.sharpness);
+      if (shake) feel?.hit(shake.intensity, shake.sharpness);
       school.mouth(hooked, mouth);
       // Near the top and pulling, it churns the water, pointing the way it goes.
       // How far under the surface its back is: from its middle, not its mouth, for its
@@ -516,8 +509,8 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
       // tackle has given under it.
       stretch = gap - out.length + haul.lent;
       // The reel in the hand.
-      const tick = click.step(given, taken, Math.min(1, tension / RUN_OUT_AT));
-      if (tick) haptics?.playTransient(tick.intensity, tick.sharpness);
+      const tick = click.step(given);
+      if (tick) feel?.hit(tick.intensity, tick.sharpness);
       // The view drifts after it, along the water.
       spot.x = toward(spot.x, mouth.x, WATCH_FOLLOW, dt);
       spot.z = toward(spot.z, mouth.z, WATCH_FOLLOW, dt);
