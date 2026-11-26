@@ -483,7 +483,7 @@ export function createCatch({ rod, line, surface, churn = null, school, net, hap
       const taken = Math.min(haul.step(dt, input.finger, tension), out.room);
       rod.reel.wind(taken);
       // The lure rides in its mouth, and the line ends there.
-      move.place(mouth.x, mouth.y, mouth.z);
+      move.drawnTo(dt, mouth.x, mouth.y, mouth.z);
       const gap = move.gap(tip);
       out.wind(dt, taken, gap);
       // Pulling harder than the reel holds, it takes line, finger down or not. With none

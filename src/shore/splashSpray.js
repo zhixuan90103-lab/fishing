@@ -44,7 +44,7 @@ const HAZE = [0.05, 0.09];
 
 // How many bits each kind of splash throws, by part.
 const COUNT = {
-  in: { crown: 64, lip: 30, jet: 44, tip: 12, mist: 3 },
+  in: { crown: 26, lip: 14, jet: 18, tip: 6, mist: 1 },
   out: { heap: 260, flung: 80, drips: 56, mist: 12 },
   thrash: { sheet: 280, fan: 130, mist: 12 },
 };
@@ -52,7 +52,7 @@ const COUNT = {
 // The foam a splash of size 1 leaves on the water: how wide at first, m, radius, and how
 // long it takes to break up, s, and how many smaller patches lie round the middle one.
 const FOAM = {
-  in: { radius: 0.035, life: 1.2, round: 2 },
+  in: { radius: 0.025, life: 1.0, round: 1 },
   out: { radius: 0.13, life: 2.4, round: 4 },
   thrash: { radius: 0.15, life: 2.0, round: 4 },
 };
@@ -123,9 +123,9 @@ export function makeSpray(kind = 'in', seed = 7) {
   const lift = toReach(crown.height);
   const shoot = toReach(jet.height);
   // The crown: a ring of white water thrown up and outward.
-  for (let i = 0; i < count.crown; i += 1) add(WATER, 0.03 * rnd(), crown.foot[0] * (0.7 + 0.9 * rnd()), 0.005, 0.12 + 0.4 * rnd(), lift * (0.55 + 0.6 * rnd()), within(CLOT) * 0.6, 0.32 + 0.3 * rnd(), (i + rnd()) / count.crown * Math.PI * 2);
+  for (let i = 0; i < count.crown; i += 1) add(WATER, 0.03 * rnd(), crown.foot[0] * (0.7 + 0.9 * rnd()), 0.005, 0.06 + 0.2 * rnd(), lift * (0.55 + 0.6 * rnd()), within(CLOT) * 0.6, 0.32 + 0.3 * rnd(), (i + rnd()) / count.crown * Math.PI * 2);
   // Drops off its lip.
-  for (let i = 0; i < count.lip; i += 1) add(DROP, 0.03 * rnd(), crown.foot[0] * 1.5, 0.01, 0.15 + 0.6 * rnd(), lift * (0.7 + 0.8 * rnd()), within(FINE), 0.6);
+  for (let i = 0; i < count.lip; i += 1) add(DROP, 0.03 * rnd(), crown.foot[0] * 1.5, 0.01, 0.1 + 0.35 * rnd(), lift * (0.7 + 0.8 * rnd()), within(FINE), 0.6);
   // The column: a jet up the middle once the hole has closed, the later of it the lower.
   for (let i = 0; i < count.jet; i += 1) {
     const late = rnd();

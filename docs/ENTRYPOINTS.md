@@ -60,7 +60,7 @@ fishing.js update(dt, { finger, sensor, viewYaw, viewPitch, raised, lift })
            松手以后饵等竿尖不再加速才走；够快 → 按记下的方向和仰角 lureMove.launch，从这一帧起 watch 是落点
            否则饵留在竿尖：lureMove.hold，line.stow
   → flight：lureMove.fly，按着就停线；lineOut.fly 线长跟着饵；落水 → surface.burst（水花和涟漪），落点换成真正的位置，lineOut.land，catch.arm（线拉不拉竿在 fishing.js 的 show 里一处说：空杆和飞行不拉）
-  → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow
+  → water：retrieve.step 得出这一帧收多少线 → rod.reel.wind → lineOut.wind（先退余线）→ lureMove.tow（线上有多余的线时饵接着沉，把它带直）；钩在鱼嘴里时不拖，suitors 每帧 lureMove.drawnTo 鱼嘴，线只在不够时跟着放
            靠近竿尖 → 饵成了挂在线上的重物（line.carry），watch 变空，catch.sendAway；线收完 → ready
            catch.come：strike.step 读手机往上倾得多快 → suitors.step
              suitors：allure.step 饵这一刻招不招鱼；离饵 7 米内的鱼群的鱼各自有了想法，allure.warm 涨落它的兴趣

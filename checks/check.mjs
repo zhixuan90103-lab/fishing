@@ -627,7 +627,69 @@ check('loose line: with the finger up a jerked rod shivers the lure and hardly b
     expect(Math.abs(jerked.line - still.line) < 0.6, `${fps} fps: the jerks do not pile up line`, `${jerked.line.toFixed(2)} m against ${still.line.toFixed(2)} m`);
     seen.push(jerked.came);
   }
-  expect(Math.max(...seen) - Math.min(...seen) < 0.15, 'the same at any frame rate', seen.map((x) => x.toFixed(2)).join(' / '));
+  // It was under 0.15 m apart, with the lure coming 0.7 m: about a sixth. Since 2026-11-25 the spare line a jerk leaves is
+  // taken up by the lure sinking before the next jerk, so each jerk works from a tight line and the lure comes 0.85 m:
+  // the same sixth of more. (The jerks are a sine sampled at each rate: that is where the sixth comes from.)
+  expect(Math.max(...seen) - Math.min(...seen) < 0.2 * Math.min(...seen), 'the same at any frame rate, to a fifth', seen.map((x) => x.toFixed(2)).join(' / '));
+});
+
+// One snap of the rod `at` seconds into t: up 30 degrees in 0.12 s, held 0.2 s, back down over 0.25 s.
+const snapOf = (t) => 20 + 30 * (t < 0 ? 0 : t < 0.12 ? t / 0.12 : t < 0.32 ? 1 : t < 0.57 ? 1 - (t - 0.32) / 0.25 : 0);
+// The furthest any point of a drawn line is from the straight line between its ends, m.
+function sagOf(p, n = 49) {
+  const e = (n - 1) * 3; const ax = p[0], ay = p[1], az = p[2], bx = p[e] - ax, by = p[e + 1] - ay, bz = p[e + 2] - az; const len = Math.hypot(bx, by, bz) || 1; let worst = 0;
+  for (let i = 1; i < n - 1; i += 1) { const px = p[i * 3] - ax, py = p[i * 3 + 1] - ay, pz = p[i * 3 + 2] - az; const t = (px * bx + py * by + pz * bz) / (len * len); worst = Math.max(worst, Math.hypot(px - bx * t, py - by * t, pz - bz * t)); }
+  return worst;
+}
+check('slack line: a lure jerked and let go at its deepest sinks on until the line has it again; a fish that takes the lure on a slack line draws it straight over a moment, not in a frame', () => {
+  // No fish. The lure lies at its deepest, the rod is snapped up once and let down.
+  const sunk = [];
+  for (const fps of [20, 60, 120]) {
+    const rig = createRig({ seed: 3, fps, hold: 0.6, noSchool: true }); const f = rig.fishing; let t0 = -1; const seen = {};
+    const spare = () => { const l = rig.line; return l.length - Math.hypot(l.tip.x - l.end.x, l.tip.y - l.end.y, l.tip.z - l.end.z); };
+    while (rig.time < 40) {
+      const t = t0 < 0 ? -1 : rig.time - t0 - 9;
+      rig.setLift(snapOf(t)); rig.step();
+      if (f.stage === 'water' && t0 < 0) t0 = rig.time;
+      if (t0 < 0) continue;
+      for (const [name, at] of [['before', -0.3], ['let go', 0.7], ['after', 3.5]]) if (seen[name] === undefined && rig.time - t0 - 9 >= at) seen[name] = { spare: spare(), depth: -f.lure.y };
+      if (seen.after) break;
+    }
+    expect(seen.before.depth > 2.2 && Math.abs(seen.before.spare) < 0.02, `${fps} fps: it lay at its deepest on a line with nothing to spare`, `${seen.before.depth.toFixed(2)} m down`);
+    expect(seen['let go'].spare > 0.1, `${fps} fps: the snap leaves spare line`, `${seen['let go'].spare.toFixed(2)} m`);
+    expect(seen.after.spare < 0.03 && seen.after.depth > seen.before.depth + 0.15 && seen.after.depth < 3.7, `${fps} fps: and the lure sinks on until the line has it again`, `${seen.after.spare.toFixed(2)} m to spare, ${seen.after.depth.toFixed(2)} m down`);
+    sunk.push(seen.after.depth);
+  }
+  // Not to the centimetre: how far one snap brings the lure in differs by about a sixth between 20 and 120 frames a
+  // second (the check above: it is how the snap is sampled, and was so before this), so the spare line it leaves does,
+  // and so does how far the lure has to sink to take it up: 2.62 / 2.69 / 2.75 m when this was written.
+  expect(Math.max(...sunk) - Math.min(...sunk) < 0.16, 'about as deep at any frame rate', sunk.map((x) => x.toFixed(2)).join(' / '));
+  // Fish about, the line kept slack by a snap every 4 s, nobody striking: at the frame one takes the lure the line does not leap straight.
+  let takes = 0;
+  for (const seed of [1, 2, 4, 5, 6]) {
+    const rig = createRig({ seed, fps: 60, hold: 0.6, strikes: false, press: 'never' }); const f = rig.fishing; const curve = createLineCurve(49); const now = new Float64Array(49 * 3);
+    let t0 = -1, lastSag = 0, lastIn = false, lastSpare = 0, lastTip = 0, still = 0;
+    while (rig.time < 70) {
+      const since = t0 < 0 ? -1 : rig.time - t0 - 6; const lift = since >= 0 && f.stage === 'water' ? snapOf(since % 4) : 20;
+      rig.setLift(lift); rig.step();
+      if (f.stage === 'water' && t0 < 0) t0 = rig.time;
+      const l = rig.line; if (l.stowed !== null) { curve.reset(); continue; }
+      curve.step(rig.dt, l.tip.x, l.tip.y, l.tip.z, l.end.x, l.end.y, l.end.z, l.length, l.tied ? l.tension : 0, now, 0);
+      const sag = sagOf(now); const spare = l.length - Math.hypot(l.tip.x - l.end.x, l.tip.y - l.end.y, l.tip.z - l.end.z);
+      const taken = !!f.hookIn || f.stage === 'fight';
+      // The rod at rest: its tip has not moved 3 mm in a frame for a quarter of a second. Let down from a snap it springs
+      // for a while yet, and a tip going up takes spare line by itself, 4 cm a frame: that is the rod, not the fish.
+      still = Math.abs(l.tip.y - lastTip) < 0.003 ? still + rig.dt : 0; lastTip = l.tip.y;
+      // Spare line of a hand's breadth or more, and the rod at rest: the frame it is taken.
+      if (taken && !lastIn && lastSpare > 0.08 && still > 0.25) {
+        takes += 1;
+        expect(spare > lastSpare * 0.5 && sag > lastSag * 0.6, `seed ${seed}: the frame a fish takes it, most of the spare line and of its sag is still there`, `spare ${lastSpare.toFixed(2)} to ${spare.toFixed(2)} m, sag ${lastSag.toFixed(2)} to ${sag.toFixed(2)} m`);
+        break;
+      }
+      lastSag = sag; lastIn = taken; lastSpare = spare;
+    }
+  }
+  expect(takes >= 1, 'a fish took the lure on a slack line in at least one of the casts', String(takes));
 });
 
 // ---------------------------------------------------------------- the view
@@ -1144,7 +1206,7 @@ check('splash: going in, a crown, then a taller column in the middle whose top c
   expect(bigOf(0.3, 0.01) < full * 0.7 && bigOf(1, 0.2) > full * 1.4 && bigOf(1, 50) <= 2.4 + 1e-9, 'a soft drop is a smaller splash, a heavier thing a bigger one, and never past all bounds', `${bigOf(0.3, 0.01).toFixed(2)} / ${bigOf(1, 0.2).toFixed(2)} / ${bigOf(1, 50).toFixed(2)}`);
 });
 
-check('spray: a splash is hundreds of bits of water that fill its shape: going in a crown then a taller jet, coming out a low heap and drips, thrashing a low fan; none goes under, and a bigger one goes higher', () => {
+check('spray: a splash is many bits of water that fill its shape: going in a crown then a taller jet, coming out a low heap and drips, thrashing a low fan; none goes under, and a bigger one goes higher', () => {
   const b = { x: 0, y: 0, z: 0, there: false };
   // Over the life of a splash of this size: how high and how far out the bits of a kind of bit get, when the highest is, and the lowest any goes while it is there.
   const flown = (kind, big, which) => { let high = 0, at = 0, far = 0, low = 0, n = 0; const bits = makeSpray(kind).filter(which); for (const bit of bits) { n += 1; for (let a = 0; a < 2.5; a += 0.004) { bitAt(bit, a, big, b); if (!b.there) continue; low = Math.min(low, b.y); far = Math.max(far, Math.hypot(b.x, b.z)); if (b.y > high) { high = b.y; at = a; } } } return { high, at, far, low, n }; };
@@ -1153,9 +1215,11 @@ check('spray: a splash is hundreds of bits of water that fill its shape: going i
   for (let a = 0; a < 1; a += 0.002) { crownAt('in', a, 1, o); crownTop = Math.max(crownTop, o.height); columnAt('in', a, 1, o); jetTop = Math.max(jetTop, o.height); }
   for (const kind of ['in', 'out', 'thrash']) {
     const f = flown(kind, 1, all);
-    expect(f.n > (kind === "in" ? 120 : 200) && f.low > -0.0101, `${kind}: hundreds of bits, and none is drawn under the water`, `${f.n} bits, lowest ${f.low.toFixed(3)} m`);
+    // The lure's is a small thing's: a few dozen bits (2026-11-25: 260 at first, then 108, each time too big on the phone for a 10 g lure). A fish's is hundreds.
+    expect(f.n > (kind === 'in' ? 50 : 200) && f.low > -0.0101, `${kind}: ${kind === 'in' ? 'dozens' : 'hundreds'} of bits, and none is drawn under the water`, `${f.n} bits, lowest ${f.low.toFixed(3)} m`);
     expect(makeSpray(kind).every((bit) => bit.after + bit.life < lifeOf(kind) + 0.6), `${kind}: all of it is over soon after the splash is`);
-    expect(foamOf(kind).radius > 0.03 && foamOf(kind).life > 1, `${kind}: it leaves foam on the water for a second or more`);
+    // The lure's patch was 6 cm then 3.5, a second and a half then 1.2: now 2.5 cm for a second (2026-11-25, too big far off).
+    expect(foamOf(kind).radius > 0.02 && foamOf(kind).life >= 1, `${kind}: it leaves foam on the water for a second or more`);
   }
   const early = flown('in', 1, (bit) => water(bit) && bit.after < 0.05), late = flown('in', 1, (bit) => water(bit) && bit.after >= 0.05);
   expect(early.high > crownTop * 0.6 && early.high < crownTop * 2 && late.high > jetTop * 0.6 && late.high < jetTop * 1.8 && late.high > early.high * 1.5 && late.at > early.at, 'going in: white water to about the height of the crown, then to about the height of the column, later', `${(early.high * 100).toFixed(0)} cm at ${early.at.toFixed(2)} s, then ${(late.high * 100).toFixed(0)} cm at ${late.at.toFixed(2)} s`);
@@ -1360,7 +1424,9 @@ check('raised rod: carried as usual a hooked fish keeps under and the water over
     // Up there it does not lie at one depth: it thrashes, now a hand's breadth down, now with its back out.
     const backs = up.r.rig.wakeBacks; const lowest = Math.max(...backs), highest = Math.min(...backs);
     expect(lowest - highest > 0.12, `size ${size}: up there it goes up and down`, `back from ${(-highest * 100).toFixed(0)} cm out to ${(lowest * 100).toFixed(0)} cm under`);
-    expect(highest < -0.02 && highest > -0.15, `size ${size}: now and then its back is a little out of the water`, `${(-highest * 100).toFixed(0)} cm`);
+    // It asked for over 2 cm. Over ten seeds a fish of 1.3 held up shows 1.3 to 4.2 cm of back at its highest, and this
+    // one cast sat on the 2: 2026-11-25 a change before the fish was ever hooked moved it to 1.96. Ten seeds are the same before and after.
+    expect(highest < -0.012 && highest > -0.15, `size ${size}: now and then its back is a little out of the water`, `${(-highest * 100).toFixed(1)} cm`);
     // It is the rod's spring that does it, not a clock: the fish is up when the tip is up of where it has been standing.
     const tips = up.r.rig.tipsOff; const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length; const mt = mean(tips), mb = mean(backs);
     let cov = 0, vt = 0, vb = 0; for (let i = 0; i < tips.length; i += 1) { cov += (tips[i] - mt) * (backs[i] - mb); vt += (tips[i] - mt) ** 2; vb += (backs[i] - mb) ** 2; }

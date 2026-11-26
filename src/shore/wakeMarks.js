@@ -20,7 +20,8 @@ import { atTop, inWater } from './waterTop.js';
 // weight: what makes rings the size of this thing's, kg, unless whoever leads its wake
 // says what it weighs (a fish: each has its own). share: this much of how strong
 // its wake is goes into the water. every: it leaves a piece this often, s. atTop: at the
-// very top of the water its wake stands this many times as tall, and no wider.
+// very top of the water its wake stands this many times as tall, and no wider. heft: left
+// out, all of its weight counts.
 // The pieces of one wake lie on top of one another along its arms. Measured from above,
 // drawn along steadily at the surface: the fish's arms stand 8.5 cm at 4 m/s, the line's
 // 0.25 cm at 2 m/s.
@@ -31,7 +32,10 @@ export const LINE_WAKE = { weight: 0.0003, share: 0.35, every: 0.1, atTop: 1 };
 // A fish: play says what this one weighs, 0.66 to 2.16 kg (until 2026-11-25 every fish
 // was taken as 1.2). Cutting the top of the water with its back it throws it about far
 // more than one just under.
-export const FISH_WAKE = { weight: 1.2, share: 1.3, every: 0.12, atTop: 2 };
+// heft: of what it weighs, this share is what the top of the water feels: most of a fish is
+// under it. Taken whole (until 2026-11-25) its wake's crests were 0.8 to 1.0 m apart and 8 to
+// 10 cm tall, over twice a lure's rings, and too big on the phone. Now 0.66 to 0.80 m apart.
+export const FISH_WAKE = { weight: 1.2, share: 0.95, every: 0.12, atTop: 2, heft: 0.3 };
 // The lure drawn along under the water raises a soft furrow over itself.
 export const LURE_WAKE = { weight: LURE_KG, share: 1.2, every: 0.1, atTop: 1 };
 
@@ -45,7 +49,7 @@ export function pieceOf(mark, track) {
     x: track.x,
     z: track.z,
     strength: track.strength * mark.share * inWater(track.depth),
-    weight: track.weight ?? mark.weight,
+    weight: (track.weight ?? mark.weight) * (mark.heft ?? 1),
     dirX: track.dirX,
     dirZ: track.dirZ,
     speed: track.speed,

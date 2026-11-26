@@ -415,11 +415,15 @@ export function createSuitors({ school, line, move, out, haptics, surface = null
       }
       // In its mouth the lure goes where the mouth goes, and the line with it: finger up
       // it runs after the fish, finger down what is wound is the lure being drawn
-      // through its lips. Either way there is as much line out as reaches the fish.
+      // through its lips. Either way there is at least as much line out as reaches the
+      // fish. Line lying spare is left spare: nothing has wound it in, and the fish going
+      // off with the lure is what takes it up. (Until 2026-11-25 the line out was set to
+      // the reach every frame: spare line was gone the frame a fish took the lure, and
+      // the line was drawn straight in that one frame.)
       if (biter && bite.held) {
         school.mouth(biter.fish, mouth);
-        move.place(mouth.x, mouth.y, mouth.z);
-        out.pay(move.gap(tip) - out.length);
+        move.drawnTo(dt, mouth.x, mouth.y, mouth.z);
+        out.pay(Math.max(0, move.gap(tip) - out.length));
       }
       return began ? 'bite' : '';
     },

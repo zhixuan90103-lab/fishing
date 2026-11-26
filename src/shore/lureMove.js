@@ -56,6 +56,19 @@ export const SINK_SPEED = 0.35;
 // does not hit a floor.
 export const SINK_FLOOR = -2.4;
 const SINK_EASE = 0.5;
+// That is where it settles on a line that follows it down. With spare line on it nothing
+// holds it there: it goes on sinking until the line has it again, this much deeper at the
+// most, m (the bed is 4.8 m down at the shallowest: it keeps over a metre off it). Spare
+// line under SPARE_COUNTS m hardly counts: a line just landed always has a little.
+// Without this (until 2026-11-25) a lure lying at its deepest, jerked and let go, lay on
+// 10 to 20 cm of spare line for good, and the line hung slack until it was wound.
+export const SINKS_ON = 1.2;
+const SPARE_COUNTS = 0.04;
+// Taken hold of (a fish's mouth: play says where) it is drawn there, not put there: what it is short of the place closes
+// at this rate, 1/s, so 10 cm is 2 cm after a tenth of a second. Put there at once (until
+// 2026-11-25) the end of the line leapt a hand's breadth in a frame, and a line lying
+// slack was straight in that same frame.
+const DRAWN_IN = 16;
 // Pulled along this fast, m/s, its lip holds it up and it stops sinking. Slower, it
 // sinks at a share of SINK_SPEED.
 const PLANE_SPEED = 0.9;
@@ -82,6 +95,10 @@ export function createLureMove() {
   let stretched = 0;
   let taut = false;
   // Metres it has sunk under its own weight are counted there, for the rock.
+
+  // Whether something has hold of it, and what it is still short of where that is, m.
+  let held = false;
+  let shortX = 0, shortY = 0, shortZ = 0;
 
   const m = {
     x: 0, y: 0, z: 0,
@@ -111,6 +128,21 @@ export function createLureMove() {
     // Put it somewhere, at rest.
     place(x, y, z) {
       m.x = x; m.y = y; m.z = z;
+      m.vx = 0; m.vy = 0; m.vz = 0;
+      held = false;
+    },
+
+    // Something has hold of it at (x, y, z) and it goes wherever that goes. Called every
+    // frame it is held. The first time, it is wherever it was: it is drawn there over a
+    // moment, and from then on it is there. What has hold of it is the caller's business.
+    drawnTo(dt, x, y, z) {
+      if (!held) {
+        held = true;
+        shortX = m.x - x; shortY = m.y - y; shortZ = m.z - z;
+      }
+      const left = Math.exp(-DRAWN_IN * Math.max(0, dt));
+      shortX *= left; shortY *= left; shortZ *= left;
+      m.x = x + shortX; m.y = y + shortY; m.z = z + shortZ;
       m.vx = 0; m.vy = 0; m.vz = 0;
     },
 
@@ -210,6 +242,7 @@ export function createLureMove() {
      * and it drops where it is. Returns true on the frame it reaches the water.
      */
     fly(dt, braking) {
+      held = false;
       if (!(dt > 0)) return false;
       // If it reaches the water inside this frame, only fly up to that moment.
       let time = dt;
@@ -243,6 +276,7 @@ export function createLureMove() {
     tow(dt, tip, length, taken, stiffness) {
       m.sank = 0;
       m.sinking = 0;
+      held = false;
       if (!(dt > 0)) return;
       const dx = tip.x - m.x, dy = tip.y - m.y, dz = tip.z - m.z;
       const d = Math.hypot(dx, dy, dz);
@@ -276,7 +310,10 @@ export function createLureMove() {
       const level = Math.hypot(tip.x - m.x, tip.z - m.z);
       const hold = smooth((level - DEPTH_NEAR) / (DEPTH_FAR - DEPTH_NEAR));
       const still = Math.max(0, 1 - pulled / dt / PLANE_SPEED);
-      const room = smooth((m.y - SINK_FLOOR) / SINK_EASE);
+      // On spare line it sinks on past where it settles.
+      const spare = Math.max(0, length - Math.hypot(tip.x - m.x, tip.y - m.y, tip.z - m.z));
+      const floor = SINK_FLOOR - SINKS_ON * smooth(spare / SPARE_COUNTS);
+      const room = smooth((m.y - floor) / SINK_EASE);
       const before = Math.hypot(tip.x - m.x, tip.y - m.y, tip.z - m.z);
       m.sinking = SINK_SPEED * still * hold * room;
       m.y -= m.sinking * dt;
