@@ -1,6 +1,6 @@
 /**
  * Boot: safe-area → device preview → WebGPU design stage → shore scene.
- * Fishing rules live in docs/FISHING-REQUIREMENTS.md. The state machine is not here yet.
+ * Fishing rules live in docs/FISHING-REQUIREMENTS.md. The cast stages live in src/play/fishing.js.
  * Keep: adapt/*, create-renderer, utils/haptics, DOM contract.
  */
 
